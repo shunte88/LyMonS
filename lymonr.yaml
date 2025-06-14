@@ -1,0 +1,12 @@
+device: ssd1322
+
+player: devboard
+
+visualization:
+  vumeter
+  histogram
+
+clock:
+  font: lcd17x44
+
+

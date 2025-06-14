@@ -1,0 +1,42 @@
+[package]
+name = "lymonr"
+version = "0.1.22"
+edition = "2024"
+
+[build-dependencies]
+chrono = "0.4.41"
+
+[dependencies]
+chrono = { version = "0.4.41", features = ["serde"] }
+clap = "4.5.39"
+display-interface = "0.5.0"
+embedded-graphics = "0.8.1"
+env = "1.0.1"
+env_logger = "0.11.8"
+linux-embedded-hal = "0.4.0"
+log = "0.4.27"
+reqwest = { version = "0.12.15", features = ["json"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+ssd1306 = "0.10.0"
+ssd1309 = "0.4.0"
+ssd1322 = "0.3.0"
+thiserror = "2.0.12"
+tokio = { version = "1.45.0", features = ["full"] }
+# Real hardware dependency (only compiled if `emulated-hardware` feature is OFF)
+rppal = { version = "0.14", optional = true }
+# Emulated hardware dependency (only compiled if `emulated-hardware` feature is ON)
+rpi-hal-emulated = { path = "../rpi-hal-emulated", optional = true }
+fontdue = "0.9.3"
+binary_raster = "0.1.15"
+
+[profile.release]
+opt-level = "z"       # prioritize size over speed (or use "s" for balanced)
+lto = true            # enable link-time optimization
+codegen-units = 1     # fewer parallel codegen units, better optimization
+panic = "abort"       # strip panic backtrace machinery
+strip = "debuginfo"   # requires Rust 1.70+, automatically strips symbols
+
+[features]
+default = ["rppal"]   # Default feature: use real hardware
+emulated-hardware = ["rpi-hal-emulated"] # Feature to enable emulation
