@@ -82,7 +82,7 @@ See the squeezelite page for more details
 
 ## Easter Eggs
 <p>
-<img width="130" align="right" src="assets/eastereggs.jpg">
+<img width="130" align="right" src="assets/eastereggs.jpg"/>
 
 There are several "easter egg" modes provided for those setups that cannot process the audio data for visualization.
 That said theres nothing stopping you using them as your main visualization.
