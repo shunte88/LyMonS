@@ -707,16 +707,16 @@ impl LMSServer {
                                     if locked_lms.active_player != usize::MAX {
                                         let _player_id = locked_lms.players[locked_lms.active_player].player_id.clone();
                                         match locked_lms.get_sliminfo_status().await {
-                                            Ok(_) => debug!("LMS status updated successfully."),
+                                            Ok(_) => {},
                                             Err(e) => error!("Error updating LMS status in polling thread: {}", e),
                                         }
                                     } else {
-                                        debug!("No active player selected for status polling.");
+                                        info!("No active player selected for status polling.");
                                     }
                                 }
                             }
                             _ = rx.recv() => {
-                                info!("LMS polling thread received stop signal. Exiting.");
+                                debug!("LMS polling thread received stop signal. Exiting.");
                                 break; // Exit the loop and terminate the thread
                             }
                         }

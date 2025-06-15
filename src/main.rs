@@ -47,7 +47,8 @@ async fn signal_handler() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::main] // Requires the `tokio` runtime with `macros` and `rt-multi-thread` features
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
-        // Parse command line arguments
+    debug!("{} vers. {}",env!("CARGO_PKG_NAME"),env!("CARGO_PKG_VERSION"));
+    // Parse command line arguments
     let matches = Command::new(env!("CARGO_PKG_NAME")) // Use Cargo.toml name
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
@@ -55,6 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg(Arg::new("debug")
         .action(ArgAction::SetTrue)
         .long("debug")
+        .short('v')
         .alias("verbose") // Use alias for verbose
         .help("Enable debug log level")
         .required(false))
@@ -69,6 +71,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .help("Text display scroll mode")
         .value_parser(["loop", "cylon"])
         .default_value("cylon")
+        .required(false))
+        .arg(Arg::new("remain")
+        .action(ArgAction::SetTrue)
+        .short('r')
+        .long("remain")
+        .help("Display Remaining Time rather than Totsl Time")
         .required(false))
         .arg(Arg::new("font")
         .short('F')
@@ -87,6 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .default_value("7seg")
         .required(false))
         .arg(Arg::new("splash")
+        .short('S')
         .long("splash")
         .help("Display splash screen") 
         .action(ArgAction::SetTrue)
@@ -112,6 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_matches();
 
     let show_splash = matches.get_flag("splash");
+    let show_remaining = matches.get_flag("remain");
     let debug_enabled = matches.get_flag("debug");
     let _config_file = matches.get_one::<String>("config").unwrap();
     let scroll_mode = matches.get_one::<String>("scroll").unwrap();
@@ -168,8 +178,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The polling thread is now running in the background if init_server was successful.
     info!("LMS Server communication initialized.");
-    let mut bannerp = true;
-    let mut bannerc = true;
 
     // Main application loop
     tokio::select! {
@@ -190,17 +198,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut lms_guard = lms_arc.lock().await;
 
                 if lms_guard.is_playing() {
-                    // cut down on the cahtter
-                    if bannerp {
-                        debug!("LMS is playing. Display mode => Track Details.");
-                        bannerp = false;
-                    }
-                    bannerc = true;
                     oled_display.set_display_mode(display::DisplayMode::Scrolling); // Set mode
                     
                     // Only update display data if LMS tags have changed
                     if lms_guard.has_changed() {
-                        debug!("LMS tags have changed. Updating display content.");
 
                         // --- Line 0: Volume, Repeat/Shuffle, Bitrate/Audio Glyphs ---
                         let current_volume_raw = lms_guard.tags[TagID::VOLUME as usize].raw_value.clone();
@@ -243,6 +244,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
 
                         oled_display.set_track_progress_data(
+                            show_remaining,
                             lms_guard.tags[TagID::DURATION as usize].raw_value.parse::<f32>().unwrap_or(0.00),
                             lms_guard.tags[TagID::TIME as usize].raw_value.parse::<f32>().unwrap_or(0.00),
                             lms_guard.tags[TagID::REMAINING as usize].raw_value.parse::<f32>().unwrap_or(0.00),
@@ -254,7 +256,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         // Request a refresh for the next LMS polling cycle
                         lms_guard.reset_changed(); // Reset changed flags after display update
-                        debug!("Resetting changed flags.");
                     } else {
                         // If not changed, but playing, just render the current animation frame.
                         // This allows ongoing scrolling animations to continue without new data.
@@ -262,12 +263,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 } else {
                     // When not playing, display the digital clock
-                    // cut down on the cahtter
-                    if bannerc {
-                        debug!("LMS is not playing. Display mode => Clock.");
-                        bannerc = false;
-                    }
-                    bannerp = true;
                     oled_display.set_display_mode(display::DisplayMode::Clock); // Set mode
 
                     // Render the clock frame. The clock's `render_frame` will call `update_and_draw_clock`
@@ -292,7 +287,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         } => {
             // This branch executes if the internal loop breaks (e.g., due to timeout)
-            info!("Main application loop completed.");
+            info!("Closed Application Loop.");
         }
     }
 

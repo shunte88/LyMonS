@@ -11,11 +11,7 @@ pub const CLK_DIGIT_HEIGHT: u32 = 44;
 
 // Calculate the number of bytes required for a 25x44 pixel image in row-major, 1-bit format.
 // (width + 7) / 8 gives bytes per row.
-pub const CLOCK_DIGIT_BYTE_SIZE: usize = ((CLK_DIGIT_WIDTH as usize + 7) / 8) * CLK_DIGIT_HEIGHT as usize; // (25+7)/8 = 2 bytes/row, 2*44 = 88 bytes total
-
-// Each character block in the provided raw data is 15 lines * 12 bytes/line = 180 bytes.
-// We assume the relevant 88 bytes for a 15x44 image are at the start of each 180-byte block,
-// and the rest is padding/unused for our 15-pixel width.
+pub const CLOCK_DIGIT_BYTE_SIZE: usize = ((CLK_DIGIT_WIDTH as usize + 7) / 8) * CLK_DIGIT_HEIGHT as usize; // (25+7)/8 = 4 bytes/row, 4*44 = 176 bytes total
 const CLOCK_DIGIT_PADDED_BLOCK_SIZE: usize = 176;
 
 pub const SPACE_1999_CLOCK_DIGIT_RAW_DATA: &[u8; 2640] = &[

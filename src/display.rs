@@ -178,9 +178,10 @@ pub struct OledDisplay {
     last_colon_toggle_time: Instant, // When the colon last toggled
     clock_font: ClockFontData<'static>, // Instance of the currently active clock font
     last_second_drawn: u8, // Store the last second drawn for progress bar updates
-    last_drawn_date: String, // Store the last drawn date string to avoid constant redraws
+    last_date_drawn: String, // Store the last drawn date string to avoid constant redraws
 
     // Player display state (for track progress bar and info line)
+    show_remaining: bool,
     pub track_duration_secs: f32,
     pub current_track_time_secs: f32,
     pub remaining_time_secs: f32,
@@ -253,8 +254,9 @@ impl OledDisplay {
             last_colon_toggle_time: Instant::now(),
             clock_font: imgdata::new_clock_font(imgdata::SEVENSEG_CLOCK_DIGITS_RAW_DATA), // Initialize with the 7-segment font
             last_second_drawn: 61, // Initialize to an invalid second to force first draw
-            last_drawn_date: String::new(), // Initialize last drawn date
+            last_date_drawn: String::new(), // Initialize last drawn date
             // Initialize new player fields
+            show_remaining: false,
             track_duration_secs: 0.00,
             current_track_time_secs: 0.00,
             remaining_time_secs: 0.00,
@@ -441,7 +443,7 @@ impl OledDisplay {
                 self.last_clock_digits = [' ', ' ', ' ', ' ', ' '];
             }
             self.last_second_drawn = 61; // Reset last second to force progress bar redraw
-            self.last_drawn_date = String::new(); // Reset last drawn date to force redraw
+            self.last_date_drawn = String::new(); // Reset last drawn date to force redraw
 
             // Reset player display fields when switching to scrolling mode for fresh draw
             if mode == DisplayMode::Scrolling {
@@ -506,6 +508,20 @@ impl OledDisplay {
         Ok(())
     }
 
+    pub fn draw_rectangle(&mut self,top_left: Point,w:u32, h:u32,fill:BinaryColor, border_width:Option<u32>, border_color:Option<BinaryColor>) -> Result<(), DisplayDrawingError> {    
+        Rectangle::new(top_left,
+            Size::new(w, h))
+            .into_styled(
+                PrimitiveStyleBuilder::new()
+                .stroke_color(if border_width.is_some() { border_color.unwrap() } else {BinaryColor::Off})
+                .stroke_width(if border_width.is_some() { border_width.unwrap() } else {0})
+                .fill_color(fill)
+                .build(),
+            )
+            .draw(&mut self.display)
+            .map_err(DisplayDrawingError::DrawingFailed)?;
+        Ok(())
+    }
 
     pub fn set_status_line_data(&mut self, volume_percent: u8, is_muted: bool, samplesize: String, samplerate: String, repeat_mode: RepeatMode, shuffle_mode: ShuffleMode)
     {
@@ -546,6 +562,7 @@ impl OledDisplay {
                 AudioBitrate::None
             };
         }
+
     }
 
     /// Sets the content for a specific line (excluding line 0 and line 5).
@@ -605,30 +622,19 @@ impl OledDisplay {
     /// Sets the track duration, current time, and mode text for the player display.
     /// This method updates internal state and will trigger a re-draw on render_frame
     /// if any of the track info elements have changed.
-    pub fn set_track_progress_data(&mut self, duration: f32, current_time: f32, remaining_time: f32, mode: String) {
+    pub fn set_track_progress_data(
+        &mut self,
+        show_remaining: bool, 
+        duration: f32, 
+        current_time: f32, 
+        remaining_time: f32, 
+        mode: String) {
+        if self.show_remaining != show_remaining { self.show_remaining = show_remaining; }
         if self.track_duration_secs != duration { self.track_duration_secs = duration; }
         if self.current_track_time_secs != current_time { self.current_track_time_secs = current_time; }
         if self.remaining_time_secs != remaining_time { self.remaining_time_secs = remaining_time; }
         if self.mode_text != mode { self.mode_text = mode; } // going to be rare as only playing will have us here
     }
-/*
-    fn render_text(&mut self, text: &str) -> Image {
-
-        if let Some(ref font) = self.custom_font {
-
-            let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
-            layout.append(&[font], &TextStyle::new(text, constants::MAIN_FONT_HEIGHT as f32, 0));
-            // The total width is the max x-coordinate of all glyphs + their width.
-
-            let mut total_width = 0;
-            let total_height:u32 = 10;
-            let glyph = layout.glyphs().last();
-            if let Some(glyph) = glyph {
-                total_width = total_width.max(glyph.x as usize+glyph.width);
-            }
-        }
-    }
-*/
 
     /// Updates and draws the clock on the display. Only flushes if changes occurred.
     /// This method is intended to be called frequently (e.g., every frame or second).
@@ -703,17 +709,14 @@ impl OledDisplay {
             let colon_state_changed = (i == 2) && (new_colon_on_state != self.colon_on); // Only check if it's the colon and its state truly changed
 
             if char_changed || colon_state_changed {
-                // Clear the specific digit's area before redrawing
-                let clear_rect = Rectangle::new(
+                // blanking rectangle
+                self.draw_rectangle(
                     Point::new(x_offset, y_offset),
-                    Size::new(self.clock_font.digit_width, self.clock_font.digit_height)
-                );
-                clear_rect
-                    .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
-                    .draw(&mut self.display)
-                    .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
-
-                // Redraw the new character
+                    self.clock_font.digit_width, self.clock_font.digit_height,
+                    BinaryColor::Off,
+                None, None)
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                // and draw the clock character
                 self.draw_custom_clock_char(current_char_for_position, x_offset, y_offset)
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
                 
@@ -730,29 +733,15 @@ impl OledDisplay {
         let progress_bar_x = (constants::DISPLAY_WIDTH as i32 - progress_bar_width_total) / 2;
 
         if current_second != self.last_second_drawn as u32 {
-            // Always clear the entire progress bar area (including potential border)
-            let clear_rect = Rectangle::new(
-                Point::new(progress_bar_x, progress_bar_y),
-                Size::new(progress_bar_width_total as u32, progress_bar_height)
-            );
-            clear_rect
-                .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
-                .draw(&mut self.display)
-                .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
 
-            // Draw the outer (empty) rectangle border
-            Rectangle::new(
+            self.draw_rectangle(
                 Point::new(progress_bar_x, progress_bar_y),
-                Size::new(progress_bar_width_total as u32, progress_bar_height),
+                progress_bar_width_total as u32, progress_bar_height,
+                BinaryColor::Off,
+                Some(border_thickness as u32),
+                Some(BinaryColor::On)
             )
-            .into_styled(
-                PrimitiveStyleBuilder::new()
-                    .stroke_color(BinaryColor::On)
-                    .stroke_width(border_thickness as u32)
-                    .build(),
-            )
-            .draw(&mut self.display)
-            .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
             // Calculate the filled width based on seconds (0 to 59)
             // Maps 0-59 seconds to a fill ratio from 0.0 to 1.0
@@ -765,18 +754,12 @@ impl OledDisplay {
 
             // Draw the filled part of the progress bar if there's actual fill to show
             if inner_fill_width > 0 {
-                Rectangle::new(
-                    // Position the inner rectangle inside the border
-                    Point::new(progress_bar_x + border_thickness, progress_bar_y + border_thickness),
-                    Size::new(inner_fill_width as u32, inner_height),
+                self.draw_rectangle(
+                    Point::new(progress_bar_x+ border_thickness, progress_bar_y+ border_thickness),
+                    inner_fill_width as u32, inner_height,
+                    BinaryColor::On,None, None
                 )
-                .into_styled(
-                    PrimitiveStyleBuilder::new()
-                        .fill_color(BinaryColor::On)
-                        .build(),
-                )
-                .draw(&mut self.display)
-                .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             }
             self.last_second_drawn = current_second as u8;
             needs_flush = true; // Mark for flush if progress bar updated
@@ -787,21 +770,17 @@ impl OledDisplay {
         let date_text_width = self.get_text_width(&current_date_string);
         let date_x_pos = (constants::DISPLAY_WIDTH as i32 - date_text_width as i32) / 2;
 
-        if current_date_string != self.last_drawn_date {
-            info!("Date changed. Redrawing date area.");
-            // Clear previous date area
-            let clear_date_rect = Rectangle::new(
-                Point::new(0, date_y), // Clear from left edge to right edge, covering full width
-                Size::new(constants::DISPLAY_WIDTH, constants::DATE_FONT_HEIGHT)
-            );
-            clear_date_rect
-                .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
-                .draw(&mut self.display)
-                .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
+        if current_date_string != self.last_date_drawn {
+            self.draw_rectangle(
+                Point::new(0, date_y),
+                constants::DISPLAY_WIDTH, constants::DATE_FONT_HEIGHT,
+                BinaryColor::Off,None, None
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
             self.draw_text(&current_date_string,date_x_pos-4, date_y, Some(&FONT_6X10))?;
 
-            self.last_drawn_date = current_date_string;
+            self.last_date_drawn = current_date_string;
             needs_flush = true;
         }
 
@@ -809,6 +788,7 @@ impl OledDisplay {
             self.flush()?;
         }
         Ok(())
+
     }
 
     /// Renders a single frame of the display animation based on the current mode.
@@ -1032,30 +1012,16 @@ impl OledDisplay {
                                           self.track_duration_secs != self.last_track_duration_secs;
 
                 if progress_bar_changed {
-                    // Clear the previous progress bar area
-                    let clear_rect = Rectangle::new(
+                    // draw progress bar
+                    self.draw_rectangle(
                         Point::new(player_progress_bar_x, player_progress_bar_y),
-                        Size::new(constants::PLAYER_PROGRESS_BAR_WIDTH, constants::PLAYER_PROGRESS_BAR_HEIGHT)
-                    );
-                    clear_rect
-                        .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
-                        .draw(&mut self.display)
-                        .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
-
-                    // Draw the outer (empty) rectangle border
-                    Rectangle::new(
-                        Point::new(player_progress_bar_x, player_progress_bar_y),
-                        Size::new(constants::PLAYER_PROGRESS_BAR_WIDTH, constants::PLAYER_PROGRESS_BAR_HEIGHT),
+                        constants::PLAYER_PROGRESS_BAR_WIDTH, constants::PLAYER_PROGRESS_BAR_HEIGHT,
+                        BinaryColor::Off,
+                        Some(constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS), 
+                        Some(BinaryColor::On)
                     )
-                    .into_styled(
-                        PrimitiveStyleBuilder::new()
-                            .stroke_color(BinaryColor::On)
-                            .stroke_width(constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS)
-                            .build(),
-                    )
-                    .draw(&mut self.display)
-                    .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
-
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+        
                     // Calculate the filled width
                     let filled_width_pixel_count = if self.track_duration_secs > 0.00 {
                         (constants::PLAYER_PROGRESS_BAR_WIDTH as f32 * (self.current_track_time_secs as f32 / self.track_duration_secs as f32))
@@ -1070,18 +1036,15 @@ impl OledDisplay {
 
                     // Draw the filled part if there's actual fill to show
                     if inner_fill_width > 0 {
-                        Rectangle::new(
-                            Point::new(player_progress_bar_x + constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS as i32, 
-                                       player_progress_bar_y + constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS as i32),
-                            Size::new(inner_fill_width as u32, inner_height),
+                        self.draw_rectangle(
+                            Point::new(
+                                player_progress_bar_x+ constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS as i32, 
+                                player_progress_bar_y+ constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS as i32),
+                            inner_fill_width as u32, inner_height,
+                            BinaryColor::On,
+                            None, None
                         )
-                        .into_styled(
-                            PrimitiveStyleBuilder::new()
-                                .fill_color(BinaryColor::On)
-                                .build(),
-                        )
-                        .draw(&mut self.display)
-                        .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
                     }
                     needs_flush = true;
                 }
@@ -1090,6 +1053,7 @@ impl OledDisplay {
                 let info_line_y = constants::PLAYER_TRACK_INFO_LINE_Y_POS;
                 let current_time_str = seconds_to_hms(self.current_track_time_secs);
                 let remaining_time_str = format!("-{}", seconds_to_hms(self.remaining_time_secs));
+                let total_time_str = format!(" {}", seconds_to_hms(self.track_duration_secs));
 
                 let info_line_changed = self.last_current_track_time_secs != self.current_track_time_secs ||
                                         self.last_remaining_time_secs != self.remaining_time_secs ||
@@ -1097,14 +1061,13 @@ impl OledDisplay {
 
                 if info_line_changed {
                     // Clear the entire info line area
-                    let clear_rect = Rectangle::new(
+
+                    self.draw_rectangle(
                         Point::new(constants::DISPLAY_REGION_X_OFFSET, info_line_y),
-                        Size::new(constants::DISPLAY_REGION_WIDTH, constants::MAIN_FONT_HEIGHT)
-                    );
-                    clear_rect
-                        .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
-                        .draw(&mut self.display)
-                        .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
+                        constants::DISPLAY_REGION_WIDTH, constants::MAIN_FONT_HEIGHT,
+                        BinaryColor::Off,None, None
+                    )
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
                     self.draw_text(&current_time_str,constants::DISPLAY_REGION_X_OFFSET, info_line_y, None)?;
 
@@ -1113,11 +1076,14 @@ impl OledDisplay {
                     let mode_text_x = constants::DISPLAY_REGION_X_OFFSET + ((constants::DISPLAY_REGION_WIDTH as i32 - mode_text_width) / 2);
                     self.draw_text(&self.mode_text.clone(),mode_text_x, info_line_y, None)?;
 
-                    // Draw remaining time (right-justified)
-                    let remaining_time_width = self.get_text_width(&remaining_time_str) as i32;
-                    let remaining_time_x = constants::DISPLAY_REGION_X_OFFSET + constants::DISPLAY_REGION_WIDTH as i32 - remaining_time_width;
-                    self.draw_text(&remaining_time_str,remaining_time_x-3, info_line_y, None)?;
-
+                    // Draw total or remaining time (right-justified)
+                    let rt_time_width = self.get_text_width(&remaining_time_str) as i32;
+                    let rt_time_x = constants::DISPLAY_REGION_X_OFFSET + constants::DISPLAY_REGION_WIDTH as i32 - rt_time_width;
+                    if self.show_remaining {
+                        self.draw_text(&remaining_time_str,rt_time_x-3, info_line_y, None)?;
+                    } else {
+                        self.draw_text(&total_time_str,rt_time_x-3, info_line_y, None)?;
+                    }
                     self.last_current_track_time_secs = self.current_track_time_secs;
                     self.last_track_duration_secs = self.track_duration_secs;
                     self.last_remaining_time_secs = self.remaining_time_secs;
