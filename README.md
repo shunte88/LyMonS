@@ -7,8 +7,9 @@ OLED information display control program for [piCorePlayer](https://www.picorepl
 ### Features
 - Track details are displayed only when playing
 - Display features independant scrolling of track details when required.
-- Remaining time can now be displayed rather than total time
+- When playing, remaining time can be displayed rather than total time
 - Audio attributes, volume, sample depth, and sample rate are shown
+- Player attributes, shuffle, repeat, and fidelity glyphs shown
 - A retro clock is displayed when the audio paused/stopped.
 - You can display current weather and time.
 - Automatically sets the brightness of the display at dawn and dusk.
@@ -24,7 +25,7 @@ OLED information display for piCorePlayer or other Raspberry Pi and LMS based au
 
   -n, --name PLAYERNAME      Name of the squeeze device to monitor
   -o, --oled [OLEDTYPE]      Specify OLED "driver" type (see options below)
-  -r, --remain-time          Display remaining time rather than track time
+  -r, --remain               Display remaining time rather than track time
   -S, --scroll [SCROLLMODE]  Label scroll mode: cylon, or loop
   -V, --verbose              Maximum log level
   -z, --splash               Show Splash Screen

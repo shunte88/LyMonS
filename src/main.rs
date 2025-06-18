@@ -4,11 +4,17 @@ use env_logger::Env;
 use std::time::{Duration};
 #[cfg(unix)] // Only compile this block on Unix-like systems
 use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
+//use std::process::exit;
+use tokio::sync::Mutex;
+use std::sync::Arc;
+use std::time::Instant;
 
 include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
 
 mod clock_font; // clock fonts impl. and usage
 mod imgdata;    // imgdata module, glyphs and graphics
+mod climacell;    // imgdata module, glyphs and graphics
+mod weather;    // imgdata module, glyphs and graphics
 mod constants;  // application constants
 mod deutils;    // deserialize helpers
 mod sliminfo;   // sliminfo - LMSServer and support
@@ -65,6 +71,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .long("name")
         .help("LMS player name to monitor")
         .required(true))
+        .arg(Arg::new("weather")
+        .short('W')
+        .long("weather")
+        .help("Weather API key,units")
+        .default_value("")
+        .required(false))
         .arg(Arg::new("scroll")
         .short('z')
         .long("scroll")
@@ -125,10 +137,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let debug_enabled = matches.get_flag("debug");
     let _config_file = matches.get_one::<String>("config").unwrap();
     let scroll_mode = matches.get_one::<String>("scroll").unwrap();
+    let weather_config = matches.get_one::<String>("weather").unwrap();
     let name_filter = matches.get_one::<String>("name").unwrap();
     let clock_font = matches.get_one::<String>("font").unwrap();
     let i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
-    
+
+    /*
+	let args = Cli::parse();
+	let config = Config::get();
+	let params = Params::merge(&config, &args).await?;
+
+	run(&params).await?.render(&params)?;
+	params.handle_next(args, &config)?;
+    */
+
+
     // Initialize the logger with the appropriate level based on debug flag
     env_logger::Builder::from_env(Env::default().default_filter_or(if debug_enabled {"debug"}else{"info"}))
         .format_timestamp_secs()
@@ -137,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("{} v{} built {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"), BUILD_DATE);
 
     // Initialize the OLED display
-    let mut oled_display = match OledDisplay::new(i2c_bus_path) {
+    let mut oled_display = match OledDisplay::new(i2c_bus_path, scroll_mode, clock_font) {
         Ok(display) => {
             info!("OLED display initialized.");
             display
@@ -148,17 +171,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // for testing various display routines
+    oled_display.test(false);
+
     oled_display.splash(
         show_splash,
         &format!("v{}",env!("CARGO_PKG_VERSION")).as_str(),
         BUILD_DATE
     ).unwrap();
 
-    if clock_font != "7seg" {
-        oled_display.set_clock_font(clock_font);
-    }
-    if scroll_mode != "standard" {
-        oled_display.set_scroll_mode(scroll_mode);
+    let mut lms_weather_arc: Option<Arc<Mutex<weather::Weather>>> = None;
+    let mut weather_display_switch_timer: Option<Instant> = None;
+    let mut weather_display_mode_counter: usize = 0; // 0 for current, 1-3 for forecast days
+    if weather_config != "" {
+
+        let parts: Vec<&str> = weather_config.split(',').collect();
+        let api_key = parts.get(0).ok_or("Weather API key not found in config string")?.to_string();
+
+        let mut lat: Option<String> = None;
+        let mut lng: Option<String> = None;
+        let mut units: String = "imperial".to_string(); // Default units
+
+        for part in parts.iter().skip(1) {
+            if part.starts_with("lat=") {
+                lat = Some(part.trim_start_matches("lat=").to_string());
+            } else if part.starts_with("lng=") {
+                lng = Some(part.trim_start_matches("lng=").to_string());
+            } else if part.starts_with("units=") {
+                units = part.trim_start_matches("units=").to_string();
+            }
+        }
+
+        match weather::Weather::new(api_key, lat, lng, units).await {
+            Ok(lw) => {
+                let lw_arc = Arc::new(Mutex::new(lw));
+                // Initial fetch
+                match lw_arc.lock().await.fetch_weather_data().await {
+                    Ok(_) => info!("Initial weather data fetched."),
+                    Err(e) => error!("Failed initial weather data fetch: {}", e),
+                }
+                // Set the weather client in the display
+                oled_display.set_weather_client(Arc::clone(&lw_arc));
+                // Start polling in background
+                match weather::Weather::start_polling(Arc::clone(&lw_arc)).await {
+                    Ok(_) => info!("Weather polling started."),
+                    Err(e) => error!("Failed to start weather polling: {}", e),
+                }
+                lms_weather_arc = Some(lw_arc);
+                weather_display_switch_timer = Some(Instant::now()); // Start timer for weather display
+            },
+            Err(e) => error!("Failed to initialize LMSWeather: {}", e),
+        }
     }
 
     // Initialize the LMS server, discover it, fetch players, init tags, and start polling
@@ -243,6 +306,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             lms_guard.tags[TagID::ARTIST as usize].display_value.clone(), 
                         );
 
+                        // use raw_data - higher fidelity
                         oled_display.set_track_progress_data(
                             show_remaining,
                             lms_guard.tags[TagID::DURATION as usize].raw_value.parse::<f32>().unwrap_or(0.00),
@@ -301,6 +365,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // its `Drop` implementation will be called, which will attempt to stop the background polling thread.
     // We can also explicitly drop it here for clarity, though it's not strictly necessary.
     drop(lms_arc);
+
+    if let Some(weather_arc) = lms_weather_arc.take() {
+        weather_arc.lock().await.stop_polling().await;
+    }
 
     Ok(())
 }

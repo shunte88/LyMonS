@@ -1,6 +1,6 @@
 [package]
 name = "lymonr"
-version = "0.1.22"
+version = "0.1.23"
 edition = "2024"
 
 [build-dependencies]
@@ -23,12 +23,11 @@ ssd1309 = "0.4.0"
 ssd1322 = "0.3.0"
 thiserror = "2.0.12"
 tokio = { version = "1.45.0", features = ["full"] }
+
 # Real hardware dependency (only compiled if `emulated-hardware` feature is OFF)
 rppal = { version = "0.14", optional = true }
 # Emulated hardware dependency (only compiled if `emulated-hardware` feature is ON)
 rpi-hal-emulated = { path = "../rpi-hal-emulated", optional = true }
-fontdue = "0.9.3"
-binary_raster = "0.1.15"
 
 [profile.release]
 opt-level = "z"       # prioritize size over speed (or use "s" for balanced)

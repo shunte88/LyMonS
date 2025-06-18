@@ -37,7 +37,6 @@ pub const GLYPH_WIDTH: u32 = 8;
 #[allow(dead_code)]
 pub const GLYPH_HEIGHT: u32 = 8;
 
-
 // Scrolling behavior constants
 /// Speed of text scrolling in pixels per second.
 pub const SCROLL_SPEED_PIXELS_PER_SEC: f32 = 4.0;

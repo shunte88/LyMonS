@@ -1,4 +1,4 @@
-use chrono::Timelike;
+use chrono::{Timelike, DateTime, Local};
 
 use embedded_graphics::{
     image::{Image, ImageRaw},
@@ -30,15 +30,18 @@ use std::time::{Instant, Duration};
 use std::error::Error; // Import the Error trait
 use std::fmt; // Import fmt for Display trait
 use std::thread::sleep;
-//use binary_raster::BinaryRaster;
+use tokio::sync::Mutex;
+use std::sync::Arc;
+use std::time::Instant;
 
 use display_interface::DisplayError;
-use fontdue::{Font, layout::{Layout, TextStyle, CoordinateSystem}};
 
-use crate::{imgdata}; // Import imgdata, glyphs and such
-use crate::constants; // Import the new constants module
-use crate::clock_font::ClockFontData; // Import the new ClockFontData struct
+use crate::imgdata;   // imgdata, glyphs and such
+use crate::constants; // constants
+use crate::climacell; // weather
+use crate::clock_font::{ClockFontData}; // ClockFontData struct
 use crate::deutils::seconds_to_hms;
+use crate::weather::{Weather, WeatherData, CurrentWeatherFields, DailyForecastFields};
 
 #[derive(Debug, PartialEq, Clone)]
 enum ScrollState {
@@ -96,6 +99,7 @@ pub enum DisplayMode {
     EasterEggs,     // TBD - our world famous easter eggs
     Scrolling,      // Done - our world famous Now Playing mode
     Clock,          // Done - our world famous Clock mode
+    Weather,        // WIP  - our world famous Weather mode
 }
 
 #[derive(Debug, Clone)]
@@ -155,8 +159,6 @@ pub struct OledDisplay {
     display: Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>,
     // this definition is 100% correct - DO NOT MODIFY
     line_states: Vec<LineDisplayState>,
-
-    custom_font: Option<Font>,
     default_mono_style: MonoTextStyle<'static, BinaryColor>,
     
     // Status line (Line 0) specific data
@@ -177,7 +179,7 @@ pub struct OledDisplay {
     #[allow(dead_code)]
     last_colon_toggle_time: Instant, // When the colon last toggled
     clock_font: ClockFontData<'static>, // Instance of the currently active clock font
-    last_second_drawn: u8, // Store the last second drawn for progress bar updates
+    last_second_drawn: f32, // Store the last second drawn for progress bar updates
     last_date_drawn: String, // Store the last drawn date string to avoid constant redraws
 
     // Player display state (for track progress bar and info line)
@@ -192,6 +194,10 @@ pub struct OledDisplay {
     last_mode_text: String,
     scroll_mode: String,
 
+    weather_data_arc: Option<Arc<Mutex<Weather>>>, // Reference to the shared weather client
+    current_weather_display_page: usize, // 0 for current, 1 for forecast days - 3 days displayed
+    last_weather_draw_data: WeatherData, // To track if weather data has changed for redraw
+
 }
 
 impl OledDisplay {
@@ -199,11 +205,29 @@ impl OledDisplay {
     /// Initializes the OLED display over I2C.
     ///
     /// `i2c_bus_path` is typically "/dev/i2c-X" where X is the bus number (e.g., "/dev/i2c-1").
-    pub fn new(i2c_bus_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    /// NEED  support for i2c and spi, argument should drive the logic for the 
+    /// interface to be instantiated
+    pub fn new(i2c_bus_path: &str, scroll_mode: &str, clock_font: &str) -> Result<Self, Box<dyn std::error::Error>> {
         info!("Initializing OLED display on {}", i2c_bus_path);
 
         let i2c = I2cdev::new(i2c_bus_path)?;
         let interface = I2CDisplayInterface::new(i2c);
+
+        /*
+        let interface = if bus_path.lower contains 'spi' {
+        remove spi and split the string 
+         // GPIOs for DC and RESET
+        let dc = Pin::new(24); // GPIO24
+        dc.export()?;
+        dc.set_direction(linux_embedded_hal::Direction::Out)?;
+        let rst = Pin::new(25); // GPIO25
+        rst.export()?;
+        rst.set_direction(linux_embedded_hal::Direction::Out)?;
+
+        let interface = SPIInterface::new(spi, dc, rst);
+        let mut display: Ssd1306<_, _, BufferedGraphicsMode<_>> =
+        Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0).into_buffered_graphics_mode();
+        */
 
         let mut display = Ssd1306::new(
             interface,
@@ -217,18 +241,6 @@ impl OledDisplay {
 
         info!("OledDisplay initialized successfully.");
 
-        let font_bytes = include_bytes!("../fonts/cherry-mono.ttf") as &[u8];
-        let custom_font = match Font::from_bytes(font_bytes, fontdue::FontSettings::default()) {
-            Ok(font) => {
-                info!("Custom font loaded successfully.");
-                Some(font)
-            },
-            Err(e) => {
-                error!("Failed to load custom TrueType font (fontdue): {}. Falling back to FONT_5X8.", e);
-                None
-            }
-        };
-
         let default_mono_style = MonoTextStyleBuilder::new()
             .font(&FONT_5X8)
             .text_color(BinaryColor::On)
@@ -237,7 +249,6 @@ impl OledDisplay {
         Ok(OledDisplay {
             display,
             line_states: vec![LineDisplayState::default(); constants::MAX_LINES],
-            custom_font,
             default_mono_style,
             // Status line (Line 0) specific data
             volume_percent: 0,
@@ -252,8 +263,8 @@ impl OledDisplay {
             last_clock_digits: [' ', ' ', ' ', ' ', ' '], // Initialize with spaces
             colon_on: false, // Colon starts off
             last_colon_toggle_time: Instant::now(),
-            clock_font: imgdata::new_clock_font(imgdata::SEVENSEG_CLOCK_DIGITS_RAW_DATA), // Initialize with the 7-segment font
-            last_second_drawn: 61, // Initialize to an invalid second to force first draw
+            clock_font: clock_font::set_clock_font(clock_font),
+            last_second_drawn: 61.0000, // Initialize to an invalid second to force first draw
             last_date_drawn: String::new(), // Initialize last drawn date
             // Initialize new player fields
             show_remaining: false,
@@ -265,8 +276,17 @@ impl OledDisplay {
             last_current_track_time_secs: 0.00,
             last_remaining_time_secs: 0.00,
             last_mode_text: String::new(),
-            scroll_mode: "scroll".to_string(),
+            scroll_mode: scroll_mode.to_string(),
+            // Weather fields
+            weather_data_arc: None,
+            current_weather_display_page: 0, // 0 for current, 1 for forecast
+            last_weather_draw_data: WeatherData::default(),
         })
+    }
+
+    /// Sets the `Arc<Mutex<LMSWeather>>` for the display to access weather data.
+    pub fn set_weather_client(&mut self, weather_client: Arc<Mutex<Weather>>) {
+        self.weather_data_arc = Some(weather_client);
     }
 
     /// Clears the display buffer.
@@ -280,6 +300,37 @@ impl OledDisplay {
         self.display.set_brightness(Brightness::custom(1, contrast))
             .map_err(|e| format!("Failed to set contrast: {:?}", e))?;
         Ok(())
+    }
+
+    pub fn test(&mut self, test: bool) {
+        if test {
+
+
+            for i in 0..20 {
+                self.clear();
+                let image_w = 34;
+                let mimage_w = 30;
+                let mut glyph = ImageRaw::<BinaryColor>::new(
+                    imgdata::get_glyph_slice(
+                        climacell::WEATHER_RAW_DATA, 
+                        i, image_w, image_w),image_w);
+                Image::new(&glyph, Point::new(20, 20))
+                    .draw(&mut self.display).unwrap();
+                if i< 8{
+                    glyph = ImageRaw::<BinaryColor>::new(
+                        imgdata::get_glyph_slice(
+                            climacell::MOON_PHASE_RAW_DATA,
+                            i, mimage_w, mimage_w),mimage_w);
+                    Image::new(&glyph, Point::new(62, 20))
+                        .draw(&mut self.display).unwrap();
+
+                }
+                self.flush().unwrap();
+                sleep(Duration::from_millis(200));
+            }
+            self.clear();
+            self.flush().unwrap();
+        }
     }
     
     /// Displays a splash screen image and fades the brightness in.
@@ -308,7 +359,7 @@ impl OledDisplay {
             x = (constants::DISPLAY_WIDTH - (5*build_date.chars().count() as u32)) / 2;
             self.draw_text(build_date, x as i32, constants::PLAYER_TRACK_INFO_LINE_Y_POS,Some(&FONT_5X8)).unwrap();
     
-            self.flush()?; // Flush to display the black image at zero brightness
+            self.flush()?; // Flush to display - yes at zero brightness
 
             const FADE_DURATION_MS: u64 = 3500;
             const FADE_STEPS: u8 = 60; // More steps for smoother fade
@@ -346,20 +397,7 @@ impl OledDisplay {
 
     /// Calculates the width of the given text in pixels using either the custom font or the default.
     fn get_text_width(&self, text: &str) -> u32 {
-        if let Some(ref font) = self.custom_font {
-            // Use fontdue's layout for accurate text measurement
-            let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
-            layout.append(&[font], &TextStyle::new(text, constants::MAIN_FONT_HEIGHT as f32, 0));
-            // The total width is the max x-coordinate of all glyphs + their width.
-            let mut max_x:f32 = 0.0;
-            for glyph in layout.glyphs() {
-                max_x = max_x.max(glyph.x + glyph.width as f32);
-            }
-            max_x.round() as u32
-        } else {
-            // Fallback to default mono font's measurement
-            self.default_mono_style.measure_string(text, Point::new(0, 0), Baseline::Top).bounding_box.size.width
-        }
+        self.default_mono_style.measure_string(text, Point::new(0, 0), Baseline::Top).bounding_box.size.width
     }
 
     fn draw_text(&mut self, text: &str, x: i32, y: i32, font:Option<&MonoFont>) -> Result<(), Box<dyn std::error::Error>> {
@@ -379,54 +417,6 @@ impl OledDisplay {
         .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
         Ok(())
     }
-
-    /// Helper function to draw text using the custom TrueType font if loaded,
-    /// otherwise falls back to the default FONT_5X8.
-    fn draw_text_with_custom_font(
-        &mut self,
-        text: &str,
-        top_left: Point,
-        _baseline: Baseline,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        
-        if let Some(ref font) = self.custom_font {
-
-            let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
-            layout.append(&[font], &TextStyle::new(text, constants::MAIN_FONT_HEIGHT as f32, 0));
-            
-            /* 
-            let mut total_width:usize = 0;
-            let mut total_height:usize = 10; // fixed height, will get maxima if exceeded
-            for glyph in layout.glyphs() {
-                total_width = total_width.max(glyph.x as usize+glyph.width);
-                total_height = total_height.max(glyph.y as usize+glyph.height);
-            }
-
-            // should adjust here for displayable bounds, avoid pixel wrapping
-            let image_data = vec![0u8; total_width * total_height];
-            let mut image = ImageRaw::<Rgb565>::new(&image_data, total_width);
-
-            for glyph in layout.glyphs() {
-                let (metrics, bitmap) = font.rasterize(glyph.parent, constants::MAIN_FONT_HEIGHT as f32);
-                for (x, y, v) in bitmap.iter_with_coords() {
-                    let px = glyph.x as usize + x;
-                    let py = glyph.y as usize + y;
-        
-                    if px < total_width && py < total_height {
-                        image(px as u32, py as u32, Rgb565([255, 255, 255, (v * 255.0) as u8]));
-                    }
-                }
-            }
-            */
-        
-            self.draw_text(text,top_left.x, top_left.y, None)?;
- 
-        } else {
-            self.draw_text(text,top_left.x, top_left.y, None)?;
-        }
-        Ok(())
-
-    }
     
     /// Sets the current display mode (e.g., Clock or Scrolling).
     pub fn set_display_mode(&mut self, mode: DisplayMode) {
@@ -441,52 +431,45 @@ impl OledDisplay {
             // This ensures a clean display of the clock digits initially.
             if mode == DisplayMode::Clock {
                 self.last_clock_digits = [' ', ' ', ' ', ' ', ' '];
-            }
-            self.last_second_drawn = 61; // Reset last second to force progress bar redraw
-            self.last_date_drawn = String::new(); // Reset last drawn date to force redraw
-
-            // Reset player display fields when switching to scrolling mode for fresh draw
-            if mode == DisplayMode::Scrolling {
+                self.last_second_drawn = 61.000; // Reset last second to force progress bar redraw
+                self.last_date_drawn = String::new(); // Reset last drawn date to force redraw
+            } else if mode == DisplayMode::Weather {
+                self.current_weather_display_page = 0; // Start at current conditions
+                self.last_weather_draw_data = WeatherData::default(); // Force redraw on first weather entry
+            } else if mode == DisplayMode::Scrolling {
+                // Reset player display fields when switching to scrolling mode for fresh draw
                 self.last_track_duration_secs = 0.00; // Forces redraw
                 self.last_current_track_time_secs = 0.00; // Forces redraw
-                self.last_remaining_time_secs  = 0.00; }
+                self.last_remaining_time_secs  = 0.00;
                 self.last_mode_text = String::new(); // Forces redraw
             }
-        }
-    
-    /// Sets the clock display font.
-    pub fn set_clock_font(&mut self, font_name: &str) {
-        self.clock_font =
-        match font_name {
-            "space1999" => {
-                imgdata::new_clock_font(imgdata::SPACE_1999_CLOCK_DIGIT_RAW_DATA)
-                },
-            "holfestus" => {
-                imgdata::new_clock_font(imgdata::HOLLOW_FESTUS_CLOCK_DIGIT_RAW_DATA)
-                },
-            "solfestus" => {
-                imgdata::new_clock_font(imgdata::SOLID_FESTUS_CLOCK_DIGIT_RAW_DATA)
-                },
-            "holdeco" => {
-                imgdata::new_clock_font(imgdata::HOLLOW_DECO_CLOCK_DIGIT_RAW_DATA)
-                },
-            "soldeco" => {
-                imgdata::new_clock_font(imgdata::SOLID_DECO_CLOCK_DIGIT_RAW_DATA)
-                },
-            "noto" => {
-                imgdata::new_clock_font(imgdata::NOTO_CLOCK_DIGIT_RAW_DATA)
-                },
-            "roboto" => {
-                imgdata::new_clock_font(imgdata::ROBOTO_CLOCK_DIGIT_RAW_DATA)
-                },
-            "7seg" => {
-                imgdata::new_clock_font(imgdata::SEVENSEG_CLOCK_DIGITS_RAW_DATA)
-            },
-            _ => {
-                imgdata::new_clock_font(imgdata::SEVENSEG_CLOCK_DIGITS_RAW_DATA)
-            }
+
         }
 
+    /// Helper to draw a weather icon based on weatherCode.
+    fn draw_weather_icon(&mut self, weather_code: Option<i32>, x: i32, y: i32) -> Result<(), Box<dyn std::error::Error>> {
+        let weather_glyph_data = match weather_code {
+            Some(1000) => Some(&imgdata::GLYPH_WEATHER_SUNNY), // Clear, Sunny
+            Some(1100) => Some(&imgdata::GLYPH_WEATHER_SUNNY), // Mostly Clear
+            Some(1101) => Some(&imgdata::GLYPH_WEATHER_PARTLY_CLOUDY), // Partly Cloudy
+            Some(1102) => Some(&imgdata::GLYPH_WEATHER_CLOUDY), // Mostly Cloudy
+            Some(1001) => Some(&imgdata::GLYPH_WEATHER_CLOUDY), // Cloudy
+            Some(2000) | Some(2100) => Some(&imgdata::GLYPH_WEATHER_CLOUDY), // Fog, Light Fog (approx)
+            Some(4000) | Some(4200) | Some(4001) | Some(4201) => Some(&imgdata::GLYPH_WEATHER_RAIN), // Drizzle, Light Rain, Rain, Heavy Rain
+            Some(5000) | Some(5001) | Some(5100) | Some(5101) => Some(&imgdata::GLYPH_WEATHER_SNOW), // Snow, Heavy Snow, Light Snow, Flurries
+            _ => Some(&imgdata::GLYPH_WEATHER_CLOUDY), // Default to cloudy for unknown or unhandled codes
+        };
+
+        if let Some(glyph_data) = weather_glyph_data {
+            let weather_image_w = 34;
+            let raw_image = ImageRaw::<BinaryColor>::new(imgdata::get_glyph_slice(
+                glyph_data, 0, weather_image_w, weather_image_w
+            ), weather_image_w);
+            Image::new(&raw_image, Point::new(x, y))
+                .draw(&mut self.display)
+                .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
+        }
+        Ok(())
     }
 
     /// Helper to draw an 8x8 glyph from raw byte data.
@@ -636,16 +619,40 @@ impl OledDisplay {
         if self.mode_text != mode { self.mode_text = mode; } // going to be rare as only playing will have us here
     }
 
+    /// Updates and draws the weather data to display. Only flushes if changes occurred.
+    /// This method is intended to be called at intervals, 1 hour cadence
+    pub fn update_and_draw_weather(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut needs_flush = false; // No longer clear the entire buffer for each clock update to maintain persistence.
+        let weather_changed = true;
+        if weather_changed {
+            // blanking rectangle
+            self.draw_rectangle(
+                Point::new(30, 30),
+                30, 30,
+                BinaryColor::On,
+                None, None)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            
+            needs_flush = true;
+        }
+        if needs_flush {
+            self.flush()?;
+        }
+        Ok(())
+
+    }
+
     /// Updates and draws the clock on the display. Only flushes if changes occurred.
     /// This method is intended to be called frequently (e.g., every frame or second).
-    pub fn update_and_draw_clock(&mut self, current_time: chrono::NaiveTime) -> Result<(), Box<dyn std::error::Error>> {
-        let mut needs_flush = false;
-        // No longer clear the entire buffer for each clock update to maintain persistence.
+    pub fn update_and_draw_clock(&mut self, current_time: DateTime<Local>) -> Result<(), Box<dyn std::error::Error>> {
 
-        let current_second = current_time.second(); // Renamed to avoid conflict with existing `current_seconds`
+        let mut needs_flush = false; // No longer clear the entire buffer for each clock update to maintain persistence.
 
+        // get fractional seconds - there has to be a cleaner way to get this
+        let current_second_fidelity:f32 = current_time.format("%S.%f").to_string().parse::<f32>().unwrap_or(0.00);
+    
         // Determine colon state for blinking (on for even seconds, off for odd)
-        let new_colon_on_state = current_second % 2 == 0;
+        let new_colon_on_state = current_second_fidelity as u8 % 2 == 0;
 
         // Format time into HH:MM string
         let hours_str = format!("{:02}", current_time.hour());
@@ -732,7 +739,7 @@ impl OledDisplay {
         let progress_bar_width_total = constants::DISPLAY_WIDTH as i32 - 4; // Display width minus 2px padding on each side
         let progress_bar_x = (constants::DISPLAY_WIDTH as i32 - progress_bar_width_total) / 2;
 
-        if current_second != self.last_second_drawn as u32 {
+        if current_second_fidelity != self.last_second_drawn {
 
             self.draw_rectangle(
                 Point::new(progress_bar_x, progress_bar_y),
@@ -743,13 +750,13 @@ impl OledDisplay {
             )
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
-            // Calculate the filled width based on seconds (0 to 59)
-            // Maps 0-59 seconds to a fill ratio from 0.0 to 1.0
-            let fill_ratio = current_second as f32 / 59.0; 
-            let filled_width_pixel_count = (progress_bar_width_total as f32 * fill_ratio).round() as i32;
+            // Calculate the filled width based on seconds (0.0000 to 59.99999)
+            // Maps to a fill ratio from 0.0 to 1.0
+            let fill_ratio = current_second_fidelity / 59.99999; 
+            let fill_width_pixels = (progress_bar_width_total as f32 * fill_ratio).round() as i32;
 
             // The actual width of the inner filled bar, considering the border.
-            let inner_fill_width = (filled_width_pixel_count - (2 * border_thickness)).max(0);
+            let inner_fill_width = (fill_width_pixels - (2 * border_thickness)).max(0);
             let inner_height = progress_bar_height - (2 * border_thickness as u32);
 
             // Draw the filled part of the progress bar if there's actual fill to show
@@ -761,7 +768,7 @@ impl OledDisplay {
                 )
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             }
-            self.last_second_drawn = current_second as u8;
+            self.last_second_drawn = current_second_fidelity;
             needs_flush = true; // Mark for flush if progress bar updated
         }
 
@@ -789,6 +796,110 @@ impl OledDisplay {
         }
         Ok(())
 
+    }
+
+    /// Updates and draws the weather data to display. Only flushes if changes occurred.
+    pub async fn update_and_draw_weather(&mut self, show_current_weather: bool) -> Result<(), Box<dyn std::error::Error>> {
+        let mut needs_flush = false;
+
+        // Acquire a lock on the weather data
+        let weather_data = if let Some(ref weather_arc) = self.weather_data_arc {
+            weather_arc.lock().await
+        } else {
+            error!("Weather client not set in OledDisplay.");
+            return Ok(()); // Nothing to draw if no weather client
+        };
+
+        // Check if weather data has changed since last draw
+        let weather_changed = self.last_weather_draw_data != *weather_data.weather_data;
+
+        if weather_changed {
+            self.clear(); // Clear the screen completely for a new weather display
+        }
+
+        // Display current or forecast based on the flag
+        if show_current_weather {
+            if let Some(current) = &weather_data.weather_data.current {
+                let location_name = &weather_data.weather_data.location_name;
+                let temp = current.temperature.map_or("N/A".to_string(), |t| format!("{:.0}°", t));
+                let humidity = current.humidity.map_or("N/A".to_string(), |h| format!("{:.0}% Hum", h));
+                let wind_speed = current.wind_speed.map_or("N/A".to_string(), |w| format!("{:.0}mph Wind", w));
+
+                // Draw location name
+                let location_width = self.get_text_width(location_name);
+                let location_x = (constants::DISPLAY_WIDTH as i32 - location_width as i32) / 2;
+                self.draw_text(location_name, location_x, 0, Some(&FONT_6X10))?;
+
+                // Draw temperature and weather icon
+                let temp_width = self.get_text_width(&temp);
+                let temp_x = (constants::DISPLAY_WIDTH as i32 - temp_width as i32) / 2; // Center temperature
+                self.draw_text(&temp, temp_x, 16, Some(&FONT_6X13_BOLD))?; // Larger font for temp
+                self.draw_weather_icon(current.weather_code, (constants::DISPLAY_WIDTH as i32 - 34) / 2, 30)?; // Center icon (assuming 34x34)
+
+                // Draw humidity and wind speed
+                self.draw_text(&humidity, 2, 48, None)?; // Left-align humidity
+                let wind_width = self.get_text_width(&wind_speed);
+                let wind_x = constants::DISPLAY_WIDTH as i32 - wind_width as i32 - 2;
+                self.draw_text(&wind_speed, wind_x, 48, None)?; // Right-align wind speed
+                needs_flush = true;
+            } else {
+                self.draw_text("No current weather data", 0, 20, None)?;
+                needs_flush = true;
+            }
+        } else {
+            // Display 3-day forecast
+            let forecasts = &weather_data.weather_data.forecast;
+            if forecasts.len() > 0 {
+                let y_start = 0;
+                let day_height = (constants::DISPLAY_HEIGHT as f32 / forecasts.len() as f32).floor() as i32;
+
+                for (i, forecast) in forecasts.iter().enumerate() {
+                    let day_y = y_start + (i as i32 * day_height);
+                    let day_of_week = forecast.sunrise_time
+                        .map_or("N/A".to_string(), |dt| dt.with_timezone(&Local).format("%a").to_string());
+                    let min_max_temp = format!(
+                        "{:.0}°/{:.0}°",
+                        forecast.temperature_min.unwrap_or(0.0),
+                        forecast.temperature_max.unwrap_or(0.0)
+                    );
+                    let pop = forecast.precipitation_probability.map_or("".to_string(), |p| format!("{:.0}% PoP", p));
+
+                    // Draw Day of Week (left-aligned)
+                    self.draw_text(&day_of_week, 2, day_y, None)?;
+
+                    // Draw Min/Max Temp (right-aligned)
+                    let temp_width = self.get_text_width(&min_max_temp);
+                    let temp_x = constants::DISPLAY_WIDTH as i32 - temp_width as i32 - 2;
+                    self.draw_text(&min_max_temp, temp_x, day_y, None)?;
+
+                    // Draw Weather Icon (centered on line)
+                    // Adjust icon position to be in the middle of the text line
+                    let icon_size = 34; // Assuming 34x34 for these icons
+                    let icon_x = (constants::DISPLAY_WIDTH as i32 - icon_size as i32) / 2;
+                    let icon_y = day_y; // Align to the top of the line
+                    self.draw_weather_icon(forecast.weather_code, icon_x, icon_y)?;
+
+                    // Draw Precipitation Probability (below temperature, maybe smaller font)
+                    if !pop.is_empty() {
+                        let pop_width = self.get_text_width(&pop);
+                        let pop_x = constants::DISPLAY_WIDTH as i32 - pop_width as i32 - 2;
+                        self.draw_text(&pop, pop_x, day_y + constants::MAIN_FONT_HEIGHT as i32 + 2, Some(&FONT_5X8))?;
+                    }
+                }
+                needs_flush = true;
+            } else {
+                self.draw_text("No forecast data", 0, 20, None)?;
+                needs_flush = true;
+            }
+        }
+
+        if weather_changed || needs_flush {
+            self.flush()?;
+            // Update last_weather_draw_data after successful draw
+            self.last_weather_draw_data = weather_data.weather_data.clone();
+        }
+
+        Ok(())
     }
 
     /// Renders a single frame of the display animation based on the current mode.
@@ -823,8 +934,11 @@ impl OledDisplay {
             },
             DisplayMode::Clock => {
                 // When in clock mode, we pass the current local time to the clock drawing function.
-                let now_chrono = chrono::Local::now().time();
-                self.update_and_draw_clock(now_chrono)?;
+                self.update_and_draw_clock(chrono::Local::now())?;
+            },
+            DisplayMode::Weather => {
+                // When in weather mode, drawing is self conrained
+                self.update_and_draw_weather()?;
             },
             DisplayMode::Scrolling => {
                 self.clear(); // Clear the entire buffer for each frame of scrolling
@@ -925,8 +1039,6 @@ impl OledDisplay {
                             let scroll_amount = constants::SCROLL_SPEED_PIXELS_PER_SEC * elapsed_time_secs;
                             line_state.current_x_offset_float = constants::DISPLAY_REGION_WIDTH as f32 - scroll_amount;
 
-                            //info!("{:.3} e-secs {:.3}, {:.3}", elapsed_time_secs, scroll_amount, line_state.current_x_offset_float);
-
                             if line_state.current_x_offset_float <= 0.0 { // Compare with 0.0 for f32
                                 line_state.current_x_offset_float = 0.0;
                                 line_state.state = ScrollState::PausedAtLeft;
@@ -934,6 +1046,7 @@ impl OledDisplay {
                             }
                         }
                         ScrollState::PausedAtLeft => {
+
                             if now.duration_since(line_state.last_update_time) >= Duration::from_millis(constants::PAUSE_DURATION_MS) {
                                 line_state.state = match line_state.scroll_type {
                                     ScrollType::Static => ScrollState::Static,
@@ -945,13 +1058,12 @@ impl OledDisplay {
                             }
                         }
                         ScrollState::ContinuousLoop => {
+
                             let effective_width = line_state.original_width as f32; // Use f32
                             // For seamless looping, the total "segment" length includes the text and the gap
                             let total_segment_length = effective_width + constants::GAP_BETWEEN_LOOP_TEXT as f32; // Use f32
-
                             // Calculate total pixels scrolled since the ContinuousLoop state started
                             let scrolled_pixels = constants::SCROLL_SPEED_PIXELS_PER_SEC * elapsed_time_secs; // Keep as f32
-
                             // Calculate the current x_offset, ensuring it wraps correctly for a continuous loop
                             line_state.current_x_offset_float = -(scrolled_pixels % total_segment_length);
                         }
@@ -985,21 +1097,14 @@ impl OledDisplay {
                     }
 
                     if !line_state.content.is_empty() {
-                        self.draw_text_with_custom_font(
-                            &line_state.content,
-                            Point::new(constants::DISPLAY_REGION_X_OFFSET + line_state.current_x_offset_float.round() as i32, y_pos),
-                            Baseline::Top,
-                        )?;
+                        let mut x_pos = constants::DISPLAY_REGION_X_OFFSET + line_state.current_x_offset_float.round() as i32;
+                        self.draw_text(&line_state.content, x_pos, y_pos, None)?;
 
                         if line_state.state == ScrollState::ContinuousLoop {
                             let effective_width = line_state.original_width as f32;
                             let total_segment_length = effective_width + constants::GAP_BETWEEN_LOOP_TEXT as f32;
-
-                            self.draw_text_with_custom_font(
-                                &line_state.content,
-                                Point::new(constants::DISPLAY_REGION_X_OFFSET + (line_state.current_x_offset_float + total_segment_length).round() as i32, y_pos),
-                                Baseline::Top,
-                            )?;
+                            x_pos += total_segment_length.round() as i32;
+                            self.draw_text(&line_state.content, x_pos, y_pos, None)?;
                         }
                     }
                 }
@@ -1023,7 +1128,7 @@ impl OledDisplay {
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         
                     // Calculate the filled width
-                    let filled_width_pixel_count = if self.track_duration_secs > 0.00 {
+                    let fill_width_pixels = if self.track_duration_secs > 0.00 {
                         (constants::PLAYER_PROGRESS_BAR_WIDTH as f32 * (self.current_track_time_secs as f32 / self.track_duration_secs as f32))
                         .round() as u32
                     } else {
@@ -1031,7 +1136,7 @@ impl OledDisplay {
                     };
 
                     // The actual width of the inner filled bar, considering the border.
-                    let inner_fill_width = (filled_width_pixel_count as i32 - (2 * constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS as i32)).max(0);
+                    let inner_fill_width = (fill_width_pixels as i32 - (2 * constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS as i32)).max(0);
                     let inner_height = constants::PLAYER_PROGRESS_BAR_HEIGHT - (2 * constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS);
 
                     // Draw the filled part if there's actual fill to show
@@ -1102,4 +1207,3 @@ impl OledDisplay {
     }
 
 }
-

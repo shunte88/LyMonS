@@ -125,3 +125,35 @@ where
     Ok(seconds_to_hms(total_seconds))
 }
 
+/// Deserializes aand transpose weather units
+pub fn deserialize_weather_uom<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    let mut units = String::deserialize(deserializer)?;
+    // yes we could just sl;ice off /hrs but they may be more to add here
+    if units == "in/hr" {
+        units = "in".to_string();      
+    } else if units == "cm/hr" {
+        units = "cm".to_string();
+    }   
+    Ok(units)
+
+}
+
+/// Deserializes aand transpose compass direction
+pub fn deserialize_compass_direction<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    let deg = f32::deserialize(deserializer)?;
+    let mut d16 = ((deg / 22.5) + 0.5) as u8;
+    d16 %= 16;
+    let compass_points = [
+        "N",  "NNE", "NE", "ENE", "E",  "ESE",
+        "SE", "SSE", "S",  "SSW", "SW", "WSW",
+        "W",  "WNW", "NW", "NNW"];
+    Ok(compass_points[d16 as usize].to_string())
+}
