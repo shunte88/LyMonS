@@ -2,6 +2,13 @@ use embedded_graphics::{
     pixelcolor::BinaryColor,
     image::ImageRaw,
 };
+use crate::imgdata::get_glyph_slice;
+use log::{info};
+
+// Define the dimensions of our custom clock digits.
+// User specified: 15 pixels wide, 44 pixels high.
+pub const CLK_DIGIT_WIDTH: u32 = 25;
+pub const CLK_DIGIT_HEIGHT: u32 = 44;
 
 /// A struct that encapsulates all necessary data for a specific clock font.
 /// This allows different clock fonts to be loaded and used interchangeably.
@@ -79,6 +86,7 @@ fn new_clock_font(raw_font: &'static [u8]) -> ClockFontData<'static> {
 
 /// Sets the clock display font
 pub fn set_clock_font(font_name: &str) -> ClockFontData<'static> {
+    info!("Load font: {}",font_name);
     match font_name {
         "space1999" => {
             new_clock_font(include_bytes!("../data/space1999_12x20.bin"))

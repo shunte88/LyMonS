@@ -93,7 +93,7 @@ impl SlimInfoClient {
     /// Creates a new `SlimInfoClient` instance inclusive populated headers and timeout.
     pub fn new() -> Self {
         // Define a constant for the User-Agent version
-        const VERSION: &'static str = concat!("LeMon25 ",env!("CARGO_PKG_NAME"), " v", env!("CARGO_PKG_VERSION"));
+        const VERSION: &'static str = concat!("LyMonS ",env!("CARGO_PKG_NAME"), " v", env!("CARGO_PKG_VERSION"));
         const SLIM_REQUEST: &'static str = "slim.request";
         
         let mut headers = header::HeaderMap::new();
@@ -104,9 +104,9 @@ impl SlimInfoClient {
     
         let client = Client::builder()
             .http1_only()
-            .connect_timeout(Duration::from_millis(200))
+            .connect_timeout(Duration::from_millis(500))
             .default_headers(headers)
-            .timeout(Duration::from_millis(500))
+            .timeout(Duration::from_millis(800))
             .build()
             .unwrap(); // Panics if client cannot be built, which is acceptable for client initialization
 

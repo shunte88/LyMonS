@@ -2,10 +2,10 @@
 
 // tags for track playing detail placement
 // should move these into display - use same paradigm as status bar 
-pub const TAG_DISPLAY_ALBUMARTIST: usize = 1;
-pub const TAG_DISPLAY_ALBUM: usize = 2;
-pub const TAG_DISPLAY_TITLE: usize = 3;
-pub const TAG_DISPLAY_ARTIST: usize = 4;
+pub const TAG_DISPLAY_ALBUMARTIST: usize = 0;
+pub const TAG_DISPLAY_ALBUM: usize = 1;
+pub const TAG_DISPLAY_TITLE: usize = 2;
+pub const TAG_DISPLAY_ARTIST: usize = 3;
 
 /// The total width of the OLED display in pixels.
 pub const DISPLAY_WIDTH: u32 = 128;
@@ -17,7 +17,7 @@ pub const DISPLAY_REGION_X_OFFSET: i32 = 0; // Starts from the left edge
 /// Y-offset for the top of the displayable region.
 pub const DISPLAY_REGION_Y_OFFSET: i32 = 0; // Starts from the top edge
 /// The width of the displayable region for text and glyphs.
-pub const DISPLAY_REGION_WIDTH: u32 = DISPLAY_WIDTH; // Occupies full width
+pub const DISPLAY_REGION_WIDTH: u32 = DISPLAY_WIDTH - 2; // Occupies adjusted width
 /// The height of the displayable region for text and glyphs.
 #[allow(dead_code)]
 pub const DISPLAY_REGION_HEIGHT: u32 = DISPLAY_HEIGHT; // Occupies full height
@@ -36,14 +36,6 @@ pub const GLYPH_WIDTH: u32 = 8;
 /// The height of standard 8x8 glyphs.
 #[allow(dead_code)]
 pub const GLYPH_HEIGHT: u32 = 8;
-
-// Scrolling behavior constants
-/// Speed of text scrolling in pixels per second.
-pub const SCROLL_SPEED_PIXELS_PER_SEC: f32 = 4.0;
-/// Duration to pause at the left edge after scrolling in, in milliseconds.
-pub const PAUSE_DURATION_MS: u64 = 2500; // 2.5 seconds
-/// Gap in pixels between the end of the first text and the start of the second text in continuous loop.
-pub const GAP_BETWEEN_LOOP_TEXT: i32 = 20;
 
 // Clock display constants
 /// Horizontal gap between clock digits (e.g., between HH, HM, MM segments).

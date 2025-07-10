@@ -4,7 +4,7 @@ use std::net::{UdpSocket, SocketAddrV4, Ipv4Addr, IpAddr};
 use std::time::{Duration, Instant};
 use std::str;
 use log::{debug, info, error};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex as TokMutex};
 use tokio::task::JoinHandle;
 use std::sync::Arc;
 
@@ -172,7 +172,7 @@ impl MetaTag {
             self.display_value = my_value; // my_value is already a String
             self.changed = true;
             self.valid = true;
-            info!("{} :: {}", self.name.replace('_', " ").to_ascii_lowercase(), self.display_value);
+            debug!("{} :: {}", self.name.replace('_', " ").to_ascii_lowercase(), self.display_value);
         } else {
             self.changed = false;
         
@@ -448,7 +448,7 @@ impl LMSServer {
         let mut buffer = [0u8; 128]; // simple string will be returned
         let payload="eJSON\0IPAD\0NAME\0VERS\0UUID\0".as_bytes();
 
-        info!("Attempting to discover LMS servers...");
+        debug!("Attempting to discover LMS servers...");
 
         loop {
 
@@ -532,9 +532,6 @@ impl LMSServer {
 
             let mut dtime:f32 = 0.0;
             let mut ptime = dtime;
-
-            //info!("Requesting status for player {} from {}:{}...",
-            //  self.players[self.active_player].player_name, self.host, self.port);
 
             match self.client.send_slim_request(
                 self.host.to_string().as_str(),
@@ -634,7 +631,7 @@ impl LMSServer {
         let command="players";
         let params = vec![json!("0"), json!("99")]; // Requesting players from index 0 to 99
         
-        info!("Requesting players from {}:{}...", self.host, self.port);
+        debug!("Requesting players from {}:{}...", self.host, self.port);
         match self.client.send_slim_request(
             self.host.to_string().as_str(),
             self.port,
@@ -644,7 +641,7 @@ impl LMSServer {
         ).await {
             Ok(result) => {
                 self.player_count = value_to_i16(&result["count"]).unwrap_or(0);
-                info!("Total players found: {}", self.player_count);
+                debug!("Total players found: {}", self.player_count);
                 
                 if self.player_count > 0 {
                     self.players = serde_json::from_value::<Vec<Player>>(result["players_loop"].clone())
@@ -654,13 +651,13 @@ impl LMSServer {
                 for (i, player) in self.players.iter().enumerate() {
                     if player_name_filter == "-" || player.player_name.to_lowercase() == player_name_filter.to_lowercase() {
                         self.active_player = i; // Store the index
-                            info!("Active player set to: {} ({})", player.player_name, player.player_id);
+                            debug!("Active player set to: {} ({})", player.player_name, player.player_id);
                             break; // Found the player, no need to continue
                         }
                     }
                     
                     if self.active_player == usize::MAX && player_name_filter != "-" {
-                        info!("Player '{}' not found among discovered players.", player_name_filter);
+                        debug!("Player '{}' not found among discovered players.", player_name_filter);
                     } else if self.active_player == usize::MAX {
                         info!("No specific player requested or no players found.");
                     }
@@ -676,9 +673,9 @@ impl LMSServer {
     /// Initializes the LMS server, discovers it, fetches players, initializes tags,
     /// and starts a background polling thread for status updates.
     ///
-    /// Returns the LMSServer instance wrapped in an `Arc<Mutex>` on success,
+    /// Returns the LMSServer instance wrapped in an `Arc<TokMutex>` on success,
     /// or an error if initialization fails.
-    pub async fn init_server(player_name_filter: &str) -> Result<Arc<Mutex<LMSServer>>, Box<dyn std::error::Error>> {
+    pub async fn init_server(player_name_filter: &str) -> Result<Arc<TokMutex<LMSServer>>, Box<dyn std::error::Error>> {
         // Directly initialize lms with the result of discover() to avoid unused_assignments warning
         let mut lms = LMSServer::discover()?;
         
@@ -692,8 +689,8 @@ impl LMSServer {
                 let (tx, rx) = mpsc::channel(1);
                 lms.stop_sender = Some(tx);
 
-                // Wrap the LMSServer instance in Arc<Mutex> for shared mutable access
-                let lms_arc = Arc::new(Mutex::new(lms));
+                // Wrap the LMSServer instance in Arc<TokMutex> for shared mutable access
+                let lms_arc = Arc::new(TokMutex::new(lms));
                 let lms_for_poll = Arc::clone(&lms_arc);
 
                 // Spawn the background polling task
@@ -711,7 +708,7 @@ impl LMSServer {
                                             Err(e) => error!("Error updating LMS status in polling thread: {}", e),
                                         }
                                     } else {
-                                        info!("No active player selected for status polling.");
+                                        debug!("No active player selected for status polling.");
                                     }
                                 }
                             }
@@ -725,18 +722,18 @@ impl LMSServer {
                 // Store the JoinHandle in the original LMSServer instance (which is now part of lms_arc)
                 lms_arc.lock().await.poll_handle = Some(poll_handle);
                 
-                Ok(lms_arc) // Return the Arc<Mutex<LMSServer>>
+                Ok(lms_arc) // Return the Arc<TokMutex<LMSServer>>
             } else {
                 // If no active player, no polling thread is started.
-                // We still need to return an Arc<Mutex<LMSServer>> to match the signature.
-                // This means we wrap the initial `lms` in an Arc<Mutex> and return it.
+                // We still need to return an Arc<TokMutex<LMSServer>> to match the signature.
+                // This means we wrap the initial `lms` in an Arc<TokMutex> and return it.
                 info!("No active LMS players found. Returning initial LMSServer instance.");
-                Ok(Arc::new(Mutex::new(lms)))
+                Ok(Arc::new(TokMutex::new(lms)))
             }
         } else {
             info!("LMS Server not found during discovery. Returning initial LMSServer instance.");
-            // If discovery failed, return the initial `lms` wrapped in Arc<Mutex>
-            Ok(Arc::new(Mutex::new(lms)))
+            // If discovery failed, return the initial `lms` wrapped in Arc<TokMutex>
+            Ok(Arc::new(TokMutex::new(lms)))
         }
     }
 }

@@ -1,1 +1,0 @@
-const LYMONR_LOGO: &[u8] = include_bytes!("lymonr_logo.bin");

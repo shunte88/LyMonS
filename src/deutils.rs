@@ -125,12 +125,12 @@ where
     Ok(seconds_to_hms(total_seconds))
 }
 
+#[allow(dead_code)]
 /// Deserializes aand transpose weather units
 pub fn deserialize_weather_uom<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
 {
-    use serde::de::Error;
     let mut units = String::deserialize(deserializer)?;
     // yes we could just sl;ice off /hrs but they may be more to add here
     if units == "in/hr" {
@@ -142,12 +142,12 @@ where
 
 }
 
-/// Deserializes aand transpose compass direction
+#[allow(dead_code)]
+/// Deserializes and transpose compass direction
 pub fn deserialize_compass_direction<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
 {
-    use serde::de::Error;
     let deg = f32::deserialize(deserializer)?;
     let mut d16 = ((deg / 22.5) + 0.5) as u8;
     d16 %= 16;

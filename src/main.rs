@@ -1,30 +1,35 @@
-use clap::{Arg, ArgAction, Command};
-use log::{debug, info, error};
+use std::{error::Error, thread, time::Duration};
+use log::{info, error, LevelFilter};
 use env_logger::Env;
-use std::time::{Duration};
+//use log4rs::config::{Appender, Config, Root};
+//use log4rs::append::console::ConsoleAppender;
+use clap::Parser; // Import Parser for command-line arguments
+use clap::{Arg, ArgAction, Command};
+use chrono::{Timelike, Local};
+
+use tokio::sync::Mutex as TokMutex;
+use std::sync::Arc;
+
 #[cfg(unix)] // Only compile this block on Unix-like systems
 use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
-//use std::process::exit;
-use tokio::sync::Mutex;
-use std::sync::Arc;
-use std::time::Instant;
+
+// move these to mod.rs
+mod display;
+mod constants;
+mod imgdata;
+mod clock_font;
+mod deutils;
+mod httprpc;
+mod sliminfo;
+mod weather;
+mod textable;
+mod climacell;
+mod geoloc;
+mod translate;
+
+use sliminfo::{LMSServer, TagID};
 
 include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
-
-mod clock_font; // clock fonts impl. and usage
-mod imgdata;    // imgdata module, glyphs and graphics
-mod climacell;    // imgdata module, glyphs and graphics
-mod weather;    // imgdata module, glyphs and graphics
-mod constants;  // application constants
-mod deutils;    // deserialize helpers
-mod sliminfo;   // sliminfo - LMSServer and support
-mod httprpc;    // http and [json]rpc helpers
-mod display;    // display setup and primitives
-
-// Import LMSServer directly, as init_server will return the instance
-use sliminfo::{LMSServer, TagID}; // Also import TagID for easy access to tags
-// Import DisplayMode along with other enums
-use display::{OledDisplay};
 
 /// Asynchronously waits for a SIGINT, SIGTERM, or SIGHUP signal.
 /// always unix so forget the cfg 
@@ -50,10 +55,30 @@ async fn signal_handler() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn check_half_hour(test:&String) -> u8 {
+
+    if test == "" {
+        return 0;
+    }
+
+    let now = Local::now();
+    let minute = now.minute();
+    let second = now.second();
+    if minute == 35 {
+        if second < 30 {
+            1
+        } else {
+            2
+        }
+    } else {
+        0
+    }
+
+}
+
 #[tokio::main] // Requires the `tokio` runtime with `macros` and `rt-multi-thread` features
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
-    debug!("{} vers. {}",env!("CARGO_PKG_NAME"),env!("CARGO_PKG_VERSION"));
+    
     // Parse command line arguments
     let matches = Command::new(env!("CARGO_PKG_NAME")) // Use Cargo.toml name
         .version(env!("CARGO_PKG_VERSION"))
@@ -74,14 +99,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg(Arg::new("weather")
         .short('W')
         .long("weather")
-        .help("Weather API key,units")
+        .help("Weather API key,units,transl,latitude,longitude")
         .default_value("")
         .required(false))
         .arg(Arg::new("scroll")
         .short('z')
         .long("scroll")
         .help("Text display scroll mode")
-        .value_parser(["loop", "cylon"])
+        .value_parser(["loop", "loopleft", "cylon"])
         .default_value("cylon")
         .required(false))
         .arg(Arg::new("remain")
@@ -151,28 +176,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	params.handle_next(args, &config)?;
     */
 
-
     // Initialize the logger with the appropriate level based on debug flag
     env_logger::Builder::from_env(Env::default().default_filter_or(if debug_enabled {"debug"}else{"info"}))
         .format_timestamp_secs()
         .init();
     
-    info!("{} v{} built {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"), BUILD_DATE);
+    info!("This {} worth the Squeeze", env!("CARGO_PKG_NAME"));
+    info!("v.{} built {}", env!("CARGO_PKG_VERSION"), BUILD_DATE);
 
-    // Initialize the OLED display
-    let mut oled_display = match OledDisplay::new(i2c_bus_path, scroll_mode, clock_font) {
-        Ok(display) => {
-            info!("OLED display initialized.");
-            display
-        },
-        Err(e) => {
-            error!("Failed to initialize OLED display: {}", e);
-            return Err(e);
-        }
-    };
+    /*
+    let mut translator = Translation::new("pl").await?;
+    for txt in ["Sunny", "Hot","Sunny, chance of rain", "Hot, realy hot"].iter() {
+        let res = translator.translate_phrase(txt).await;
+        info!("{} --> {:?}", txt, res.unwrap());
+    }
+*/
 
-    // for testing various display routines
-    oled_display.test(false);
+    let mut oled_display = display::OledDisplay::new(i2c_bus_path, scroll_mode, clock_font)?;
 
     oled_display.splash(
         show_splash,
@@ -180,52 +200,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         BUILD_DATE
     ).unwrap();
 
-    let mut lms_weather_arc: Option<Arc<Mutex<weather::Weather>>> = None;
-    let mut weather_display_switch_timer: Option<Instant> = None;
-    let mut weather_display_mode_counter: usize = 0; // 0 for current, 1-3 for forecast days
     if weather_config != "" {
-
-        let parts: Vec<&str> = weather_config.split(',').collect();
-        let api_key = parts.get(0).ok_or("Weather API key not found in config string")?.to_string();
-
-        let mut lat: Option<String> = None;
-        let mut lng: Option<String> = None;
-        let mut units: String = "imperial".to_string(); // Default units
-
-        for part in parts.iter().skip(1) {
-            if part.starts_with("lat=") {
-                lat = Some(part.trim_start_matches("lat=").to_string());
-            } else if part.starts_with("lng=") {
-                lng = Some(part.trim_start_matches("lng=").to_string());
-            } else if part.starts_with("units=") {
-                units = part.trim_start_matches("units=").to_string();
-            }
-        }
-
-        match weather::Weather::new(api_key, lat, lng, units).await {
-            Ok(lw) => {
-                let lw_arc = Arc::new(Mutex::new(lw));
-                // Initial fetch
-                match lw_arc.lock().await.fetch_weather_data().await {
-                    Ok(_) => info!("Initial weather data fetched."),
-                    Err(e) => error!("Failed initial weather data fetch: {}", e),
-                }
-                // Set the weather client in the display
-                oled_display.set_weather_client(Arc::clone(&lw_arc));
-                // Start polling in background
-                match weather::Weather::start_polling(Arc::clone(&lw_arc)).await {
-                    Ok(_) => info!("Weather polling started."),
-                    Err(e) => error!("Failed to start weather polling: {}", e),
-                }
-                lms_weather_arc = Some(lw_arc);
-                weather_display_switch_timer = Some(Instant::now()); // Start timer for weather display
-            },
-            Err(e) => error!("Failed to initialize LMSWeather: {}", e),
-        }
+        oled_display.setup_weather(weather_config).await?;
     }
+    
+    oled_display.test(false);
 
     // Initialize the LMS server, discover it, fetch players, init tags, and start polling
-    // init_server now returns Arc<Mutex<LMSServer>>
+    // init_server now returns Arc<TokMutex<LMSServer>>
     let lms_arc = match LMSServer::init_server(name_filter).await {
         Ok(server_arc) => server_arc,
         Err(e) => {
@@ -237,7 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // sleep duration for playing, visualizer, and easter eggs
     let scrolling_poll_duration = Duration::from_millis(50);
     // clock display sleep duration
-    let clock_poll_duration = Duration::from_millis(500);
+    let clock_poll_duration = Duration::from_millis(300);
 
     // The polling thread is now running in the background if init_server was successful.
     info!("LMS Server communication initialized.");
@@ -252,16 +234,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Main logic loop
         _ = async {
+
             // clear the display before we dip into
             // the specifiuc displayods
             oled_display.clear();
             oled_display.flush().unwrap();
+
             loop {
+
+                let wc_chk = check_half_hour(weather_config);
+
                 // Acquire a lock on the LMSServer instance to access its methods and data
                 let mut lms_guard = lms_arc.lock().await;
 
                 if lms_guard.is_playing() {
-                    oled_display.set_display_mode(display::DisplayMode::Scrolling); // Set mode
+                    oled_display.set_display_mode(display::DisplayMode::Scrolling).await; // Set mode
                     
                     // Only update display data if LMS tags have changed
                     if lms_guard.has_changed() {
@@ -303,8 +290,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             lms_guard.tags[TagID::ALBUMARTIST as usize].display_value.clone(), 
                             lms_guard.tags[TagID::ALBUM as usize].display_value.clone(), 
                             lms_guard.tags[TagID::TITLE as usize].display_value.clone(), 
-                            lms_guard.tags[TagID::ARTIST as usize].display_value.clone(), 
-                        );
+                            lms_guard.tags[TagID::ARTIST as usize].display_value.clone(),
+                            scroll_mode
+                        ).await;
 
                         // use raw_data - higher fidelity
                         oled_display.set_track_progress_data(
@@ -316,26 +304,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
 
                         // Render the frame, which includes updating scroll positions and drawing
-                        oled_display.render_frame().unwrap_or_else(|e| error!("Failed to render display frame in scrolling mode: {}", e));
+                        oled_display.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in scrolling mode: {}", e));
 
                         // Request a refresh for the next LMS polling cycle
                         lms_guard.reset_changed(); // Reset changed flags after display update
                     } else {
                         // If not changed, but playing, just render the current animation frame.
                         // This allows ongoing scrolling animations to continue without new data.
-                        oled_display.render_frame().unwrap_or_else(|e| error!("Failed to render display frame in scrolling mode (no change): {}", e));
+                        oled_display.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in scrolling mode (no change): {}", e));
                     }
                 } else {
-                    // When not playing, display the digital clock
-                    oled_display.set_display_mode(display::DisplayMode::Clock); // Set mode
 
-                    // Render the clock frame. The clock's `render_frame` will call `update_and_draw_clock`
-                    // internally, which handles its own partial updates and flushing.
-                    oled_display.render_frame().unwrap_or_else(|e| error!("Failed to render display frame in clock mode: {}", e));
+                    // When not playing, display the digital clock and if configured
+                    // weather at intervals
+                    if wc_chk == 0 {
+                        oled_display.set_display_mode(display::DisplayMode::Clock).await; // Set clock mode
+
+                    } else if wc_chk == 1 {
+                        oled_display.set_display_mode(display::DisplayMode::WeatherCurrent).await; // Set current weather mod
+
+                    } else {
+                        oled_display.set_display_mode(display::DisplayMode::WeatherForecast).await; // Set 3 day forecast mode
+                    }
+                    // Render the frame. 
+                    // The required update and draw method will be called
+                    oled_display.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in clock/weather mode: {}", e));
 
                 }
-
-                // ew cki soeop                
+                
                 // Determine sleep duration based on the current display mode
                 let current_poll_duration = if oled_display.current_mode == display::DisplayMode::Clock {
                     clock_poll_duration
@@ -366,10 +362,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // We can also explicitly drop it here for clarity, though it's not strictly necessary.
     drop(lms_arc);
 
+    /*
     if let Some(weather_arc) = lms_weather_arc.take() {
         weather_arc.lock().await.stop_polling().await;
     }
+    */
+    //translator.persist_now().await?;
 
     Ok(())
+
 }
 
