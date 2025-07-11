@@ -2,10 +2,10 @@ use chrono::{Timelike, DateTime, Local};
 use embedded_graphics::{
     image::{Image, ImageRaw},
     mono_font::{
-        ascii::{
+        iso_8859_1::{
+            FONT_4X6,
             FONT_5X8, 
             FONT_6X10,
-            FONT_6X13,
             FONT_6X13_BOLD}, 
         MonoFont, 
         MonoTextStyle, 
@@ -13,7 +13,7 @@ use embedded_graphics::{
     }, 
     pixelcolor::BinaryColor, 
     prelude::*, 
-    primitives::{PrimitiveStyleBuilder, Rectangle}, 
+    primitives::{PrimitiveStyleBuilder, Rectangle, Line, Circle}, 
     text::{self, renderer::TextRenderer, Baseline, Text}
 };
 use embedded_text::{
@@ -167,6 +167,10 @@ pub struct OledDisplay {
     current_weather_display_page: usize, // 0 for current, 1 for forecast days - 3 days displayed
     last_weather_draw_data: WeatherData, // To track if weather data has changed for redraw
 
+    // Easter Egg: Compact Cassette animation state
+    cassette_animation_start_time: Instant,
+    current_hub_angle_degrees: f32,
+
 }
 
 #[allow(dead_code)]
@@ -271,6 +275,9 @@ impl OledDisplay {
             current_weather_display_page: 0, // 0 for current, 1 for forecast
             last_weather_draw_data: WeatherData::default(),
             weather_display_switch_timer: None,
+            // Easter Egg: Compact Cassette animation state
+            cassette_animation_start_time: Instant::now(),
+            current_hub_angle_degrees: 0.0,
             })
 
     }
@@ -405,13 +412,6 @@ impl OledDisplay {
         let text_box = TextBox::with_textbox_style(text, region, character_style, textbox_style);
         text_box
         .draw(display)
-        //Text::with_baseline(
-        //    text,
-        //    Point::new(x, y),
-        //    MonoTextStyleBuilder::new().font(font).text_color(BinaryColor::On).build(),
-        //    Baseline::Top,
-        //)
-        //.draw(display) // Draw on the passed mutable display reference
         .map_err(DisplayDrawingError::DrawingFailed)?;
         Ok(())
     }
@@ -461,14 +461,14 @@ impl OledDisplay {
                     let w_arc = Arc::new(TokMutex::new(w));
                     // Initial fetch
                     match w_arc.lock().await.fetch_weather_data().await {
-                        Ok(_) => info!("Initial weather data fetched."),
+                        Ok(_) => debug!("Initial weather data fetched."),
                         Err(e) => error!("Failed initial weather data fetch: {}", e),
                     }
                     // Set the weather client in the display
                     self.set_weather_client(Arc::clone(&w_arc));
                     // Start polling in background
                     match Weather::start_polling(Arc::clone(&w_arc)).await {
-                        Ok(_) => info!("Weather polling started."),
+                        Ok(_) => debug!("Weather polling started."),
                         Err(e) => error!("Failed to start weather polling: {}", e),
                     }
                     self.weather_display_switch_timer = Some(Instant::now()); // Start timer for weather display
@@ -491,10 +491,16 @@ impl OledDisplay {
             let _ = self.flush(); // Attempt to flush, ignore error for mode change
 
             // If switching to Clock or Weather, stop all text scrollers
-            if mode == DisplayMode::Clock || mode == DisplayMode::WeatherCurrent || mode == DisplayMode::WeatherForecast {
+            if mode == DisplayMode::Clock || mode == DisplayMode::EasterEggs || mode == DisplayMode::WeatherCurrent || mode == DisplayMode::WeatherForecast {
                 for scroller in &mut self.scrollers {
                     scroller.stop().await;
                 }
+            }
+
+            if mode == DisplayMode::EasterEggs {
+                // Initialize animation state for Easter Eggs
+                self.cassette_animation_start_time = Instant::now();
+                self.current_hub_angle_degrees = 0.0;
             }
 
             // Reset clock digits so it redraws everything when switching to clock mode
@@ -858,34 +864,66 @@ impl OledDisplay {
             let current = &weather_data.weather_data.current.clone();
 
             let conditions = current.weather_code.description.clone();
+
             let min_max_temp = format!(
                 "{:.0}{2} | {:.0}{2}",
-                current.temperature_min,
-                current.temperature_max,
-                temp_units
+                current.temperature_min, current.temperature_max, temp_units
             );
-
             let humidity = format!("{:.0} %", current.humidity_avg);
             let wind_dir = current.wind_direction.clone();
             let wind_speed = format!("{:.0} {} {}", current.wind_speed_avg, wind_speed_units, wind_dir);
-            let icon = current.weather_code.icon;
+            let pop =  format!("{}%", current.precipitation_probability_avg);
+            let icon_idx = current.weather_code.icon;
 
-            let glyph = ImageRaw::<BinaryColor>::new(
+            let icon = ImageRaw::<BinaryColor>::new(
                 imgdata::get_glyph_slice(
                     climacell::WEATHER_RAW_DATA, 
-                    icon as usize, icon_w, icon_w),icon_w);
-            Image::new(&glyph, Point::new(12, 20))
+                    icon_idx as usize, icon_w, icon_w),icon_w);
+            Image::new(&icon, Point::new(12, 10))
                 .draw(&mut self.display).unwrap();
 
+            let glyph_w = 12;
             // Draw wether details
-            let temp_x = 66;
-            let mut text_y = 12;
-            Self::draw_text_internal(&mut self.display, &min_max_temp, temp_x, text_y, &FONT_6X13_BOLD)?;
-            text_y += 14;
-            Self::draw_text_internal(&mut self.display,&humidity, temp_x, text_y, &FONT_6X13)?;
-            text_y += 14;
-            Self::draw_text_internal(&mut self.display,&wind_speed, temp_x, text_y, &FONT_6X13)?;
-            text_y += 14;
+            let glyph_x = 52;
+            let text_x = glyph_x + 14;
+            let mut text_y = 1;
+            
+            let temp_glyph = ImageRaw::<BinaryColor>::new(
+                imgdata::get_glyph_slice(
+                    climacell::THERMO_RAW_DATA, 
+                    0 as usize, glyph_w, glyph_w),glyph_w);
+            Image::new(&temp_glyph, Point::new(glyph_x, text_y))
+                .draw(&mut self.display).unwrap();
+            Self::draw_text_internal(&mut self.display, &min_max_temp, text_x, text_y, &FONT_6X13_BOLD)?;
+
+            text_y += 13;
+            let humidity_glyph = ImageRaw::<BinaryColor>::new(
+                imgdata::get_glyph_slice(
+                    climacell::THERMO_RAW_DATA, 
+                    2 as usize, glyph_w, glyph_w),glyph_w);
+            Image::new(&humidity_glyph, Point::new(glyph_x, text_y))
+                .draw(&mut self.display).unwrap();
+            Self::draw_text_internal(&mut self.display,&humidity, text_x, text_y, &FONT_6X10)?;
+
+            text_y += 11;
+            let wind_glyph = ImageRaw::<BinaryColor>::new(
+                imgdata::get_glyph_slice(
+                    climacell::THERMO_RAW_DATA, 
+                    1 as usize, glyph_w, glyph_w),glyph_w);
+            Image::new(&wind_glyph, Point::new(glyph_x, text_y))
+                .draw(&mut self.display).unwrap();
+            Self::draw_text_internal(&mut self.display,&wind_speed, text_x, text_y, &FONT_6X10)?;
+
+            text_y += 11;
+            let pop_glyph = ImageRaw::<BinaryColor>::new(
+                imgdata::get_glyph_slice(
+                    climacell::THERMO_RAW_DATA, 
+                    3 as usize, glyph_w, glyph_w),glyph_w);
+            Image::new(&pop_glyph, Point::new(glyph_x, text_y))
+                .draw(&mut self.display).unwrap();
+            Self::draw_text_internal(&mut self.display,&pop, text_x, text_y, &FONT_6X10)?;
+
+            text_y += 13;
             let conditions_text_width = Self::get_text_width_specific_font(&conditions, &FONT_6X13_BOLD);
             let conditions_text_x = (constants::DISPLAY_WIDTH as i32 - conditions_text_width as i32) / 2;
             Self::draw_text_internal(&mut self.display,&conditions, conditions_text_x, text_y, &FONT_6X13_BOLD)?;
@@ -924,18 +962,17 @@ impl OledDisplay {
                     Self::draw_rectangle_internal(
                         &mut self.display,
                         Point::new(icon_x-4, day_y-2),
-                        icon_w + 6, 10,
+                        icon_w + 6, 9,
                         BinaryColor::Off,
                         Some(1), Some(BinaryColor::On))
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
                     // Draw Day of Week (left-aligned)
-                    let day_width = Self::get_text_width_specific_font(&day_of_week, &FONT_5X8);
+                    let day_width = Self::get_text_width_specific_font(&day_of_week, &FONT_4X6);
                     let day_x = icon_x + ((icon_w as i32 - day_width as i32) / 2);
-                    Self::draw_text_internal(&mut self.display,&day_of_week, day_x, day_y, &FONT_5X8)?;
+                    Self::draw_text_internal(&mut self.display,&day_of_week, day_x, day_y, &FONT_4X6)?;
 
-                    day_y += 10;
-
+                    day_y += 9;
                     Self::draw_rectangle_internal(
                         &mut self.display,
                         Point::new(icon_x-4, day_y-3),
@@ -945,15 +982,15 @@ impl OledDisplay {
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
                     // Draw Min/Max Temp (right-aligned)
-                    let temp_width = Self::get_text_width_specific_font(&min_max_temp, &FONT_5X8);
+                    let temp_width = Self::get_text_width_specific_font(&min_max_temp, &FONT_4X6);
                     let temp_x = icon_x + ((icon_w as i32 - temp_width as i32) / 2);
-                    Self::draw_text_internal(&mut self.display,&min_max_temp, temp_x, day_y, &FONT_5X8)?;
+                    Self::draw_text_internal(&mut self.display,&min_max_temp, temp_x, day_y, &FONT_4X6)?;
 
                     // and POP
-                    day_y += 8;
-                    let pop_width = Self::get_text_width_specific_font(&pop, &FONT_5X8);
+                    day_y += 7;
+                    let pop_width = Self::get_text_width_specific_font(&pop, &FONT_4X6);
                     let pop_x = icon_x + ((icon_w as i32 - pop_width as i32) / 2);
-                    Self::draw_text_internal(&mut self.display,&pop, pop_x, day_y, &FONT_5X8)?;
+                    Self::draw_text_internal(&mut self.display,&pop, pop_x, day_y, &FONT_4X6)?;
 
                     icon_x += icon_w as i32 + 6; // next day forecast position
 
@@ -967,6 +1004,109 @@ impl OledDisplay {
         }
         Ok(())
 
+    }
+
+    /// Draws the compact cassette Easter Egg animation.
+    fn draw_compact_cassette(&mut self, current_time_secs: f32, duration_secs: f32) -> Result<(), Box<dyn std::error::Error>> {
+        let now = Instant::now();
+        debug!("{:?}",now);
+/*
+        let elapsed_time = now.duration_since(self.cassette_animation_start_time).as_secs_f32();
+
+        // Update hub rotation angle
+        self.current_hub_angle_degrees = (constants::HUB_ROTATION_SPEED_DPS * elapsed_time) % 360.0;
+        let angle_radians = self.current_hub_angle_degrees.to_radians();
+
+        // --- Draw Cassette Body ---
+        Rectangle::new(
+            Point::new(constants::CASSETTE_BODY_X, constants::CASSETTE_BODY_Y),
+            Size::new(constants::CASSETTE_BODY_WIDTH, constants::CASSETTE_BODY_HEIGHT),
+        )
+        .into_styled(
+            PrimitiveStyleBuilder::new()
+                .stroke_color(BinaryColor::On)
+                .stroke_width(1)
+                .build(),
+        )
+        .draw(&mut self.display)?;
+
+        // --- Draw Tape Window ---
+        Rectangle::new(
+            Point::new(constants::CASSETTE_TAPE_WINDOW_X, constants::CASSETTE_TAPE_WINDOW_Y),
+            Size::new(constants::CASSETTE_TAPE_WINDOW_WIDTH, constants::CASSETTE_TAPE_WINDOW_HEIGHT),
+        )
+        .into_styled(
+            PrimitiveStyleBuilder::new()
+                .stroke_color(BinaryColor::On)
+                .stroke_width(constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS)
+                .build(),
+        )
+        .draw(&mut self.display)?;
+
+        // --- Draw Tape Progress ---
+        let tape_fill_ratio = if duration_secs > 0.0 {
+            current_time_secs / duration_secs
+        } else {
+            0.0
+        };
+        let tape_fill_width = (constants::CASSETTE_TAPE_WINDOW_WIDTH as f32 * tape_fill_ratio).round() as u32;
+
+        if tape_fill_width > 0 {
+            Rectangle::new(
+                Point::new(
+                    constants::CASSETTE_TAPE_WINDOW_X + constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS as i32,
+                    constants::CASSETTE_TAPE_WINDOW_Y + constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS as i32,
+                ),
+                Size::new(
+                    tape_fill_width.saturating_sub(2 * constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS),
+                    constants::CASSETTE_TAPE_WINDOW_HEIGHT.saturating_sub(2 * constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS),
+                ),
+            )
+            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+            .draw(&mut self.display)?;
+        }
+
+        // --- Draw Rotating Hubs ---
+        let hub_style = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
+
+        // Left Hub
+        let left_hub_center = Point::new(constants::CASSETTE_HUB_LEFT_CENTER_X, constants::CASSETTE_HUB_CENTER_Y);
+        Circle::new(left_hub_center, constants::CASSETTE_HUB_RADIUS)
+            .into_styled(hub_style)
+            .draw(&mut self.display)?;
+        // Draw a rotating spoke for the left hub
+        let spoke_length = constants::CASSETTE_HUB_RADIUS as f32 - 2.0; // Slightly shorter than radius
+        let spoke1_end_x = left_hub_center.x + (spoke_length * angle_radians.cos()).round() as i32;
+        let spoke1_end_y = left_hub_center.y + (spoke_length * angle_radians.sin()).round() as i32;
+        Line::new(left_hub_center, Point::new(spoke1_end_x, spoke1_end_y))
+            .into_styled(hub_style)
+            .draw(&mut self.display)?;
+        let spoke2_end_x = left_hub_center.x + (spoke_length * (angle_radians + std::f32::consts::PI).cos()).round() as i32;
+        let spoke2_end_y = left_hub_center.y + (spoke_length * (angle_radians + std::f32::consts::PI).sin()).round() as i32;
+        Line::new(left_hub_center, Point::new(spoke2_end_x, spoke2_end_y))
+            .into_styled(hub_style)
+            .draw(&mut self.display)?;
+
+
+        // Right Hub
+        let right_hub_center = Point::new(constants::CASSETTE_HUB_RIGHT_CENTER_X, constants::CASSETTE_HUB_CENTER_Y);
+        Circle::new(right_hub_center, constants::CASSETTE_HUB_RADIUS)
+            .into_styled(hub_style)
+            .draw(&mut self.display)?;
+        // Draw a rotating spoke for the right hub (opposite direction for visual effect)
+        let reverse_angle_radians = -angle_radians;
+        let spoke3_end_x = right_hub_center.x + (spoke_length * reverse_angle_radians.cos()).round() as i32;
+        let spoke3_end_y = right_hub_center.y + (spoke_length * reverse_angle_radians.sin()).round() as i32;
+        Line::new(right_hub_center, Point::new(spoke3_end_x, spoke3_end_y))
+            .into_styled(hub_style)
+            .draw(&mut self.display)?;
+        let spoke4_end_x = right_hub_center.x + (spoke_length * (reverse_angle_radians + std::f32::consts::PI).cos()).round() as i32;
+        let spoke4_end_y = right_hub_center.y + (spoke_length * (reverse_angle_radians + std::f32::consts::PI).sin()).round() as i32;
+        Line::new(right_hub_center, Point::new(spoke4_end_x, spoke4_end_y))
+            .into_styled(hub_style)
+            .draw(&mut self.display)?;
+*/
+        Ok(())
     }
 
     /// Renders a single frame of the display animation based on the current mode.
@@ -994,14 +1134,14 @@ impl OledDisplay {
                 self.clear();
                 debug!("HistoDownmix functionality TBD.");
             },
-            DisplayMode::EasterEggs => {
-                // this is just some fun animations
-                self.clear();
-                debug!("EasterEggs functionality TBD.");
-            },
             DisplayMode::Clock => {
                 // When in clock mode, we pass the current local time to the clock drawing function.
                 self.update_and_draw_clock(chrono::Local::now())?;
+            },
+            DisplayMode::EasterEggs => {
+                self.clear();
+                self.draw_compact_cassette(self.current_track_time_secs, self.track_duration_secs)?;
+                self.flush()?;
             },
             DisplayMode::WeatherCurrent => {
                 // When in weather mode, drawing is self contained

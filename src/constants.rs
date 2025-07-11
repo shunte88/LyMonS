@@ -65,3 +65,23 @@ pub const PLAYER_TRACK_INFO_LINE_Y_POS: i32 = DISPLAY_HEIGHT as i32 - MAIN_FONT_
 pub const LYMONS_LOGO_WIDTH: u32 = 108;
 #[allow(dead_code)]
 pub const LYMONS_LOGO_HEIGHT: u32 = 44;
+
+// Compact Cassette Easter Egg dimensions and positions
+pub const CASSETTE_BODY_WIDTH: u32 = 100;
+pub const CASSETTE_BODY_HEIGHT: u32 = 50;
+pub const CASSETTE_BODY_X: i32 = ((DISPLAY_WIDTH - CASSETTE_BODY_WIDTH) / 2) as i32;
+pub const CASSETTE_BODY_Y: i32 = ((DISPLAY_HEIGHT - CASSETTE_BODY_HEIGHT) / 2) as i32;
+pub const CASSETTE_BODY_CORNER_RADIUS: u32 = 4;
+
+pub const CASSETTE_HUB_RADIUS: u32 = 7; // Radius of the rotating hubs
+pub const CASSETTE_HUB_LEFT_CENTER_X: i32 = CASSETTE_BODY_X + 25; // Center X for left hub
+pub const CASSETTE_HUB_RIGHT_CENTER_X: i32 = CASSETTE_BODY_X + CASSETTE_BODY_WIDTH as i32 - 25; // Center X for right hub
+pub const CASSETTE_HUB_CENTER_Y: i32 = CASSETTE_BODY_Y + 18; // Center Y for both hubs
+
+pub const CASSETTE_TAPE_WINDOW_X: i32 = CASSETTE_BODY_X + 20;
+pub const CASSETTE_TAPE_WINDOW_Y: i32 = CASSETTE_BODY_Y + 32;
+pub const CASSETTE_TAPE_WINDOW_WIDTH: u32 = CASSETTE_BODY_WIDTH - 40; // 20px padding on each side
+pub const CASSETTE_TAPE_WINDOW_HEIGHT: u32 = 10;
+pub const CASSETTE_TAPE_WINDOW_BORDER_THICKNESS: u32 = 1;
+
+pub const HUB_ROTATION_SPEED_DPS: f32 = 180.0; // Degrees per second for hub rotation

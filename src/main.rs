@@ -1,8 +1,6 @@
 use std::{error::Error, thread, time::Duration};
-use log::{info, error, LevelFilter};
+use log::{info, error, debug, LevelFilter};
 use env_logger::Env;
-//use log4rs::config::{Appender, Config, Root};
-//use log4rs::append::console::ConsoleAppender;
 use clap::Parser; // Import Parser for command-line arguments
 use clap::{Arg, ArgAction, Command};
 use chrono::{Timelike, Local};
@@ -131,6 +129,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
         .default_value("7seg")
         .required(false))
+        .arg(Arg::new("eggs")
+        .short('E')
+        .long("eggs")
+        .help("Easter Egg Animation")
+        .value_parser(
+            ["cassette",
+            "technics",
+            "reels",
+            "vcr",
+            "radio",
+            "tv",
+            "pc"]
+            )
+        .default_value("cassette")
+        .required(false))
         .arg(Arg::new("splash")
         .short('S')
         .long("splash")
@@ -166,6 +179,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let name_filter = matches.get_one::<String>("name").unwrap();
     let clock_font = matches.get_one::<String>("font").unwrap();
     let i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
+    let easter_eggs = matches.get_one::<String>("eggs").unwrap();
+
 
     /*
 	let args = Cli::parse();
@@ -184,13 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("This {} worth the Squeeze", env!("CARGO_PKG_NAME"));
     info!("v.{} built {}", env!("CARGO_PKG_VERSION"), BUILD_DATE);
 
-    /*
-    let mut translator = Translation::new("pl").await?;
-    for txt in ["Sunny", "Hot","Sunny, chance of rain", "Hot, realy hot"].iter() {
-        let res = translator.translate_phrase(txt).await;
-        info!("{} --> {:?}", txt, res.unwrap());
-    }
-*/
+    debug!("{}", easter_eggs);
 
     let mut oled_display = display::OledDisplay::new(i2c_bus_path, scroll_mode, clock_font)?;
 
@@ -236,7 +245,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ = async {
 
             // clear the display before we dip into
-            // the specifiuc displayods
+            // the specifiuc display modes
             oled_display.clear();
             oled_display.flush().unwrap();
 
