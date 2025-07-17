@@ -2,10 +2,12 @@ use chrono::{Timelike, DateTime, Local};
 use embedded_graphics::{
     image::{Image, ImageRaw},
     mono_font::{
-        iso_8859_1::{
+        iso_8859_13::{
             FONT_4X6,
             FONT_5X8, 
             FONT_6X10,
+            FONT_6X13,
+            FONT_7X14,
             FONT_6X13_BOLD}, 
         MonoFont, 
         MonoTextStyle, 
@@ -17,10 +19,12 @@ use embedded_graphics::{
     text::{self, renderer::TextRenderer, Baseline, Text}
 };
 use embedded_text::{
-    alignment::{HorizontalAlignment, VerticalAlignment},
     style::{TextBoxStyle, TextBoxStyleBuilder},
     TextBox,
 };
+
+//use embedded_picofont::FontPico;
+
 use linux_embedded_hal::I2cdev;
 use ssd1306::{
     mode::{self, BufferedGraphicsMode},
@@ -31,12 +35,13 @@ use ssd1306::{
 };
 
 use log::{info, error, debug};
-use std::time::{Instant, Duration};
+use std::{path, time::{Duration, Instant}};
 use std::error::Error; // Import the Error trait
 use std::fmt; // Import fmt for Display trait
 use std::thread::sleep;
 use tokio::sync::Mutex as TokMutex;
 use std::sync::Arc;
+use std::fs; // move this to svgimage
 
 use display_interface::DisplayError;
 
@@ -47,6 +52,7 @@ use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
 use crate::deutils::seconds_to_hms;
 use crate::weather::{Weather, WeatherData};
 use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode, GAP_BETWEEN_LOOP_TEXT_FIXED};
+use crate::svgimage::SvgImageRenderer;
 
 /// Represents the audio bitrate mode for displaying the correct glyph.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -75,6 +81,7 @@ pub enum ShuffleMode {
 
 /// NEW: Enum to define the current display mode (Scrolling text or Clock).
 #[derive(Debug, PartialEq, Clone, Copy)]
+#[allow(dead_code)]
 pub enum DisplayMode {
     #[allow(dead_code)]
     VUMeters,       // TBD - a stereo pair of VU meters - device scaled
@@ -99,6 +106,10 @@ pub enum DisplayDrawingError {
     DrawingFailed(DisplayError),
     /// A generic string error for other display-related failures.
     Other(String),
+    /// Error from SVG rendering.
+    SvgError(crate::svgimage::SvgImageError),
+    /// Error reading SVG file.
+    IoError(std::io::Error),
 }
 
 impl fmt::Display for DisplayDrawingError {
@@ -106,6 +117,8 @@ impl fmt::Display for DisplayDrawingError {
         match self {
             DisplayDrawingError::DrawingFailed(e) => write!(f, "Display drawing error: {:?}", e),
             DisplayDrawingError::Other(msg) => write!(f, "Display error: {}", msg),
+            DisplayDrawingError::SvgError(e) => write!(f, "SVG rendering error: {}", e),
+            DisplayDrawingError::IoError(e) => write!(f, "IO error reading SVG file: {}", e),
         }
     }
 }
@@ -116,6 +129,17 @@ impl Error for DisplayDrawingError {}
 impl From<DisplayError> for DisplayDrawingError {
     fn from(err: DisplayError) -> Self {
         DisplayDrawingError::DrawingFailed(err)
+    }
+}
+impl From<crate::svgimage::SvgImageError> for DisplayDrawingError {
+    fn from(err: crate::svgimage::SvgImageError) -> Self {
+        DisplayDrawingError::SvgError(err)
+    }
+}
+
+impl From<std::io::Error> for DisplayDrawingError {
+    fn from(err: std::io::Error) -> Self {
+        DisplayDrawingError::IoError(err)
     }
 }
 #[allow(dead_code)]
@@ -300,39 +324,68 @@ impl OledDisplay {
         Ok(())
     }
 
-    pub fn test(&mut self, test: bool) {
+    // sizing - 100% or multiples of 8 e.g. 32, 40, 48
+    pub fn put_svg(&mut self, path: &str, x: i32, y: i32, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
+        info!("put_svg {} {} {}",path,width,height);
+        let data = fs::read_to_string(path).expect("load an svg file");
+        let buffer_size = ((width * height + 7) / 8) as usize;
+        let mut buffer = vec![0u8; buffer_size];
+        let svg_renderer = SvgImageRenderer::new(&data, width, height)?;
+        svg_renderer.render_to_buffer_dither(&mut buffer)?;
+        let raw_image = ImageRaw::<BinaryColor>::new(&buffer, width);
+        Image::new(&raw_image, Point::new(x, y))
+            .draw(&mut self.display)
+            .map_err(DisplayDrawingError::DrawingFailed)?;
+        Ok(())
+    }
+
+    pub fn test(&mut self, test: bool) 
+    {
         if test {
-            for i in 0..26 {
-                self.clear();
-                let image_w = 34;
-                let mimage_w = 30;
-
-                let text = format!("Glyph {}", i);
-                self.draw_text(&text, 4, 4,Some(&FONT_6X13_BOLD)).unwrap();
-
-                let mut glyph = ImageRaw::<BinaryColor>::new(
-                    imgdata::get_glyph_slice(
-                        climacell::WEATHER_RAW_DATA, 
-                        i, image_w, image_w),image_w);
-                Image::new(&glyph, Point::new(20, 20))
-                    .draw(&mut self.display).unwrap();
-                if i< 8{
-                    glyph = ImageRaw::<BinaryColor>::new(
-                        imgdata::get_glyph_slice(
-                            climacell::MOON_PHASE_RAW_DATA,
-                            i, mimage_w, mimage_w),mimage_w);
-                    Image::new(&glyph, Point::new(62, 20))
-                        .draw(&mut self.display).unwrap();
-
-                }
-                self.flush().unwrap();
-                sleep(Duration::from_millis(200));
-            }
             self.clear();
+            let width = 32; // multiples of 8 or actual size - scale perfectly
+            let height = 32;
+            let x = 0;
+            let y = 0;
+            for path in [
+                "./assets/sunny44.svg", 
+                "./assets/thunder.svg",
+                "./assets/hurrican.svg",
+                "./assets/icepellets.svg", // 24x24
+                "./assets/s2.svg",
+                "./assets/tornado.svg",
+                "./assets/cloudysun.svg", // std size
+                "./assets/cloudy.svg", // std size
+                  "./assets/rain.svg", // std size
+                "./assets/lightrain.svg", // std size
+                "./assets/heavyrain.svg", // std size
+                  "./assets/snow.svg",
+                "./assets/heavysnow.svg",
+                "./assets/lightsnow.svg",
+                "./assets/cloudynight.svg",
+                "./assets/clearnight.svg",
+                "./assets/clearnight2.svg",
+                "./assets/lightsleet.svg",
+                "./assets/sleet.svg",
+                "./assets/heavysleet.svg",
+                "./assets/flurries.svg",
+                "./assets/lightfog.svg",
+                "./assets/fog.svg",
+                "./assets/sunny55.svg"] {
+                self.put_svg(path, x, y, width, height).unwrap();
+                self.flush().unwrap();
+                sleep(Duration::from_millis(2500));
+                //width += 8;
+                //height += 8;
+                self.clear();
+            }
             self.flush().unwrap();
+
         }
     }
+
     
+
     /// Displays a splash screen image and fades the brightness in.
     /// The splash image is the LyMonS logo, version and build date
     pub fn splash(&mut self, 
@@ -869,7 +922,7 @@ impl OledDisplay {
                 "{:.0}{2} | {:.0}{2}",
                 current.temperature_min, current.temperature_max, temp_units
             );
-            let humidity = format!("{:.0} %", current.humidity_avg);
+            let humidity = format!("{:.0}%", current.humidity_avg);
             let wind_dir = current.wind_direction.clone();
             let wind_speed = format!("{:.0} {} {}", current.wind_speed_avg, wind_speed_units, wind_dir);
             let pop =  format!("{}%", current.precipitation_probability_avg);
@@ -924,9 +977,9 @@ impl OledDisplay {
             Self::draw_text_internal(&mut self.display,&pop, text_x, text_y, &FONT_6X10)?;
 
             text_y += 13;
-            let conditions_text_width = Self::get_text_width_specific_font(&conditions, &FONT_6X13_BOLD);
+            let conditions_text_width = Self::get_text_width_specific_font(&conditions, &FONT_7X14);
             let conditions_text_x = (constants::DISPLAY_WIDTH as i32 - conditions_text_width as i32) / 2;
-            Self::draw_text_internal(&mut self.display,&conditions, conditions_text_x, text_y, &FONT_6X13_BOLD)?;
+            Self::draw_text_internal(&mut self.display,&conditions, conditions_text_x, text_y, &FONT_7X14)?;
 
             needs_flush = true;
 

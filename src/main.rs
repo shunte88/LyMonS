@@ -24,6 +24,7 @@ mod textable;
 mod climacell;
 mod geoloc;
 mod translate;
+mod svgimage;
 
 use sliminfo::{LMSServer, TagID};
 
@@ -140,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "vcr",
             "radio",
             "tv",
-            "pc"]
+            "ibmpc"]
             )
         .default_value("cassette")
         .required(false))
@@ -213,7 +214,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         oled_display.setup_weather(weather_config).await?;
     }
     
-    oled_display.test(false);
+    oled_display.test(true);
 
     // Initialize the LMS server, discover it, fetch players, init tags, and start polling
     // init_server now returns Arc<TokMutex<LMSServer>>
@@ -257,6 +258,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut lms_guard = lms_arc.lock().await;
 
                 if lms_guard.is_playing() {
+
                     oled_display.set_display_mode(display::DisplayMode::Scrolling).await; // Set mode
                     
                     // Only update display data if LMS tags have changed

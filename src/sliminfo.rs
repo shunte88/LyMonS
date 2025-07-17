@@ -314,6 +314,7 @@ pub struct LMSServer {
     pub slim_tags: String,
     pub tags: Vec<MetaTag>,
     pub client: SlimInfoClient,
+    working: bool,
     // Fields for background polling thread management
     stop_sender: Option<mpsc::Sender<()>>,
     poll_handle: Option<JoinHandle<()>>,
@@ -335,6 +336,7 @@ impl LMSServer {
             slim_tags: "tags:".to_string(),
             tags: Vec::with_capacity(MAXTAG_TYPES),
             client: SlimInfoClient::new(),
+            working: false,
             stop_sender: None,
             poll_handle: None,
         }
@@ -432,7 +434,7 @@ impl LMSServer {
         const LISTEN_ADDR: &str="0.0.0.0:0"; // Listen on any interface, any available port
         const BROADCAST_PORT: u16 = 3483; // Standard LMS discovery port
         const TIMEOUT_MS: u64 = 5000;
-        const POLL_INTERVAL_MS: u64 = 250;
+        const POLL_INTERVAL_MS: u64 = 500;
         
         let mut lms: LMSServer = LMSServer::new();
 
@@ -524,7 +526,7 @@ impl LMSServer {
             return Err("LMS Server not discovered. Call discover() first.".into());
         }
 
-        if self.refresh {
+        if self.refresh && !self.working {
 
             self.refresh = false;
             let command="status";
@@ -533,6 +535,7 @@ impl LMSServer {
             let mut dtime:f32 = 0.0;
             let mut ptime = dtime;
 
+            self.working = true;
             match self.client.send_slim_request(
                 self.host.to_string().as_str(),
                 self.port,
@@ -616,6 +619,7 @@ impl LMSServer {
                 },
                 Err(e) => error!("Error calling 'status' on LMS Server: {}", e),
             }
+            self.working = false;
         }
         Ok(())
         

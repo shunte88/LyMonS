@@ -134,6 +134,7 @@ impl WeatherConditions {
     }
 }
 
+#[allow(dead_code)]
 impl Weather {
     /// Creates a new `Weather` instance. Performs IP lookup if lat/lng are not provided.
     pub async fn new(weather_config:&str) -> Result<Self, WeatherApiError> {
@@ -429,7 +430,7 @@ impl Weather {
             }, // night
             1102 | 11020 => WeatherCode {
                 description: "Mostly Cloudy".to_string(),
-                icon: 16,
+                icon: 17,
             },
             11021 => WeatherCode {
                 description: "Mostly Cloudy".to_string(),
@@ -813,39 +814,3 @@ impl Drop for Weather {
     }
 }
 
-/*
-
-        (wiconmap_t){"clearD", "Clear", 0, true},
-        (wiconmap_t){"clearN", "Clear", 1, true},
-        (wiconmap_t){"clear", "Clear", 0, true},
-        (wiconmap_t){"cloudy", "Cloudy", 2, true},
-        (wiconmap_t){"drizzle", "Drizzle", 3, true},
-        (wiconmap_t){"flurries", "Snow Flurries", 4, true},
-        (wiconmap_t){"fog", "Fog", 5, true},
-        (wiconmap_t){"fog_light", "Mist", 6, true},
-        (wiconmap_t){"freezing_drizzle", "Freezing Drizzle", 7, true},
-        (wiconmap_t){"freezing_rain", "Freezing Rain", 8, true},
-        (wiconmap_t){"freezing_rain_heavy", "Frezing Rain", 9, true},
-        (wiconmap_t){"freezing_rain_light", "Freezing Rain", 10, true},
-        (wiconmap_t){"ice_pellets", "Hail", 11, true},
-        (wiconmap_t){"ice_pellets_heavy", "Hail", 12, true},
-        (wiconmap_t){"ice_pellets_light", "Hail", 13, true},
-        (wiconmap_t){"mostly_clearD", "Mostly Clear", 14, true},
-        (wiconmap_t){"mostly_clearN", "Mostly Clear", 15, true},
-        (wiconmap_t){"mostly_clear", "Mostly Clear", 14, true},
-        (wiconmap_t){"partly_cloudyD", "Partly Cloudy", 17, true},
-        (wiconmap_t){"partly_cloudyN", "Partly Cloudy", 18, true},
-        (wiconmap_t){"partly_cloudy", "Partly Cloudy", 17, true},
-        (wiconmap_t){"mostly_cloudyD", "Mostly Cloudy", 16, true},
-        (wiconmap_t){"mostly_cloudyN", "Mostly Cloudy", 18, true},
-        (wiconmap_t){"mostly_cloudy", "Mostly Cloudy", 16, true},
-        (wiconmap_t){"rain", "Rain", 19, true},
-        (wiconmap_t){"rain_heavy", "Heavy Rain", 20, true},
-        (wiconmap_t){"rain_light", "Showers", 21, true},
-        (wiconmap_t){"snow", "Snow", 22, true},
-        (wiconmap_t){"snow_heavy", "Heavy Snow", 23, true},
-        (wiconmap_t){"snow_light", "Snow Showers", 24, true},
-        (wiconmap_t){"tstorm", "Thunderstorm", 25, true},
-        (wiconmap_t){"???", "Unknown", 26, true},
-
-*/
