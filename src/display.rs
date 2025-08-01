@@ -6,7 +6,7 @@ use embedded_graphics::{
             FONT_4X6,
             FONT_5X8, 
             FONT_6X10,
-            FONT_6X13,
+            //FONT_6X13,
             FONT_7X14,
             FONT_6X13_BOLD}, 
         MonoFont, 
@@ -15,15 +15,19 @@ use embedded_graphics::{
     }, 
     pixelcolor::BinaryColor, 
     prelude::*, 
-    primitives::{PrimitiveStyleBuilder, Rectangle, Line, Circle}, 
-    text::{self, renderer::TextRenderer, Baseline, Text}
-};
-use embedded_text::{
-    style::{TextBoxStyle, TextBoxStyleBuilder},
-    TextBox,
+    primitives::{PrimitiveStyleBuilder, Rectangle}, 
+    text::{self, 
+        renderer::TextRenderer, 
+        Baseline, 
+        Text, 
+    }
 };
 
-//use embedded_picofont::FontPico;
+use embedded_text::{
+    alignment::{HorizontalAlignment, VerticalAlignment},
+    style::TextBoxStyleBuilder,
+    TextBox,
+};
 
 use linux_embedded_hal::I2cdev;
 use ssd1306::{
@@ -34,8 +38,8 @@ use ssd1306::{
     Ssd1306, 
 };
 
-use log::{info, error, debug};
-use std::{path, time::{Duration, Instant}};
+use log::{debug, info, error};
+use std::{time::{Duration, Instant}};
 use std::error::Error; // Import the Error trait
 use std::fmt; // Import fmt for Display trait
 use std::thread::sleep;
@@ -47,19 +51,20 @@ use display_interface::DisplayError;
 
 use crate::imgdata;   // imgdata, glyphs and such
 use crate::constants; // constants
-use crate::climacell; // weather glyphs
+use crate::climacell; // weather glyphs - need to move to SVG mpl.
 use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
 use crate::deutils::seconds_to_hms;
 use crate::weather::{Weather, WeatherData};
 use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode, GAP_BETWEEN_LOOP_TEXT_FIXED};
-use crate::svgimage::SvgImageRenderer;
+use crate::svgimage::{SvgImageRenderer, SvgImageError};
+use crate::eggs::{Eggs, set_easter_egg};
 
 /// Represents the audio bitrate mode for displaying the correct glyph.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AudioBitrate {
-    HD,
-    SD,
-    DSD,
+    SD = 1,
+    HD = 2,
+    DSD = 3,
     None, // No specific audio bitrate glyph displayed
 }
 
@@ -108,6 +113,8 @@ pub enum DisplayDrawingError {
     Other(String),
     /// Error from SVG rendering.
     SvgError(crate::svgimage::SvgImageError),
+    /// Error from Easter Egg rendering.
+    EggsError(crate::eggs::EggsError),
     /// Error reading SVG file.
     IoError(std::io::Error),
 }
@@ -118,6 +125,7 @@ impl fmt::Display for DisplayDrawingError {
             DisplayDrawingError::DrawingFailed(e) => write!(f, "Display drawing error: {:?}", e),
             DisplayDrawingError::Other(msg) => write!(f, "Display error: {}", msg),
             DisplayDrawingError::SvgError(e) => write!(f, "SVG rendering error: {}", e),
+            DisplayDrawingError::EggsError(e) => write!(f, "Easter Egg error: {}", e),
             DisplayDrawingError::IoError(e) => write!(f, "IO error reading SVG file: {}", e),
         }
     }
@@ -136,7 +144,11 @@ impl From<crate::svgimage::SvgImageError> for DisplayDrawingError {
         DisplayDrawingError::SvgError(err)
     }
 }
-
+impl From<crate::eggs::EggsError> for DisplayDrawingError {
+    fn from(err: crate::eggs::EggsError) -> Self {
+        DisplayDrawingError::EggsError(err)
+    }
+}
 impl From<std::io::Error> for DisplayDrawingError {
     fn from(err: std::io::Error) -> Self {
         DisplayDrawingError::IoError(err)
@@ -185,16 +197,15 @@ pub struct OledDisplay {
     last_remaining_time_secs: f32,
     last_mode_text: String,
     scroll_mode: String,
-    #[allow(dead_code)]
     weather_data_arc: Option<Arc<TokMutex<Weather>>>, // Reference to the shared weather client
     weather_display_switch_timer: Option<Instant>,
     current_weather_display_page: usize, // 0 for current, 1 for forecast days - 3 days displayed
     last_weather_draw_data: WeatherData, // To track if weather data has changed for redraw
-
-    // Easter Egg: Compact Cassette animation state
-    cassette_animation_start_time: Instant,
-    current_hub_angle_degrees: f32,
-
+    artist: String,
+    title: String,
+    level: u8,
+    pct: f64,
+    easter_egg: Eggs,
 }
 
 #[allow(dead_code)]
@@ -205,7 +216,7 @@ impl OledDisplay {
     /// `i2c_bus_path` is typically "/dev/i2c-X" where X is the bus number (e.g., "/dev/i2c-1").
     /// NEED  support for i2c and spi, argument should drive the logic for the 
     /// interface to be instantiated
-    pub fn new(i2c_bus_path: &str, scroll_mode: &str, clock_font: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(i2c_bus_path: &str, scroll_mode: &str, clock_font: &str, egg_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
         info!("Initializing Display on {}", i2c_bus_path);
 
         let i2c = I2cdev::new(i2c_bus_path)?;
@@ -299,10 +310,12 @@ impl OledDisplay {
             current_weather_display_page: 0, // 0 for current, 1 for forecast
             last_weather_draw_data: WeatherData::default(),
             weather_display_switch_timer: None,
-            // Easter Egg: Compact Cassette animation state
-            cassette_animation_start_time: Instant::now(),
-            current_hub_angle_degrees: 0.0,
-            })
+            artist: String::new(),
+            title: String::new(),
+            level: 1,
+            pct: 0.00,
+            easter_egg: set_easter_egg(egg_name),
+        })
 
     }
 
@@ -319,72 +332,127 @@ impl OledDisplay {
     /// Sets the contrast (brightness) of the OLED display.
     /// `contrast` should be a value between 0 and 255.
     pub fn set_brightness(&mut self, contrast: u8) -> Result<(), Box<dyn std::error::Error>> {
+
         self.display.set_brightness(Brightness::custom(1, contrast))
             .map_err(|e| format!("Failed to set contrast: {:?}", e))?;
         Ok(())
+
     }
 
-    // sizing - 100% or multiples of 8 e.g. 32, 40, 48
-    pub fn put_svg(&mut self, path: &str, x: i32, y: i32, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
-        info!("put_svg {} {} {}",path,width,height);
+    fn calc_progress_angle(&mut self, angle0:f32, angle100:f32, progress_percent: f32) -> f32 {
+        let clamped_percent = progress_percent.clamp(0.0, 100.0);
+        let angle_range = angle100 - angle0;
+        let factor = clamped_percent / 100.0;
+        angle0 + (angle_range * factor)
+    }
+
+    pub fn get_egg_type(&mut self) -> u8 {
+        self.easter_egg.egg_type
+    }
+
+    /// direct SVG rendering with scale and eggy SVG dynamics
+    pub async fn put_eggy_svg(&mut self, artist: &str, title: &str, level: u8, pct: f64, x: i32, y: i32) -> Result<(), Box<dyn std::error::Error>> {
+        
+        let mut eggy = self.easter_egg.clone();
+        let raw_image = eggy.update_and_render( 
+            artist,
+            title,
+            level, 
+            pct
+        )
+        .await
+        .map_err(DisplayDrawingError::EggsError)?;
+
+        Image::new(&raw_image, Point::new(x as i32, y as i32))
+            .draw(&mut self.display)
+            .map_err(DisplayDrawingError::DrawingFailed)?;
+
+        let combined = eggy.is_combined();
+        let character_style = MonoTextStyle::new(&FONT_4X6, BinaryColor::On);
+        let mut textbox_style = TextBoxStyleBuilder::new()
+            .alignment(HorizontalAlignment::Center)
+            .vertical_alignment(VerticalAlignment::Middle)
+            .build();
+        if combined {
+            textbox_style = TextBoxStyleBuilder::new()
+            .alignment(HorizontalAlignment::Left)
+            .vertical_alignment(VerticalAlignment::Top)
+            .build();
+        };
+
+        let arect = eggy.get_artist_rect();
+        let atext = eggy.get_artist();
+        let text_box = TextBox::with_textbox_style(atext, arect, character_style, textbox_style);
+        text_box.draw(&mut self.display)
+            .map_err(DisplayDrawingError::DrawingFailed)?;
+
+        if !combined {
+            let trect = eggy.get_title_rect();
+            let ttext = eggy.get_title();
+            let text_box = TextBox::with_textbox_style(ttext, trect, character_style, textbox_style);
+            text_box.draw(&mut self.display)
+                .map_err(DisplayDrawingError::DrawingFailed)?;
+        }
+
+        Ok(())
+    }
+
+    /// direct SVG rendering with scale, no SVG dynamics
+    pub async fn put_svg(&mut self, path: &str, x: i32, y: i32, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
+        debug!("put_svg {} {} {}", path, width, height);
+
         let data = fs::read_to_string(path).expect("load an svg file");
-        let buffer_size = ((width * height + 7) / 8) as usize;
-        let mut buffer = vec![0u8; buffer_size];
-        let svg_renderer = SvgImageRenderer::new(&data, width, height)?;
-        svg_renderer.render_to_buffer_dither(&mut buffer)?;
+        let buffer_size = height as usize * ((width + 7) / 8) as usize;
+        let mut buffer = vec![0; buffer_size];
+        let svg_renderer = SvgImageRenderer::new(&data, width, height)
+            .map_err(|e| SvgImageError::SvgParseError(e.to_string()))?;
+        svg_renderer.render_to_buffer(&mut buffer)
+            .map_err(|e| SvgImageError::RenderingError(e.to_string()))?;
         let raw_image = ImageRaw::<BinaryColor>::new(&buffer, width);
+
         Image::new(&raw_image, Point::new(x, y))
             .draw(&mut self.display)
             .map_err(DisplayDrawingError::DrawingFailed)?;
         Ok(())
     }
 
-    pub fn test(&mut self, test: bool) 
+    pub async fn test(&mut self, test: bool) 
     {
         if test {
-            self.clear();
-            let width = 32; // multiples of 8 or actual size - scale perfectly
-            let height = 32;
-            let x = 0;
-            let y = 0;
-            for path in [
-                "./assets/sunny44.svg", 
-                "./assets/thunder.svg",
-                "./assets/hurrican.svg",
-                "./assets/icepellets.svg", // 24x24
-                "./assets/s2.svg",
-                "./assets/tornado.svg",
-                "./assets/cloudysun.svg", // std size
-                "./assets/cloudy.svg", // std size
-                  "./assets/rain.svg", // std size
-                "./assets/lightrain.svg", // std size
-                "./assets/heavyrain.svg", // std size
-                  "./assets/snow.svg",
-                "./assets/heavysnow.svg",
-                "./assets/lightsnow.svg",
-                "./assets/cloudynight.svg",
-                "./assets/clearnight.svg",
-                "./assets/clearnight2.svg",
-                "./assets/lightsleet.svg",
-                "./assets/sleet.svg",
-                "./assets/heavysleet.svg",
-                "./assets/flurries.svg",
-                "./assets/lightfog.svg",
-                "./assets/fog.svg",
-                "./assets/sunny55.svg"] {
-                self.put_svg(path, x, y, width, height).unwrap();
-                self.flush().unwrap();
-                sleep(Duration::from_millis(2500));
-                //width += 8;
-                //height += 8;
+
+            let save_egg = self.easter_egg.clone();
+
+            // svg animation test
+            for egg in [
+                "cassette",
+                "technics",
+                "reel2reel",
+                "vcr",
+                "tubeamp",
+                "radio40",
+                "radio50",
+                "tvtime",
+                "ibmpc"] {
+
+                self.easter_egg = set_easter_egg(egg);
                 self.clear();
+
+                for i in 0..100 { 
+                    let pct = i as f64 / 100.0; 
+                    self.put_eggy_svg("Bonnie Barrow", "My Dingo, My Love",2, pct, 0, 0)
+                    .await
+                    .unwrap();
+                    self.flush().unwrap();
+                    sleep(Duration::from_millis(50));
+                }
             }
+            self.easter_egg = save_egg;
+
+            self.clear();
             self.flush().unwrap();
 
         }
     }
-
-    
 
     /// Displays a splash screen image and fades the brightness in.
     /// The splash image is the LyMonS logo, version and build date
@@ -446,30 +514,15 @@ impl OledDisplay {
     // This is a static/associated function, not a method, so it doesn't borrow self.
     fn get_text_width_specific_font(text: &str, font: &MonoFont) -> u32 {
         MonoTextStyleBuilder::new().font(font).text_color(BinaryColor::On).build()
-            .measure_string(text, Point::new(0, 0), Baseline::Top).bounding_box.size.width
+            .measure_string(text, Point::zero(), Baseline::Top).bounding_box.size.width
     }
 
     /// Calculates the width of the given text in pixels using either the custom font or the default.
     fn get_text_width(&self, text: &str) -> u32 {
-        self.default_mono_style.measure_string(text, Point::new(0, 0), Baseline::Top).bounding_box.size.width
+        self.default_mono_style.measure_string(text, Point::zero(), Baseline::Top).bounding_box.size.width
     }
 
     // This is now an internal helper, but also matches the DisplaySurface trait method.
-    fn draw_text_region_internal(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        text: &str, x: i32, y: i32, region: Rectangle, 
-        font: &MonoFont) -> Result<(), DisplayDrawingError> {
-        let character_style = MonoTextStyle::new(&font, BinaryColor::On);
-        let textbox_style = TextBoxStyleBuilder::new()
-            .build();
-        let text_box = TextBox::with_textbox_style(text, region, character_style, textbox_style);
-        text_box
-        .draw(display)
-        .map_err(DisplayDrawingError::DrawingFailed)?;
-        Ok(())
-    }
-
-        // This is now an internal helper, but also matches the DisplaySurface trait method.
     fn flush_internal(display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>) -> Result<(), DisplayDrawingError> {
         display.flush()
             .map_err(DisplayDrawingError::DrawingFailed)?;
@@ -552,8 +605,6 @@ impl OledDisplay {
 
             if mode == DisplayMode::EasterEggs {
                 // Initialize animation state for Easter Eggs
-                self.cassette_animation_start_time = Instant::now();
-                self.current_hub_angle_degrees = 0.0;
             }
 
             // Reset clock digits so it redraws everything when switching to clock mode
@@ -601,7 +652,7 @@ impl OledDisplay {
 
     fn draw_rectangle_internal(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        top_left: Point,w:u32, h:u32,fill:BinaryColor, border_width:Option<u32>, border_color:Option<BinaryColor>
+        top_left: Point, w:u32, h:u32, fill:BinaryColor, border_width:Option<u32>, border_color:Option<BinaryColor>
     ) -> Result<(), DisplayDrawingError> {
         Rectangle::new(top_left,
             Size::new(w, h))
@@ -670,12 +721,19 @@ impl OledDisplay {
             } else {
                 AudioBitrate::None
             };
+
+            self.level = self.audio_bitrate as u8;
+
         }
 
     }
 
     /// Sets the content for each scrolling line.
     pub async fn set_track_details(&mut self, albumartist: String, album: String, title: String, artist: String, scroll_mode_str:&str) {
+
+        self.artist = artist.clone();
+        self.title = title.clone();
+
         // Prepare data for each scroller
         let scroller_data = [
             (constants::TAG_DISPLAY_ALBUMARTIST, albumartist),  // @ 1 
@@ -919,8 +977,8 @@ impl OledDisplay {
             let conditions = current.weather_code.description.clone();
 
             let min_max_temp = format!(
-                "{:.0}{2} | {:.0}{2}",
-                current.temperature_min, current.temperature_max, temp_units
+                "{:.0}({:.0}) {}",
+                current.temperature_avg, current.temperature_apparent_avg, temp_units
             );
             let humidity = format!("{:.0}%", current.humidity_avg);
             let wind_dir = current.wind_direction.clone();
@@ -990,7 +1048,7 @@ impl OledDisplay {
             if forecasts.len() > 0 {
 
                 let mut icon_x = 7;
-                for (i, forecast) in forecasts.iter().enumerate() {
+                for (_i, forecast) in forecasts.iter().enumerate() {
 
                     let mut day_y = 1;
                     let day_of_week = forecast.sunrise_time
@@ -1059,106 +1117,20 @@ impl OledDisplay {
 
     }
 
-    /// Draws the compact cassette Easter Egg animation.
-    fn draw_compact_cassette(&mut self, current_time_secs: f32, duration_secs: f32) -> Result<(), Box<dyn std::error::Error>> {
-        let now = Instant::now();
-        debug!("{:?}",now);
-/*
-        let elapsed_time = now.duration_since(self.cassette_animation_start_time).as_secs_f32();
-
-        // Update hub rotation angle
-        self.current_hub_angle_degrees = (constants::HUB_ROTATION_SPEED_DPS * elapsed_time) % 360.0;
-        let angle_radians = self.current_hub_angle_degrees.to_radians();
-
-        // --- Draw Cassette Body ---
-        Rectangle::new(
-            Point::new(constants::CASSETTE_BODY_X, constants::CASSETTE_BODY_Y),
-            Size::new(constants::CASSETTE_BODY_WIDTH, constants::CASSETTE_BODY_HEIGHT),
-        )
-        .into_styled(
-            PrimitiveStyleBuilder::new()
-                .stroke_color(BinaryColor::On)
-                .stroke_width(1)
-                .build(),
-        )
-        .draw(&mut self.display)?;
-
-        // --- Draw Tape Window ---
-        Rectangle::new(
-            Point::new(constants::CASSETTE_TAPE_WINDOW_X, constants::CASSETTE_TAPE_WINDOW_Y),
-            Size::new(constants::CASSETTE_TAPE_WINDOW_WIDTH, constants::CASSETTE_TAPE_WINDOW_HEIGHT),
-        )
-        .into_styled(
-            PrimitiveStyleBuilder::new()
-                .stroke_color(BinaryColor::On)
-                .stroke_width(constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS)
-                .build(),
-        )
-        .draw(&mut self.display)?;
-
-        // --- Draw Tape Progress ---
-        let tape_fill_ratio = if duration_secs > 0.0 {
-            current_time_secs / duration_secs
-        } else {
-            0.0
-        };
-        let tape_fill_width = (constants::CASSETTE_TAPE_WINDOW_WIDTH as f32 * tape_fill_ratio).round() as u32;
-
-        if tape_fill_width > 0 {
-            Rectangle::new(
-                Point::new(
-                    constants::CASSETTE_TAPE_WINDOW_X + constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS as i32,
-                    constants::CASSETTE_TAPE_WINDOW_Y + constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS as i32,
-                ),
-                Size::new(
-                    tape_fill_width.saturating_sub(2 * constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS),
-                    constants::CASSETTE_TAPE_WINDOW_HEIGHT.saturating_sub(2 * constants::CASSETTE_TAPE_WINDOW_BORDER_THICKNESS),
-                ),
-            )
-            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
-            .draw(&mut self.display)?;
-        }
-
-        // --- Draw Rotating Hubs ---
-        let hub_style = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
-
-        // Left Hub
-        let left_hub_center = Point::new(constants::CASSETTE_HUB_LEFT_CENTER_X, constants::CASSETTE_HUB_CENTER_Y);
-        Circle::new(left_hub_center, constants::CASSETTE_HUB_RADIUS)
-            .into_styled(hub_style)
-            .draw(&mut self.display)?;
-        // Draw a rotating spoke for the left hub
-        let spoke_length = constants::CASSETTE_HUB_RADIUS as f32 - 2.0; // Slightly shorter than radius
-        let spoke1_end_x = left_hub_center.x + (spoke_length * angle_radians.cos()).round() as i32;
-        let spoke1_end_y = left_hub_center.y + (spoke_length * angle_radians.sin()).round() as i32;
-        Line::new(left_hub_center, Point::new(spoke1_end_x, spoke1_end_y))
-            .into_styled(hub_style)
-            .draw(&mut self.display)?;
-        let spoke2_end_x = left_hub_center.x + (spoke_length * (angle_radians + std::f32::consts::PI).cos()).round() as i32;
-        let spoke2_end_y = left_hub_center.y + (spoke_length * (angle_radians + std::f32::consts::PI).sin()).round() as i32;
-        Line::new(left_hub_center, Point::new(spoke2_end_x, spoke2_end_y))
-            .into_styled(hub_style)
-            .draw(&mut self.display)?;
-
-
-        // Right Hub
-        let right_hub_center = Point::new(constants::CASSETTE_HUB_RIGHT_CENTER_X, constants::CASSETTE_HUB_CENTER_Y);
-        Circle::new(right_hub_center, constants::CASSETTE_HUB_RADIUS)
-            .into_styled(hub_style)
-            .draw(&mut self.display)?;
-        // Draw a rotating spoke for the right hub (opposite direction for visual effect)
-        let reverse_angle_radians = -angle_radians;
-        let spoke3_end_x = right_hub_center.x + (spoke_length * reverse_angle_radians.cos()).round() as i32;
-        let spoke3_end_y = right_hub_center.y + (spoke_length * reverse_angle_radians.sin()).round() as i32;
-        Line::new(right_hub_center, Point::new(spoke3_end_x, spoke3_end_y))
-            .into_styled(hub_style)
-            .draw(&mut self.display)?;
-        let spoke4_end_x = right_hub_center.x + (spoke_length * (reverse_angle_radians + std::f32::consts::PI).cos()).round() as i32;
-        let spoke4_end_y = right_hub_center.y + (spoke_length * (reverse_angle_radians + std::f32::consts::PI).sin()).round() as i32;
-        Line::new(right_hub_center, Point::new(spoke4_end_x, spoke4_end_y))
-            .into_styled(hub_style)
-            .draw(&mut self.display)?;
-*/
+    /// Draws the configured Egg inclusive animation and track progress.
+    async fn draw_egg(&mut self, current_time_secs: f32, duration_secs: f32) -> Result<(), Box<dyn std::error::Error>> {
+        let pct = current_time_secs/duration_secs;
+        let tl = self.easter_egg.get_top_left();
+        self.put_eggy_svg(
+            self.artist.clone().as_str(),
+            self.title.clone().as_str(),
+            self.level,
+            pct as f64,
+            tl.x,
+            tl.y)
+        .await?;
+        // hand the text output here
+        self.flush()?;
         Ok(())
     }
 
@@ -1192,9 +1164,8 @@ impl OledDisplay {
                 self.update_and_draw_clock(chrono::Local::now())?;
             },
             DisplayMode::EasterEggs => {
-                self.clear();
-                self.draw_compact_cassette(self.current_track_time_secs, self.track_duration_secs)?;
-                self.flush()?;
+                self.draw_egg(self.current_track_time_secs, self.track_duration_secs)
+                .await?;
             },
             DisplayMode::WeatherCurrent => {
                 // When in weather mode, drawing is self contained

@@ -1,13 +1,13 @@
-use anyhow::{bail};
 use serde::{Deserialize, Serialize};
-use reqwest::{Url, Client, header};
+use serde_json::{Value, Error as JsonError};
+use reqwest::{Client, header};
 use std::fmt::{self, Display};
 use std::time::{Duration, Instant}; // Added Instant for tracking last update
 use log::{info, error, debug};
 use tokio::sync::{mpsc, Mutex as TokMutex};
 use tokio::task::JoinHandle;
 use std::sync::Arc;
-use chrono::{DateTime, Utc}; // Import Duration for adding to DateTime
+use chrono::{DateTime, Local}; // Import Duration for adding to DateTime
 
 use flate2::read::GzDecoder;
 use std::io::Read;
@@ -20,8 +20,8 @@ use crate::translate::Translation;
 #[derive(Debug)]
 pub enum WeatherApiError {
     HttpRequestError(reqwest::Error),
-    SerializationError(serde_json::Error),
-    DeserializationError(serde_json::Error),
+    SerializationError(JsonError),
+    DeserializationError(JsonError),
     ApiKeyError(String), // For specific API error messages
     GeolocationError(String),
     InvalidInput(String),
@@ -56,8 +56,8 @@ impl From<reqwest::Error> for WeatherApiError {
     }
 }
 
-impl From<serde_json::Error> for WeatherApiError {
-    fn from(err: serde_json::Error) -> Self {
+impl From<JsonError> for WeatherApiError {
+    fn from(err: JsonError) -> Self {
         WeatherApiError::SerializationError(err) // Can be refined to DeserializationError later if context allows
     }
 }
@@ -77,14 +77,14 @@ pub struct Location {
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct WeatherData {
-    pub day: DateTime<Utc>,
+    pub day: DateTime<Local>,
     pub humidity_avg: i64,
-    pub moonrise_time: Option<DateTime<Utc>>,
-    pub moonset_time: Option<DateTime<Utc>>,
+    pub moonrise_time: Option<DateTime<Local>>,
+    pub moonset_time: Option<DateTime<Local>>,
     pub precipitation_probability_avg: f64,
     pub pressure_sea_level_avg: f64,
-    pub sunrise_time: Option<DateTime<Utc>>,
-    pub sunset_time: Option<DateTime<Utc>>,
+    pub sunrise_time: Option<DateTime<Local>>,
+    pub sunset_time: Option<DateTime<Local>>,
     pub temperature_apparent_avg: f64,
     pub temperature_avg: f64,
     pub temperature_max: f64,
@@ -102,7 +102,7 @@ pub struct WeatherConditions {
     pub windspeed_units: String, // "km/h" or "mph"
     pub current: WeatherData,
     pub forecast: Vec<WeatherData>,
-    pub last_updated: DateTime<Utc>,
+    pub last_updated: DateTime<Local>,
 }
 
 // Main Weather client
@@ -129,7 +129,7 @@ impl WeatherConditions {
             windspeed_units: if units == "imperial" { "mph" } else { "km/h" }.to_string(),
             current: WeatherData::default(),
             forecast: vec![WeatherData::default(); 3],
-            last_updated: Utc::now(),
+            last_updated: Local::now(),
         }
     }
 }
@@ -220,20 +220,138 @@ impl Weather {
         })
     }
 
+    pub async fn get_forecast_data(&mut self, day: &Value) -> Result<WeatherData, JsonError> {
+
+        let values = day["values"].clone();
+        let mut deg = values["windDirectionAvg"].as_f64().unwrap_or(-999.0);
+        if deg == -999.0 {
+            deg = values["windDirection"].as_f64().unwrap_or(0.0);
+        }
+        
+        let mut d16 = ((deg / 22.5) + 0.5) as u8;
+        d16 %= 16;
+        let compass_points = [
+            "N",  "NNE", "NE", "ENE", "E",  "ESE",
+            "SE", "SSE", "S",  "SSW", "SW", "WSW",
+            "W",  "WNW", "NW", "NNW"];
+        let wind_dir = compass_points[d16 as usize].to_string();
+        let mut weather_code = values["weatherCodeMax"].as_i64().unwrap_or(99999);
+        if weather_code == 99999 {
+            weather_code = values["weatherCode"].as_i64().unwrap_or(0);
+        }
+        let wc: WeatherCode = self.parse_weather_code(weather_code).await;
+
+        let moonrise_time = if "" != values["moonriseTime"].as_str().unwrap_or("") {
+            let date_str = values["moonriseTime"].as_str().unwrap();
+            Some(DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Local))
+        } else {
+            None
+        };
+        let moonset_time = if "" != values["moonsetTime"].as_str().unwrap_or("") {
+            let date_str = values["moonsetTime"].as_str().unwrap();
+            Some(DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Local))
+        } else {
+            None
+        };
+        let sunrise_time = if "" != values["sunriseTime"].as_str().unwrap_or("") {
+            let date_str = values["sunriseTime"].as_str().unwrap();
+            Some(DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Local))
+        } else {
+            None
+        };
+        let sunset_time = if "" != values["sunsetTime"].as_str().unwrap_or("") {
+            let date_str = values["sunsetTime"].as_str().unwrap();
+            Some(DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Local))
+        } else {
+            None
+        };
+        let day_time = day["time"].as_str().unwrap();
+
+        let mut temp_apparent_avg = values["temperatureApparentAvg"].as_f64().unwrap_or(-999.0);
+        if temp_apparent_avg == -999.0 {
+            temp_apparent_avg = values["temperatureApparent"].as_f64().unwrap_or(0.0);
+        }
+        let mut temp_avg = values["temperatureAvg"].as_f64().unwrap_or(-999.0);
+        if temp_avg == -999.0 {
+            temp_avg = values["temperature"].as_f64().unwrap_or(0.0);
+        }
+        let mut temp_max = values["temperatureMax"].as_f64().unwrap_or(-999.0);
+        if temp_max == -999.0 {
+            temp_max = values["temperature"].as_f64().unwrap_or(0.0);
+        }
+        let mut temp_min = values["temperatureMin"].as_f64().unwrap_or(-999.0);
+        if temp_min == -999.0 {
+            temp_min = temp_max;
+        }
+        let mut pop = values["precipitationProbabilityAvg"].as_f64().unwrap_or(-999.0);
+        if pop == -999.0 {
+            pop = values["precipitationProbability"].as_f64().unwrap_or(0.0);
+        }
+        let mut pressure = values["pressureSurfaceLevelAvg"].as_f64().unwrap_or(-999.0);
+        if pressure == -999.0 {
+            pressure = values["pressureSurfaceLevel"].as_f64().unwrap_or(0.0);
+        }
+        let mut wind_speed = values["windSpeedAvg"].as_f64().unwrap_or(-999.0);
+        if wind_speed == -999.0 {
+            wind_speed = values["windSpeed"].as_f64().unwrap_or(0.0);
+        }
+        let mut humidity = values["humidityAvg"].as_i64().unwrap_or(999);
+        if humidity == 999 {
+            humidity = values["humidity"].as_i64().unwrap_or(0);
+        }
+
+        let wd = WeatherData {
+            day: DateTime::parse_from_rfc3339(day_time).unwrap().with_timezone(&Local),
+            humidity_avg: humidity,
+            moonrise_time: moonrise_time,
+            moonset_time: moonset_time,
+            precipitation_probability_avg: pop,
+            pressure_sea_level_avg: pressure,
+            sunrise_time: sunrise_time,
+            sunset_time: sunset_time,
+            temperature_apparent_avg: temp_apparent_avg,
+            temperature_avg: temp_avg,
+            temperature_max: temp_max,
+            temperature_min: temp_min,
+            weather_code: wc,
+            wind_direction: wind_dir,
+            wind_speed_avg: wind_speed,
+        };
+        Ok(wd)
+
+    }
+
     /// Fetches current weather and 3-day forecast from Tomorrow.io.
     pub async fn fetch_weather_data(&mut self) -> Result<(), WeatherApiError> {
         info!("Fetching weather data for {}...", self.weather_data.location_name);
 
         // fields do not appear to work!
-        let fields: Vec<&'static str> = vec![
-            "temperature", "weatherCode", "humidity", "windSpeed", "precipitationType",
-            "temperatureMax", "temperatureMin", "sunriseTime", "sunsetTime", "precipitationProbability",
-            "windSpeed","windDirection","windGust",];
+        let fields= [
+            "temperature",
+            "temperatureAvg", 
+            "temperatureApparentAvg", 
+            "temperatureMax", 
+            "temperatureMin", 
+            "temperature", 
+            "humidity", 
+            "precipitationType",
+            "precipitationProbabilityAvg",
+            "pressureSeaLevelAvg",
+            "moonriseTime", 
+            "moonsetTime", 
+            "sunriseTime", 
+            "sunsetTime", 
+            "windSpeed",
+            "windDirection",
+            "windGust",
+            "weatherCode",
+            ]
+            .join(",");
         let params = [
             ("location", format!("{},{}", self.lat, self.lng)),
-            ("fields", fields.join(",")), // this is NOT working???
+            ("fields", fields), // this is NOT working???
             ("units", self.units.clone()),
-            ("timesteps", "1d".to_string()),
+            ("timesteps", "1h,1d".to_string()),
             ("startTime", "now".to_string()),
             ("endTime", "nowPlus4d".to_string()),
             ("dailyStartTime", "6".to_string()),
@@ -251,82 +369,46 @@ impl Weather {
         let mut plain = String::new();
         decoder.read_to_string(&mut plain).unwrap();
         
-        let the_json: serde_json::Value = serde_json::from_str(&plain.as_str())
+        let the_json: Value = serde_json::from_str(&plain.as_str())
             .map_err(|e| WeatherApiError::DeserializationError(e))?;
 
-        let mut idx = 0;
-        if let Some(days) = the_json["timelines"]["daily"].as_array() {
-            for day in days {
-
-                let values = day["values"].clone();
-                let deg = values["windDirectionAvg"].as_f64().unwrap();
-                let mut d16 = ((deg / 22.5) + 0.5) as u8;
-                d16 %= 16;
-                let compass_points = [
-                    "N",  "NNE", "NE", "ENE", "E",  "ESE",
-                    "SE", "SSE", "S",  "SSW", "SW", "WSW",
-                    "W",  "WNW", "NW", "NNW"];
-                let wind_dir = compass_points[d16 as usize].to_string();
-                let wc: WeatherCode = self.parse_weather_code(values["weatherCodeMax"].as_i64().unwrap()).await;
-
-                let moonrise_time = if "" != values["moonriseTime"].as_str().unwrap_or("") {
-                    let date_str = values["moonriseTime"].as_str().unwrap();
-                    Some(DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Utc))
-                } else {
-                    None
-                };
-                let moonset_time = if "" != values["moonsetTime"].as_str().unwrap_or("") {
-                    let date_str = values["moonsetTime"].as_str().unwrap();
-                    Some(DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Utc))
-                } else {
-                    None
-                };
-                let sunrise_time = if "" != values["sunriseTime"].as_str().unwrap_or("") {
-                    let date_str = values["sunriseTime"].as_str().unwrap();
-                    Some(DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Utc))
-                } else {
-                    None
-                };
-                let sunset_time = if "" != values["sunsetTime"].as_str().unwrap_or("") {
-                    let date_str = values["sunsetTime"].as_str().unwrap();
-                    Some(DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Utc))
-                } else {
-                    None
-                };
-                let day_time = day["time"].as_str().unwrap();
-
-                let wd = WeatherData {
-                    day: DateTime::parse_from_rfc3339(day_time).unwrap().with_timezone(&Utc),
-                    humidity_avg: values["humidityAvg"].as_i64().unwrap_or(0),
-                    moonrise_time: moonrise_time,
-                    moonset_time: moonset_time,
-                    precipitation_probability_avg: values["precipitationProbabilityAvg"].as_f64().unwrap_or(0.0),
-                    pressure_sea_level_avg: values["pressureSeaLevelAvg"].as_f64().unwrap_or(0.0),
-                    sunrise_time: sunrise_time,
-                    sunset_time: sunset_time,
-                    temperature_apparent_avg: values["temperatureApparentAvg"].as_f64().unwrap_or(0.0),
-                    temperature_avg: values["temperatureAvg"].as_f64().unwrap_or(0.0),
-                    temperature_max: values["temperatureMax"].as_f64().unwrap_or(0.0),
-                    temperature_min: values["temperatureMin"].as_f64().unwrap_or(0.0),
-                    weather_code: wc,
-                    wind_direction: wind_dir,
-                    wind_speed_avg: values["windSpeedAvg"].as_f64().unwrap_or(0.0),
-                };
-
-                if idx == 0 {
-                    self.weather_data.current = wd;
-                } else {
-                    self.weather_data.forecast[idx-1] = wd;
-                }
-                idx += 1;
-                if idx > 3 {
-                    break;
+        let now = Local::now();
+        if let Some(timelines) = the_json.get("timelines") {
+            // Current weather (next hour)
+            if let Some(hours) = timelines.get("hourly").and_then(|i| i.as_array()) {
+                for hour in hours.iter() {
+                    let date_str = hour["time"].as_str().unwrap();
+                    if DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Local) > now {
+                        self.weather_data.current = self.get_forecast_data(hour)
+                            .await
+                            .map_err(|e| WeatherApiError::DeserializationError(e))?;
+                        break;
+                    }
                 }
             }
+            // 3-day daily forecast
+            let mut idx: usize = 0;
+            let now_day = now.date_naive();
+            if let Some(daily) = timelines.get("daily").and_then(|i| i.as_array()) {
+                for day in daily.iter().take(4) {
+                    if idx > 2 { // safe!
+                        break;
+                    }
+                    let date_str = day["time"].as_str().unwrap();
+                    if DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Local).date_naive() <= now_day {
+                        continue;
+                    }
+                    debug!("Forecast {} for {} > {}", idx, date_str,now_day);
+                    self.weather_data.forecast[idx] = self.get_forecast_data(day)
+                        .await
+                        .map_err(|e| WeatherApiError::DeserializationError(e))?;
+                    idx += 1;
+                }
+            }
+        } else {
+            println!("No forecast data found in the response.");
         }
-
-        debug!("{:#?}", self.weather_data);
-        self.weather_data.last_updated = Utc::now();
+        self.weather_data.last_updated = Local::now();
         info!("Weather data fetched successfully.");
         self.last_fetch_time = Some(Instant::now()); // Record fetch time
         Ok(())

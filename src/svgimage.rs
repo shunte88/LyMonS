@@ -4,10 +4,19 @@
 //! The output is a 1-bit per pixel monochrome bitmap, suitable for OLED displays
 //! using `embedded-graphics::image::ImageRaw`.
 
-use resvg::{render, usvg::{Tree as ResvgTree, Options as ResvgUsvgOptions, Size, Transform}};
+use resvg::{
+    render, 
+    usvg::{
+        Tree as ResvgTree, 
+        Options as ResvgUsvgOptions, 
+        Transform,
+    }
+}; // Use resvg's re-exports for usvg types
+
+//use roxmltree::Document;
 use tiny_skia::Pixmap;
 use log::{debug, error};
-use std::error::Error;
+use std::{error::Error};
 use std::fmt;
 
 /// Custom error type for SVG rendering operations.
@@ -20,7 +29,11 @@ pub enum SvgImageError {
     /// The provided buffer is too small for the target image size.
     BufferTooSmall,
     /// Generic rendering error.
-    _RenderingError(String),
+    RenderingError(String),
+    /// Node with specified ID not found.
+    _NodeNotFound(String),
+    /// Attempted to apply an animation type to an incompatible SVG node.
+    _IncompatibleNodeType(String),
 }
 
 impl fmt::Display for SvgImageError {
@@ -29,7 +42,9 @@ impl fmt::Display for SvgImageError {
             SvgImageError::SvgParseError(msg) => write!(f, "SVG parse error: {}", msg),
             SvgImageError::PixmapCreationError(msg) => write!(f, "Pixmap creation error: {}", msg),
             SvgImageError::BufferTooSmall => write!(f, "Provided buffer is too small for SVG rendering."),
-            SvgImageError::_RenderingError(msg) => write!(f, "SVG rendering error: {}", msg),
+            SvgImageError::RenderingError(msg) => write!(f, "SVG rendering error: {}", msg),
+            SvgImageError::_NodeNotFound(id) => write!(f, "SVG node with ID '{}' not found.", id),
+            SvgImageError::_IncompatibleNodeType(msg) => write!(f, "Incompatible SVG node type: {}", msg),
         }
     }
 }
@@ -50,10 +65,9 @@ impl SvgImageRenderer {
     ///
     /// The SVG will be scaled to fit `target_width` and `target_height`.
     pub fn new(svg_data: &str, target_width: u32, target_height: u32) -> Result<Self, SvgImageError> {
-        let usvg_options = ResvgUsvgOptions::default(); // Use resvg's re-exported Options
+        let usvg_options = ResvgUsvgOptions::default(); // Use resvg's re-exported Options   
         let tree = ResvgTree::from_str(svg_data, &usvg_options) // Use resvg's re-exported Tree
             .map_err(|e| SvgImageError::SvgParseError(format!("Failed to parse SVG: {:?}", e)))?;
-
         Ok(SvgImageRenderer {
             tree,
             target_width,
@@ -67,7 +81,8 @@ impl SvgImageRenderer {
     /// The format is row-major, LSB-first within each byte.
     pub fn render_to_buffer(&self, buffer: &mut [u8]) -> Result<(), SvgImageError> {
 
-        let buffer_len_needed = ((self.target_width * self.target_height + 7) / 8) as usize;
+        let padded_width = (self.target_width + 7) / 8;
+        let buffer_len_needed = self.target_height as usize * padded_width as usize;
         if buffer.len() < buffer_len_needed {
             error!(
                 "Buffer too small. Needed: {} bytes, Got: {} bytes",
@@ -105,9 +120,8 @@ impl SvgImageRenderer {
                 row.iter().enumerate().for_each(|(x, p)| {
                     let luminance = 0.299 * p.red() as f32 + 0.597 * p.green() as f32 + 0.114 * p.blue() as f32;
                     if luminance > threshold as f32 && p.alpha() > threshold {
-                        let pixel_flat_idx = y * self.target_width as usize + x;
-                        let byte_idx = pixel_flat_idx / 8;
-                        let bit_idx = pixel_flat_idx % 8;
+                        let byte_idx = y * padded_width as usize + (x / 8); // Corrected byte index
+                        let bit_idx = x % 8; // Bit index within the byte
                         buffer[byte_idx] |= 1 << (7 - bit_idx);
                     }
                 });
@@ -123,7 +137,9 @@ impl SvgImageRenderer {
     /// Each bit in the buffer represents a pixel (1 for BinaryColor::On, 0 for BinaryColor::Off).
     /// The format is row-major, LSB-first within each byte.
     pub fn render_to_buffer_dither(&self, buffer: &mut [u8]) -> Result<(), SvgImageError> {
-        let buffer_len_needed = ((self.target_width * self.target_height + 7) / 8) as usize;
+
+        let padded_width = (self.target_width + 7) / 8;
+        let buffer_len_needed = self.target_height as usize * padded_width as usize;
         if buffer.len() < buffer_len_needed {
             error!(
                 "Buffer too small. Needed: {} bytes, Got: {} bytes",
@@ -245,8 +261,8 @@ impl SvgImageRenderer {
                 let is_on = p.red() > 0; // Since R=G=B after dithering to grayscale
 
                 if is_on {
-                    let byte_idx = pixel_idx / 8;
-                    let bit_idx = pixel_idx % 8;
+                    let byte_idx = y * padded_width as usize + (x / 8); // Corrected byte index
+                    let bit_idx = x % 8; // Bit index within the byte
                     buffer[byte_idx] |= 1 << (7 - bit_idx); // Set the pixel (MSB-first)
                 }
             }

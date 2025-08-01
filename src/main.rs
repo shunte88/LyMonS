@@ -24,6 +24,7 @@ mod textable;
 mod climacell;
 mod geoloc;
 mod translate;
+mod eggs;
 mod svgimage;
 
 use sliminfo::{LMSServer, TagID};
@@ -63,7 +64,7 @@ fn check_half_hour(test:&String) -> u8 {
     let now = Local::now();
     let minute = now.minute();
     let second = now.second();
-    if minute == 35 {
+    if minute == 30 {
         if second < 30 {
             1
         } else {
@@ -137,13 +138,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .value_parser(
             ["cassette",
             "technics",
-            "reels",
+            "reel2reel",
             "vcr",
-            "radio",
-            "tv",
-            "ibmpc"]
+            "tubeamp",
+            "radio40",
+            "radio50",
+            "tvtime",
+            "ibmpc",
+            "none"]
             )
-        .default_value("cassette")
+        .default_value("none")
         .required(false))
         .arg(Arg::new("splash")
         .short('S')
@@ -180,7 +184,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let name_filter = matches.get_one::<String>("name").unwrap();
     let clock_font = matches.get_one::<String>("font").unwrap();
     let i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
-    let easter_eggs = matches.get_one::<String>("eggs").unwrap();
+    let easter_egg = matches.get_one::<String>("eggs").unwrap();
 
 
     /*
@@ -200,9 +204,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("This {} worth the Squeeze", env!("CARGO_PKG_NAME"));
     info!("v.{} built {}", env!("CARGO_PKG_VERSION"), BUILD_DATE);
 
-    debug!("{}", easter_eggs);
-
-    let mut oled_display = display::OledDisplay::new(i2c_bus_path, scroll_mode, clock_font)?;
+    let mut oled_display = display::OledDisplay::new(i2c_bus_path, scroll_mode, clock_font, easter_egg)?;
 
     oled_display.splash(
         show_splash,
@@ -214,7 +216,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         oled_display.setup_weather(weather_config).await?;
     }
     
-    oled_display.test(true);
+    oled_display.test(false).await;
 
     // Initialize the LMS server, discover it, fetch players, init tags, and start polling
     // init_server now returns Arc<TokMutex<LMSServer>>
@@ -259,7 +261,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if lms_guard.is_playing() {
 
-                    oled_display.set_display_mode(display::DisplayMode::Scrolling).await; // Set mode
+                    let egg_type = oled_display.get_egg_type();
+                    let mut this_mode = "scrolling";
+
+                    if egg_type == eggs::EGGS_TYPE_UNKNOWN {
+                        oled_display.set_display_mode(display::DisplayMode::Scrolling).await; // Set mode
+                    } else {
+                        oled_display.set_display_mode(display::DisplayMode::EasterEggs).await; // Set mode
+                        this_mode = "eggy"
+                    }
                     
                     // Only update display data if LMS tags have changed
                     if lms_guard.has_changed() {
@@ -315,14 +325,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         );
 
                         // Render the frame, which includes updating scroll positions and drawing
-                        oled_display.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in scrolling mode: {}", e));
+                        oled_display.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in {} mode: {}", this_mode, e));
 
                         // Request a refresh for the next LMS polling cycle
                         lms_guard.reset_changed(); // Reset changed flags after display update
                     } else {
                         // If not changed, but playing, just render the current animation frame.
                         // This allows ongoing scrolling animations to continue without new data.
-                        oled_display.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in scrolling mode (no change): {}", e));
+                        oled_display.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in {} mode (no change): {}", this_mode, e));
                     }
                 } else {
 

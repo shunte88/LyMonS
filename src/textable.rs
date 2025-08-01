@@ -14,7 +14,7 @@ use tokio::sync::Mutex as TokMutex; // Aliased tokio::sync::Mutex
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
-use log::{info, error, debug}; // Add logging
+use log::{info, debug}; // Add logging
 
 const SCROLL_LEFT: i8 = -1;
 const SCROLL_RIGHT: i8 = 1;
