@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use chrono::{Timelike, DateTime, Local};
 use embedded_graphics::{
     image::{Image, ImageRaw},

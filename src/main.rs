@@ -1,12 +1,11 @@
-use std::{error::Error, thread, time::Duration};
-use log::{info, error, debug, LevelFilter};
+#[allow(dead_code)]
+#[allow(unused_imports)]
+use std::{time::Duration};
+use log::{info, error};
 use env_logger::Env;
-use clap::Parser; // Import Parser for command-line arguments
+//use clap::Parser;
 use clap::{Arg, ArgAction, Command};
 use chrono::{Timelike, Local};
-
-use tokio::sync::Mutex as TokMutex;
-use std::sync::Arc;
 
 #[cfg(unix)] // Only compile this block on Unix-like systems
 use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
@@ -64,7 +63,7 @@ fn check_half_hour(test:&String) -> u8 {
     let now = Local::now();
     let minute = now.minute();
     let second = now.second();
-    if minute == 30 {
+    if minute == 5 || minute == 25 || minute == 45 {
         if second < 30 {
             1
         } else {
@@ -382,13 +381,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // its `Drop` implementation will be called, which will attempt to stop the background polling thread.
     // We can also explicitly drop it here for clarity, though it's not strictly necessary.
     drop(lms_arc);
-
-    /*
-    if let Some(weather_arc) = lms_weather_arc.take() {
-        weather_arc.lock().await.stop_polling().await;
-    }
-    */
-    //translator.persist_now().await?;
 
     Ok(())
 

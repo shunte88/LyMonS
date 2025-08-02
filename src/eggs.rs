@@ -75,10 +75,11 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 EGGS_TYPE_CASSETTE,
                 "./assets/compactcassettef.svg",
                 Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(4,6), Size::new(120,6)), 
-                Rectangle::new(Point::new(4,11), Size::new(120,6)), 
-                37.0, 
-                51.0, 
+                Rectangle::new(Point::new(18,6), Size::new(90,6)), 
+                Rectangle::new(Point::new(18,11), Size::new(90,6)), 
+                // reversed these
+                37.7, 
+                51.7, 
                 false)
         },
         "technics" => {
@@ -283,7 +284,7 @@ impl Eggs {
         }
 
         // note that right->left (-ve) and left->right (+ve) is defined via -ve , -{{progress}}, in the SVG
-        let linear_pct = self.calc_progress_angle_pct(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
+        let linear_pct = self.calc_progress_angle_linear(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
         data = data.replace("{{track-progress}}", linear_pct.to_string().as_str());
 
         // progress-arc - note using _pct flavor as we're called with precalculated percentile
@@ -357,6 +358,11 @@ impl Eggs {
         let angle_range = angle100 - angle0;
         let factor = clamped_percent / 100.0;
         angle0 + (angle_range * factor)
+    }
+    fn calc_progress_angle_linear(&mut self, angle0:f32, angle100:f32, progress_percent: f32) -> f32 {
+        let angle_range = angle100 - angle0;
+        let factor = angle_range / 100.0;
+        angle0 + (progress_percent * factor)
     }
     fn calc_progress_angle_pct(&mut self, angle0:f32, angle100:f32, progress_percent: f32) -> f32 {
         let factor = progress_percent.clamp(0.0, 1.0);

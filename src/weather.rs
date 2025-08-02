@@ -135,6 +135,7 @@ impl WeatherConditions {
 }
 
 #[allow(dead_code)]
+#[allow(irrefutable_let_patterns)]
 impl Weather {
     /// Creates a new `Weather` instance. Performs IP lookup if lat/lng are not provided.
     pub async fn new(weather_config:&str) -> Result<Self, WeatherApiError> {
