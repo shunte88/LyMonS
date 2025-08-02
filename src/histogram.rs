@@ -7,7 +7,6 @@ use embedded_graphics::{
     primitives::{Line, Primitive, PrimitiveStyle, Rectangle},
     text::Text,
 };
-use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 use rand::Rng;
 use std::time::{Duration, Instant};
 
@@ -88,6 +87,8 @@ impl AudioHistogram {
     }
 
     /// Update the internal state with new audio data.
+    /// fed from routine chomping shared memory
+    /// will need to lock, clone, release to acquire data
     pub fn update(&mut self, left_data: &[f32], right_data: &[f32]) {
         self.state.update(left_data, right_data);
     }
@@ -164,25 +165,20 @@ impl AudioHistogram {
     }
 }
 
+/*
 /// Main function for simulation purposes.
 /// In your project, you would integrate `AudioHistogram` into your main loop.
-fn main() -> Result<(), std::convert::Infallible> {
-    let mut display: SimulatorDisplay<BinaryColor> =
-        SimulatorDisplay::new(Size::new(DISPLAY_WIDTH, DISPLAY_HEIGHT));
+fn draw_stereo_histogram(&mut display) -> Result<(), std::convert::Infallible> {
 
-    let output_settings = OutputSettingsBuilder::new().scale(4).build();
-    let mut window = Window::new("Audio Histogram", &output_settings);
-
-    
     let mut histogram = AudioHistogram::new();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
-    'running: loop {
+    loop {
         display.clear(BinaryColor::Off)?;
 
         // --- Simulate new audio data ---
-        let left_data: Vec<f32> = (0..NUM_BANDS).map(|_| rng.gen::<f32>()).collect();
-        let right_data: Vec<f32> = (0..NUM_BANDS).map(|_| rng.gen::<f32>()).collect();
+        let left_data: Vec<f32> = (0..NUM_BANDS).map(|_| rng.r#random::<f32>()).collect();
+        let right_data: Vec<f32> = (0..NUM_BANDS).map(|_| rng.r#random::<f32>()).collect();
         histogram.update(&left_data, &right_data);
 
         // --- Draw the histogram ---
@@ -193,13 +189,9 @@ fn main() -> Result<(), std::convert::Infallible> {
         Text::new("L", Point::new(2, 10), text_style).draw(&mut display)?;
         Text::new("R", Point::new(120, 10), text_style).draw(&mut display)?;
 
-        window.update(&display);
-
-        if window.events().any(|e| e == simulator::SimulatorEvent::Quit) {
-            break 'running;
-        }
         std::thread::sleep(Duration::from_millis(50));
     }
 
     Ok(())
 }
+*/

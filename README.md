@@ -1,17 +1,24 @@
 # LyMonS
 An LMS Monitor For The Future
+LyMonS version 0.1.35 - August 2nd 2025
 OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
 
 <img width="800" src="assets/lymons.webp" align="center" />
 
 ### Features
+- SVG are utilized enabling support on many different OLED displays
+- SVG are lightweight external files, embeded graphic are not stored in memory
 - Track details are displayed only when playing
-- Display features independant scrolling of track details when required.
+- Display features independant scrolling of track details as required.
 - When playing, remaining time can be displayed rather than total time
 - Audio attributes, volume, sample depth, and sample rate are shown
-- Player attributes, shuffle, repeat, and fidelity glyphs shown
-- A retro clock is displayed when the audio paused/stopped.
-- You can display current weather and time.
+- Player attributes, shuffle, repeat, and fidelity glyphs are shown
+- A retro clock is displayed when the audio is paused or stopped.
+- Display regions are utilized for alignment, text wrapping, and layout
+- You can display current weather and time. Requires an API key
+- Weather descriptions can be translated to any language, however the
+  display of same is not fully supported, Japanese, Korean, Chinese,
+  and cyrilic languages are not supported (TBD)
 - Automatically sets the brightness of the display at dawn and dusk.
 - Multiple audio visualization modes are supported
 - Multiple visualization styles are supported
@@ -29,6 +36,7 @@ OLED information display for piCorePlayer or other Raspberry Pi and LMS based au
   -S, --scroll [SCROLLMODE]  Label scroll mode: cylon, or loop
   -V, --verbose              Maximum log level
   -z, --splash               Show Splash Screen
+  -e, --egg                  Show animated easter eggs wh track playing
 
 Supported OLED types:
     SH1106
@@ -54,15 +62,13 @@ OLED Clock Fonts:
 Several visualizer modes are supported
 - Stereo VU Meters - dBfs metered
 - Stereo 12-band Spectrum Analysis
-- Stereo 12-band "tornado" Spectrum Analysis
-- Stereo 12-band "mirror" Spectrum Analysis
 - Stereo Peak Meter - dBfs metered
 - Downmix (visual data only) Peak Meter
 - Large Downmix (visual data only) VU meter
 - Large Downmix (visual data only) Spectrum
 - All-In-One - track details and spectrum/VU "swoosh" (use -a1 or simply -a)
 - All-In-One - fixed mode (use -a2 or simply -a -a)
-- Easter Eggs - fixed mode (use -E[1-7])
+- Easter Eggs - fixed mode (use --egg <<name>>)
 
 ### Installation
 
@@ -89,15 +95,16 @@ There are several "easter egg" modes provided for those setups that cannot proce
 That said theres nothing stopping you using them as your main visualization.
 
 There are currently 7 easter egg modes:
-- <b>[1]</b> Compact Cassette, as visually correct as possible given the OLED limitations.  Hubs turn and the tape window shows the track "progress"
-- <b>[2]</b> Technics SL-1200, as visually correct as possible given the OLED limitations.  Tone arm traverses platter to indicate progress.
-- <b>[3]</b> Open Reel To Reel, pure fantasy. Reels rotate, minor animation.
-- <b>[4]</b> VCR with flashing 12:00 AM clock! No additional animation - the clock is annoying enough.
-- <b>[5]</b> An old bakelite radio. Minor animation, radio changes station as track progresses.
-- <b>[6]</b> An old analog TV in all its 5x4 glory... VHF or UHF... no it's worms?!?
-- <b>[7]</b> A crusty old IBM PS/2 clone... playing pong! Equally matched "AI" players make for an uneventful game until they cheat!
+- <b>[cassette]</b> Compact Cassette, as visually correct as possible given the OLED limitations.  Hubs turn and the tape window shows the track "progress"
+- <b>[technics]</b> Technics SL-1200, as visually correct as possible given the OLED limitations.  Tone arm traverses platter to indicate progress.
+- <b>[reel2reel]</b> Open Reel To Reel, pure fantasy. Reels rotate, minor animation.
+- <b>[vcr]</b> VCR with flashing 12:00 AM clock! No additional animation - the clock is annoying enough.
+- <b>[radio40]</b> An large ornate radio. Minor animation, radio changes station as track progresses.
+- <b>[radio50]</b> An old bakelite radio. Minor animation, radio changes station as track progresses.
+- <b>[tvtime]</b> An old analog TV in all its 5x4 glory... VHF or UHF... no it's worms?!?
+- <b>[pctime]</b> A crusty old IBM PS/2 clone... simple animation just for fun
 
-Specify -E[1-7] to display eggs on track playback
+Specify --egg <name> to display eggs on track playback
 </p>
 These are just a fun display mode where visualization is not possible.
 
@@ -106,11 +113,6 @@ These are just a fun display mode where visualization is not possible.
 - TODO! Audio visualizer support: stereo VU meters
 - TODO! Audio visualizer support: histogram spectrum
 - TODO! Audio visualizer support: horizontal Peak RMS
-- TODO! Set display brightness, day and night modes.
-- TODO! Downmix visual data and display on one large VU meter.
-- TODO! Downmix visual data and display on one large histogram.
-- TODO! Weather: free API incorporation
-- TODO! Weather: current and forecast support
 - TODO! Downmix PK Meter - scratch draw and animation
 - TODO! SSD1322 256x64 OLED support - WIP
 

@@ -24,6 +24,8 @@ mod climacell;
 mod geoloc;
 mod translate;
 mod eggs;
+mod visualizers;
+mod histogram; // core into visualizers
 mod svgimage;
 
 use sliminfo::{LMSServer, TagID};
