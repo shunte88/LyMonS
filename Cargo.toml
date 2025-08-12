@@ -1,6 +1,6 @@
 [package]
 name = "LyMonS"
-version = "0.1.35"
+version = "0.1.36"
 edition = "2024"
 
 [build-dependencies]
@@ -30,17 +30,20 @@ async-compression = { version = "0.4.25", features = ["gzip", "futures-io"] }
 embedded-text = "0.7.2"
 flate2 = "1.1.2"
 rand = "0.9.2"
+mac_address = "1.1.8"
 
 # SVG Rendering (optimized features)
 tiny-skia = { version = "0.11.4", default-features = false, features = ["std"] } # Explicitly control tiny-skia features
 resvg = { version = "0.45.1" }
 usvg = { version = "0.45.1" }
+#roxmltree = "0.20.0"
 
 # Real hardware dependency (only compiled if `emulated-hardware` feature is OFF)
 rppal = { version = "0.14", optional = true }
 # Emulated hardware dependency (only compiled if `emulated-hardware` feature is ON)
 rpi-hal-emulated = { path = "../rpi-hal-emulated", optional = true }
-roxmltree = "0.20.0"
+libc = "0.2.174"
+rustfft = "6.4.0"
 
 [profile.release]
 opt-level = "z"       # prioritize size over speed (or use "s" for balanced)

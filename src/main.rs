@@ -28,6 +28,7 @@ mod visualizers;
 mod histogram; // core into visualizers
 mod svgimage;
 
+use mac_address::get_mac_address;
 use sliminfo::{LMSServer, TagID};
 
 include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
@@ -75,6 +76,11 @@ fn check_half_hour(test:&String) -> u8 {
         0
     }
 
+}
+
+fn get_mac_addr() -> String {
+    let ma =  get_mac_address().unwrap();
+    format!("{:?}", ma)
 }
 
 #[tokio::main] // Requires the `tokio` runtime with `macros` and `rt-multi-thread` features
@@ -138,6 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .help("Easter Egg Animation")
         .value_parser(
             ["cassette",
+            "moog",
             "technics",
             "reel2reel",
             "vcr",
@@ -146,6 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "radio50",
             "tvtime",
             "ibmpc",
+            "bass",
             "none"]
             )
         .default_value("none")
@@ -213,6 +221,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         BUILD_DATE
     ).unwrap();
 
+    let mac_addr = get_mac_addr();
+
     if weather_config != "" {
         oled_display.setup_weather(weather_config).await?;
     }
@@ -221,7 +231,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize the LMS server, discover it, fetch players, init tags, and start polling
     // init_server now returns Arc<TokMutex<LMSServer>>
-    let lms_arc = match LMSServer::init_server(name_filter).await {
+    let lms_arc = match LMSServer::init_server(name_filter, mac_addr.as_str()).await {
         Ok(server_arc) => server_arc,
         Err(e) => {
             error!("LMS Server initialization failed: {}", e);

@@ -303,6 +303,7 @@ const MAXTAG_TYPES: usize = TagID::MAXTAG as usize;
 pub struct LMSServer {
     pub player_count: i16,
     pub active_player: usize,
+    pub shared_memory: String,
     pub players: Vec<Player>,
     pub refresh: bool,
     pub ready: bool,
@@ -325,6 +326,7 @@ impl LMSServer {
         LMSServer {
             player_count: -1, // no players
             active_player: usize::MAX, // no active player
+            shared_memory: "".to_string(),
             players: Vec::with_capacity(MAX_PLAYERS),
             refresh: false,
             ready: false,
@@ -627,7 +629,7 @@ impl LMSServer {
         
     /// Fetches player information from the discovered LMS server.
     /// This method assumes `self.host` and `self.port` are already populated by `discover()`.
-    pub async fn get_players(&mut self, player_name_filter: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn get_players(&mut self, player_name_filter: &str, mac_address: &str) -> Result<(), Box<dyn std::error::Error>> {
         if !self.ready {
             return Err("LMS Server not discovered. Call discover() first.".into());
         }
@@ -651,11 +653,14 @@ impl LMSServer {
                     self.players = serde_json::from_value::<Vec<Player>>(result["players_loop"].clone())
                     .expect(&format!("{} json parser", command));
                 
-                // Iterate through the players to find the active player
-                for (i, player) in self.players.iter().enumerate() {
-                    if player_name_filter == "-" || player.player_name.to_lowercase() == player_name_filter.to_lowercase() {
-                        self.active_player = i; // Store the index
+                    // Iterate through the players to find the active player
+                    for (i, player) in self.players.iter().enumerate() {
+                        if player_name_filter == "-" || player.player_name.to_lowercase() == player_name_filter.to_lowercase() {
+                            self.active_player = i; // Store the index
                             debug!("Active player set to: {} ({})", player.player_name, player.player_id);
+                            if player.player_id.to_lowercase() == mac_address.to_lowercase() {
+                                self.shared_memory = format!("/squeezelite-{}", player.player_id.clone().to_lowercase());
+                            }
                             break; // Found the player, no need to continue
                         }
                     }
@@ -679,12 +684,12 @@ impl LMSServer {
     ///
     /// Returns the LMSServer instance wrapped in an `Arc<TokMutex>` on success,
     /// or an error if initialization fails.
-    pub async fn init_server(player_name_filter: &str) -> Result<Arc<TokMutex<LMSServer>>, Box<dyn std::error::Error>> {
+    pub async fn init_server(player_name_filter: &str, mac_address: &str) -> Result<Arc<TokMutex<LMSServer>>, Box<dyn std::error::Error>> {
         // Directly initialize lms with the result of discover() to avoid unused_assignments warning
         let mut lms = LMSServer::discover()?;
         
         if lms.ready {
-            lms.get_players(player_name_filter).await?;
+            lms.get_players(player_name_filter, mac_address).await?;
             if lms.player_count > 0 && lms.active_player != usize::MAX { // Ensure an active player is found
                 lms.init_tags();
                 lms.ask_refresh();

@@ -53,7 +53,7 @@ use display_interface::DisplayError;
 
 use crate::imgdata;   // imgdata, glyphs and such
 use crate::constants; // constants
-use crate::climacell; // weather glyphs - need to move to SVG mpl.
+use crate::climacell; // weather glyphs - need to move to SVG impl.
 use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
 use crate::deutils::seconds_to_hms;
 use crate::weather::{Weather, WeatherData};
@@ -353,14 +353,15 @@ impl OledDisplay {
     }
 
     /// direct SVG rendering with scale and eggy SVG dynamics
-    pub async fn put_eggy_svg(&mut self, artist: &str, title: &str, level: u8, pct: f64, x: i32, y: i32) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn put_eggy_svg(&mut self, artist: &str, title: &str, level: u8, pct: f64, tsec:f32, x: i32, y: i32) -> Result<(), Box<dyn std::error::Error>> {
         
         let mut eggy = self.easter_egg.clone();
         let raw_image = eggy.update_and_render( 
             artist,
             title,
             level, 
-            pct
+            pct,
+            tsec
         )
         .await
         .map_err(DisplayDrawingError::EggsError)?;
@@ -371,31 +372,56 @@ impl OledDisplay {
 
         let combined = eggy.is_combined();
         let character_style = MonoTextStyle::new(&FONT_4X6, BinaryColor::On);
-        let mut textbox_style = TextBoxStyleBuilder::new()
+
+        let textbox_style = if !combined {
+            TextBoxStyleBuilder::new()
             .alignment(HorizontalAlignment::Center)
             .vertical_alignment(VerticalAlignment::Middle)
-            .build();
-        if combined {
-            textbox_style = TextBoxStyleBuilder::new()
+            .build()
+        } else {
+            TextBoxStyleBuilder::new()
             .alignment(HorizontalAlignment::Left)
             .vertical_alignment(VerticalAlignment::Top)
-            .build();
+            .build()
         };
 
+        let trect = eggy.get_time_rect();
         let arect = eggy.get_artist_rect();
         let atext = eggy.get_artist();
-        let text_box = TextBox::with_textbox_style(atext, arect, character_style, textbox_style);
+        let text_box = TextBox::with_textbox_style(
+            atext, 
+            arect, 
+            character_style, 
+            textbox_style);
         text_box.draw(&mut self.display)
             .map_err(DisplayDrawingError::DrawingFailed)?;
 
         if !combined {
             let trect = eggy.get_title_rect();
             let ttext = eggy.get_title();
-            let text_box = TextBox::with_textbox_style(ttext, trect, character_style, textbox_style);
+            let text_box = TextBox::with_textbox_style(
+                ttext, 
+                trect, 
+                character_style, 
+                textbox_style);
             text_box.draw(&mut self.display)
                 .map_err(DisplayDrawingError::DrawingFailed)?;
         }
-
+        if !trect.is_zero_sized() {
+            let time_character_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+            let time_textbox_style = TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Right)
+                .vertical_alignment(VerticalAlignment::Middle)
+                .build();
+            let time_str = seconds_to_hms(eggy.get_track_time());
+            let text_box = TextBox::with_textbox_style(
+                time_str.as_str(), 
+                trect, 
+                time_character_style, 
+                time_textbox_style);
+            text_box.draw(&mut self.display)
+                .map_err(DisplayDrawingError::DrawingFailed)?;
+        }
         Ok(())
     }
 
@@ -441,7 +467,7 @@ impl OledDisplay {
 
                 for i in 0..100 { 
                     let pct = i as f64 / 100.0; 
-                    self.put_eggy_svg("Bonnie Barrow", "My Dingo, My Love",2, pct, 0, 0)
+                    self.put_eggy_svg("Bonnie Barrow", "My Dingo, My Love",2, pct, i as f32, 0, 0)
                     .await
                     .unwrap();
                     self.flush().unwrap();
@@ -1120,14 +1146,15 @@ impl OledDisplay {
     }
 
     /// Draws the configured Egg inclusive animation and track progress.
-    async fn draw_egg(&mut self, current_time_secs: f32, duration_secs: f32) -> Result<(), Box<dyn std::error::Error>> {
-        let pct = current_time_secs/duration_secs;
+    async fn draw_egg(&mut self, current_track_time_secs: f32, remaining_time_secs: f32, duration_secs: f32, show_remaining: bool) -> Result<(), Box<dyn std::error::Error>> {
+        let pct = current_track_time_secs/duration_secs;
         let tl = self.easter_egg.get_top_left();
         self.put_eggy_svg(
             self.artist.clone().as_str(),
             self.title.clone().as_str(),
             self.level,
             pct as f64,
+            if show_remaining { remaining_time_secs } else { current_track_time_secs },
             tl.x,
             tl.y)
         .await?;
@@ -1166,7 +1193,12 @@ impl OledDisplay {
                 self.update_and_draw_clock(chrono::Local::now())?;
             },
             DisplayMode::EasterEggs => {
-                self.draw_egg(self.current_track_time_secs, self.track_duration_secs)
+                self.draw_egg(
+                    self.current_track_time_secs, 
+                    self.remaining_time_secs, 
+                    self.track_duration_secs,
+                    self.show_remaining
+                )
                 .await?;
             },
             DisplayMode::WeatherCurrent => {
