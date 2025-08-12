@@ -384,6 +384,7 @@ impl Eggs {
     pub fn get_artist(&self) -> &str {
         &self.artist
     }
+
     pub fn get_track_time(&self) -> f32 {
         self.track_time_secs
     }
@@ -411,6 +412,7 @@ impl Eggs {
     pub fn get_artist_rect(&self) -> Rectangle {
         self.artist_rect
     }
+    
     pub fn get_time_rect(&self) -> Rectangle {
         self.time_rect
     }
@@ -421,11 +423,13 @@ impl Eggs {
         let factor = clamped_percent / 100.0;
         angle0 + (angle_range * factor)
     }
+
     fn calc_progress_angle_linear(&mut self, angle0:f32, angle100:f32, progress_percent: f32) -> f32 {
         let angle_range = angle100 - angle0;
         let factor = angle_range / 100.0;
         angle0 + (progress_percent * factor)
     }
+
     fn calc_progress_angle_pct(&mut self, angle0:f32, angle100:f32, progress_percent: f32) -> f32 {
         let factor = progress_percent.clamp(0.0, 1.0);
         let angle_range = angle100 - angle0;
