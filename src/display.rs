@@ -51,7 +51,7 @@ use std::fs; // move this to svgimage
 
 use display_interface::DisplayError;
 
-use crate::imgdata;   // imgdata, glyphs and such
+use crate::{imgdata};   // imgdata, glyphs and such
 use crate::constants; // constants
 use crate::climacell; // weather glyphs - need to move to SVG impl.
 use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
@@ -59,6 +59,7 @@ use crate::deutils::seconds_to_hms;
 use crate::weather::{Weather, WeatherData};
 use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode, GAP_BETWEEN_LOOP_TEXT_FIXED};
 use crate::svgimage::{SvgImageRenderer, SvgImageError};
+use crate::metrics::{MachineMetrics};
 use crate::eggs::{Eggs, set_easter_egg};
 
 /// Represents the audio bitrate mode for displaying the correct glyph.
@@ -201,13 +202,14 @@ pub struct OledDisplay {
     scroll_mode: String,
     weather_data_arc: Option<Arc<TokMutex<Weather>>>, // Reference to the shared weather client
     weather_display_switch_timer: Option<Instant>,
-    current_weather_display_page: usize, // 0 for current, 1 for forecast days - 3 days displayed
     last_weather_draw_data: WeatherData, // To track if weather data has changed for redraw
     artist: String,
     title: String,
     level: u8,
     pct: f64,
     easter_egg: Eggs,
+    show_metrics: bool,
+    device_metrics: MachineMetrics
 }
 
 #[allow(dead_code)]
@@ -218,7 +220,12 @@ impl OledDisplay {
     /// `i2c_bus_path` is typically "/dev/i2c-X" where X is the bus number (e.g., "/dev/i2c-1").
     /// NEED  support for i2c and spi, argument should drive the logic for the 
     /// interface to be instantiated
-    pub fn new(i2c_bus_path: &str, scroll_mode: &str, clock_font: &str, egg_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(
+        i2c_bus_path: &str, 
+        scroll_mode: &str, 
+        clock_font: &str, 
+        show_metrics: bool,
+        egg_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
         info!("Initializing Display on {}", i2c_bus_path);
 
         let i2c = I2cdev::new(i2c_bus_path)?;
@@ -309,7 +316,6 @@ impl OledDisplay {
             scroll_mode: scroll_mode.to_string(),
             // Weather fields
             weather_data_arc: None,
-            current_weather_display_page: 0, // 0 for current, 1 for forecast
             last_weather_draw_data: WeatherData::default(),
             weather_display_switch_timer: None,
             artist: String::new(),
@@ -317,6 +323,8 @@ impl OledDisplay {
             level: 1,
             pct: 0.00,
             easter_egg: set_easter_egg(egg_name),
+            show_metrics,
+            device_metrics: MachineMetrics::default()
         })
 
     }
@@ -641,12 +649,8 @@ impl OledDisplay {
                 self.last_clock_digits = [' ', ' ', ' ', ' ', ' '];
                 self.last_second_drawn = 61.000; // Reset last second to force progress bar redraw
                 self.last_date_drawn = String::new(); // Reset last drawn date to force redraw
-            } else if mode == DisplayMode::WeatherCurrent {
-                self.current_weather_display_page = 0; // Start at current conditions
-                self.last_weather_draw_data = WeatherData::default(); // Force redraw on first weather entry
-            } else if mode == DisplayMode::WeatherForecast {
-                self.current_weather_display_page = 1; // Start at current conditions
-                self.last_weather_draw_data = WeatherData::default(); // Force redraw on first weather entry
+            //} else if mode == DisplayMode::WeatherCurrent {
+            //} else if mode == DisplayMode::WeatherForecast {
             } else if mode == DisplayMode::Scrolling {
                 // When switching back to scrolling, the track details will be re-set
                 // by the main loop, which will then trigger scroller starts as needed.
@@ -971,11 +975,42 @@ impl OledDisplay {
             needs_flush = true;
         }
 
+        if self.show_metrics {
+            let metrics_y = 39;
+            let metrics = self.device_metrics.check();
+            if metrics != self.device_metrics {
+                self.device_metrics.update(metrics);
+                let buff = format!("{:>3}% {:>2.1}C", 
+                    metrics.cpu_load as u8, 
+                    metrics.cpu_temp);
+                self.draw_rectangle(
+                    Point::new(0, metrics_y),
+                    constants::DISPLAY_WIDTH, 6,
+                    BinaryColor::Off,None, None
+                )
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                self.draw_text(&buff,2, metrics_y, Some(&FONT_4X6))?;
+                needs_flush = true;
+            }
+
+        }
+
         if needs_flush {
             self.flush()?;
         }
         Ok(())
 
+    }
+
+    pub async fn is_weather_active(&self) -> bool {
+        // Acquire a lock on the weather data
+        let weather_data = if let Some(ref weather_arc) = self.weather_data_arc {
+            weather_arc.lock().await
+        } else {
+            error!("Weather client not setup.");
+            return false; // Nothing to draw if no weather clientfalse
+        };
+        return weather_data.active;
     }
 
     /// Updates and draws the weather data to display. Only flushes if changes occurred.

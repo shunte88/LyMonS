@@ -12,6 +12,7 @@ use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
 
 // move these to mod.rs
 mod display;
+mod metrics;
 mod constants;
 mod imgdata;
 mod clock_font;
@@ -57,9 +58,9 @@ async fn signal_handler() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn check_half_hour(test:&String) -> u8 {
+fn check_half_hour(test:&String, active: bool) -> u8 {
 
-    if test == "" {
+    if test == "" || !active {
         return 0;
     }
 
@@ -127,14 +128,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .long("font")
         .help("Clock font to use")
         .value_parser(
-            ["space1999",
-            "holfestus",
-            "solfestus",
+            ["7seg",
             "holdeco",
-            "soldeco",
+            "holfestus",
             "noto",
             "roboto",
-            "7seg"]
+            "soldeco",
+            "solfestus",
+            "space1999"]
             )
         .default_value("7seg")
         .required(false))
@@ -143,17 +144,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .long("eggs")
         .help("Easter Egg Animation")
         .value_parser(
-            ["cassette",
+            ["bass",
+            "cassette",
+            "ibmpc",
             "moog",
-            "technics",
-            "reel2reel",
-            "vcr",
-            "tubeamp",
             "radio40",
             "radio50",
+            "reel2reel",
+            "scope",
+            "technics",
+            "tubeamp",
             "tvtime",
-            "ibmpc",
-            "bass",
+            "vcr",
             "none"]
             )
         .default_value("none")
@@ -163,6 +165,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .long("splash")
         .help("Display splash screen") 
         .action(ArgAction::SetTrue)
+        .required(false))
+        .arg(Arg::new("metrics")
+        .short('k')
+        .long("metrics")
+        .help("Display device metrics") 
+        .action(ArgAction::SetTrue)
+        .default_value("")
         .required(false))
         .arg(Arg::new("config")
         .short('c')
@@ -185,6 +194,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_matches();
 
     let show_splash = matches.get_flag("splash");
+    let show_metrics = matches.get_flag("metrics");
     let show_remaining = matches.get_flag("remain");
     let debug_enabled = matches.get_flag("debug");
     let _config_file = matches.get_one::<String>("config").unwrap();
@@ -213,7 +223,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("This {} worth the Squeeze", env!("CARGO_PKG_NAME"));
     info!("v.{} built {}", env!("CARGO_PKG_VERSION"), BUILD_DATE);
 
-    let mut oled_display = display::OledDisplay::new(i2c_bus_path, scroll_mode, clock_font, easter_egg)?;
+    let mut oled_display = display::OledDisplay::new(
+        i2c_bus_path, 
+        scroll_mode, 
+        clock_font,
+        show_metrics, 
+        easter_egg)?;
 
     oled_display.splash(
         show_splash,
@@ -262,17 +277,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // the specifiuc display modes
             oled_display.clear();
             oled_display.flush().unwrap();
+            let egg_type = oled_display.get_egg_type(); // static
 
             loop {
 
-                let wc_chk = check_half_hour(weather_config);
+                let is_weather_active = oled_display.is_weather_active().await;
+                let wc_chk = check_half_hour(weather_config, is_weather_active);
 
                 // Acquire a lock on the LMSServer instance to access its methods and data
                 let mut lms_guard = lms_arc.lock().await;
 
                 if lms_guard.is_playing() {
 
-                    let egg_type = oled_display.get_egg_type();
                     let mut this_mode = "scrolling";
 
                     if egg_type == eggs::EGGS_TYPE_UNKNOWN {

@@ -11,6 +11,7 @@ use chrono::{DateTime, Local}; // Import Duration for adding to DateTime
 
 use flate2::read::GzDecoder;
 use std::io::Read;
+use std::thread;
 
 use crate::geoloc::{fetch_location};
 use crate::translate::Translation;
@@ -108,6 +109,7 @@ pub struct WeatherConditions {
 // Main Weather client
 #[derive(Debug)]
 pub struct Weather {
+    pub active: bool,
     base_url: String,
     api_key: String,
     lat: f64,
@@ -207,6 +209,7 @@ impl Weather {
         let final_lng = lng.ok_or(WeatherApiError::GeolocationError("Could not determine longitude".to_string()))?;
 
         Ok(Weather {
+            active: false,
             base_url: "https://api.tomorrow.io/v4/weather/forecast".to_string(),
             api_key: api_key.to_string(),
             lat: final_lat,
@@ -322,6 +325,30 @@ impl Weather {
 
     }
 
+    async fn send_with_retries<T: Serialize + ?Sized>(&mut self, params: &T, max_retries: u8) -> Result<String, reqwest::Error> {
+        let mut retries = 0;
+        loop {
+            match self.client.get(&self.base_url.clone())
+                .query(params).send().await {
+                Ok(response) => {
+                    let raw = response.bytes().await?;
+                    let mut plain = String::new();
+                    let mut decoder = GzDecoder::new(&raw[..]);
+                    decoder.read_to_string(&mut plain).unwrap();
+                    return Ok(plain);
+                }
+                Err(e) => {
+                    retries += 1;
+                    if retries >= max_retries {
+                        self.active = false;
+                        return Err(e); // max retries reached
+                    }
+                    thread::sleep(Duration::from_secs(1)); // Wait before retrying
+                }
+            }
+        }
+    }
+
     /// Fetches current weather and 3-day forecast from Tomorrow.io.
     pub async fn fetch_weather_data(&mut self) -> Result<(), WeatherApiError> {
         info!("Fetching weather data for {}...", self.weather_data.location_name);
@@ -348,6 +375,7 @@ impl Weather {
             "weatherCode",
             ]
             .join(",");
+
         let params = [
             ("location", format!("{},{}", self.lat, self.lng)),
             ("fields", fields), // this is NOT working???
@@ -359,17 +387,11 @@ impl Weather {
             ("apikey", self.api_key.clone()),
         ];
 
-        let response = self.client.get(&self.base_url.clone())
-        .query(&params)
-        .send()
-        .await?;
-       
-        // take control - ensure we're on the green path
-        let raw = response.bytes().await?;
-        let mut decoder = GzDecoder::new(&raw[..]);
-        let mut plain = String::new();
-        decoder.read_to_string(&mut plain).unwrap();
-        
+        let plain =
+            self.send_with_retries(&params, 3)
+                .await
+                .map_err(|e| WeatherApiError::HttpRequestError(e))?;
+
         let the_json: Value = serde_json::from_str(&plain.as_str())
             .map_err(|e| WeatherApiError::DeserializationError(e))?;
 
@@ -412,6 +434,7 @@ impl Weather {
         self.weather_data.last_updated = Local::now();
         info!("Weather data fetched successfully.");
         self.last_fetch_time = Some(Instant::now()); // Record fetch time
+        self.active = true;
         Ok(())
 
     }

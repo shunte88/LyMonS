@@ -23,8 +23,9 @@ use crate::histogram;
 pub const VIZ_TYPE_STEREO_HISTOGRAM: u8 = 10;
 pub const VIZ_TYPE_DOWNMIX_HISTOGRAM: u8 = 20;
 pub const VIZ_TYPE_STEREO_VUMETER: u8 = 30;
-pub const VIZ_TYPE_PEAK_METER: u8 = 40;
-pub const VIZ_TYPE_ALL_IN_ONE: u8 = 50;
+pub const VIZ_TYPE_DOWNMIX_VUMETER: u8 = 40;
+pub const VIZ_TYPE_PEAK_METER: u8 = 50;
+pub const VIZ_TYPE_ALL_IN_ONE: u8 = 60;
 pub const VIZ_TYPE_UNKNOWN: u8 = 255;
 
 /// Custom error type for Visualization rendering operations.

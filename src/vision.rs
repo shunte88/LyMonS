@@ -12,12 +12,98 @@ use std::ptr;
 use std::slice;
 use std::sync::{Arc, Mutex};
 
-// The kiss_fft module is no longer needed.
+pub const VIS_BUF_SIZE = 16384;        // Predefined in Squeezelite.
+pub const PEAK_METER_LEVELS_MAX = 48;  // Number of peak meter intervals
+pub const SPECTRUM_POWER_MAP_MAX = 32; // Number of spectrum bands
+pub const METER_CHANNELS = 2;          // Number of metered channels.
+pub const OVERLOAD_PEAKS = 3; // Number of consecutive 0dBFS peaks for overload.
+pub const X_SCALE_LOG = 20;
+pub const MAX_SAMPLE_WINDOW = 1024 * X_SCALE_LOG;
+pub const MAX_SUBBANDS = MAX_SAMPLE_WINDOW / 2 / X_SCALE_LOG;
+pub const MIN_SUBBANDS = 16;
+pub const MIN_FFT_INPUT_SAMPLES = 128;
 
-// Add rustfft to your Cargo.toml:
-// [dependencies]
-// libc = "0.2"
-// rustfft = "6.1"
+enum VIZMODES {
+    VEMODE_NA = -1,
+    VEMODE_RN = 0,
+    VEMODE_VU = 1,
+    VEMODE_PK = 2,
+    VEMODE_SA = 3,
+    VEMODE_ST = 4,
+    VEMODE_SM = 5,
+    VEMODE_MX = 6,
+    VEMODE_A1 = 7,
+    VEMODE_A1S = 8,
+    VEMODE_A1V = 9,
+}                  // note all-in-one modes out of "bounds"
+
+struct peak_meter_t {
+    int_time: u16,  // Integration time (ms).
+    samples: u16,   // Samples for integration time.
+    hold_time: u16, // Peak hold time (ms).
+    hold_incs: u16, // Hold time counter.
+    fall_time: u16, // Fall time (ms).
+    fall_incs: u16, // Fall time counter.
+    over_peaks: u16, // Number of consecutive 0dBFS samples for overload.
+    over_time: u16, // Overload indicator time (ms).
+    over_incs: u16, // Overload indicator count.
+    num_levels: u8, // Number of display levels
+    floor: i8,      // Noise floor for meter (dB).
+    reference: u16, // Reference level.
+    overload: Vec(METER_CHANNELS, bool),    // Overload flags.
+    dBfs: Vec(METER_CHANNELS, i8),          // dBfs values.
+    bar_index: Vec(METER_CHANNELS, u8),     // Index for bar display.
+    dot_index: Vec(METER_CHANNELS, u8),     // Index for dot display (peak hold).
+    elapsed: Vec(METER_CHANNELS, u32),      // Elapsed time (us).
+    scale: Vec(PEAK_METER_LEVELS_MAX, u16), // Scale intervals.
+}
+
+struct bin_chan_t {
+    bin: Vec(METER_CHANNELS, Vec(MAX_SUBBANDS, float64)),
+}
+
+struct {
+    metric: Vec(METER_CHANNELS, i32),
+    percent: Vec(METER_CHANNELS, float64),
+    erase: Vec(METER_CHANNELS, bool),
+}
+
+/*
+struct vissy_meter_t {
+    vis_type_t meter_type;
+    char channel_name[METER_CHANNELS][2];
+    int is_mono;
+    int64_t sample_accum[METER_CHANNELS]; // VU raw peak values.
+    int8_t floor;                         // Noise floor for meter (dB).
+    uint16_t reference;                   // Reference level.
+    int64_t dBfs[METER_CHANNELS];         // dBfs values.
+    int64_t dB[METER_CHANNELS];           // dB values.
+    int64_t linear[METER_CHANNELS];       // linear dB (min->max)
+    uint8_t rms_bar[METER_CHANNELS];
+    uint8_t rms_levels;
+    char rms_charbar[METER_CHANNELS][PEAK_METER_LEVELS_MAX + 1];
+    int16_t rms_scale[PEAK_METER_LEVELS_MAX];
+    int32_t power_map[SPECTRUM_POWER_MAP_MAX];
+    int channel_width[METER_CHANNELS];
+    int bar_size[METER_CHANNELS];
+    int subbands_in_bar[METER_CHANNELS];
+    int num_bars[METER_CHANNELS];
+    int channel_flipped[METER_CHANNELS];
+    int clip_subbands[METER_CHANNELS];
+    int num_subbands;
+    int sample_window;
+    int num_windows;
+    double filter_window[MAX_SAMPLE_WINDOW];
+    double preemphasis[MAX_SUBBANDS];
+    int decade_idx[MAX_SUBBANDS];
+    int decade_len[MAX_SUBBANDS];
+    int numFFT[METER_CHANNELS];
+    int sample_bin_chan[METER_CHANNELS][MAX_SUBBANDS];
+    float avg_power[2 * MAX_SUBBANDS];
+    kiss_fft_cfg cfg;
+};
+
+*/
 
 mod visdata {
     use super::Fft;

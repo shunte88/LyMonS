@@ -16,17 +16,18 @@ use std::fs;
 
 use crate::svgimage::SvgImageRenderer;
 
-pub const EGGS_TYPE_CASSETTE: u8 = 10;
-pub const EGGS_TYPE_MOOG: u8 = 20;
-pub const EGGS_TYPE_TECHNICS: u8 = 30;
-pub const EGGS_TYPE_REEL2REEL: u8 = 40;
-pub const EGGS_TYPE_VCR: u8 = 50;
-pub const EGGS_TYPE_TUBEAMP: u8 = 60;
-pub const EGGS_TYPE_RADIO40: u8 = 70;
-pub const EGGS_TYPE_RADIO50: u8 = 80;
-pub const EGGS_TYPE_TVTIME: u8 = 90;
-pub const EGGS_TYPE_IBMPC: u8 = 100;
-pub const EGGS_TYPE_BASS: u8 = 110;
+pub const EGGS_TYPE_BASS: u8 = 10;
+pub const EGGS_TYPE_CASSETTE: u8 = 20;
+pub const EGGS_TYPE_IBMPC: u8 = 30;
+pub const EGGS_TYPE_MOOG: u8 = 40;
+pub const EGGS_TYPE_RADIO40: u8 = 50;
+pub const EGGS_TYPE_RADIO50: u8 = 60;
+pub const EGGS_TYPE_REEL2REEL: u8 = 70;
+pub const EGGS_TYPE_SCOPE: u8 = 80;
+pub const EGGS_TYPE_TECHNICS: u8 = 90;
+pub const EGGS_TYPE_TUBEAMP: u8 = 100;
+pub const EGGS_TYPE_TVTIME: u8 = 110;
+pub const EGGS_TYPE_VCR: u8 = 120;
 pub const EGGS_TYPE_UNKNOWN: u8 = 255;
 
 /// Custom error type for Eggs rendering operations.
@@ -74,6 +75,19 @@ pub struct Eggs {
 pub fn set_easter_egg(egg_name: &str) -> Eggs {
     info!("Load egg: {}",egg_name);
     match egg_name {
+        "bass" => {
+            Eggs::new(
+                EGGS_TYPE_BASS,
+                "./assets/bass.svg", 
+                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::new(4,4), Size::new(120,6)), 
+                Rectangle::new(Point::new(4,12), Size::new(120,6)), 
+                48.0, 
+                88.0, 
+                false,
+                Rectangle::new(Point::new(64,26), Size::new(48,12)),
+            )
+        },
         "cassette" => {
             Eggs::new(
                 EGGS_TYPE_CASSETTE,
@@ -89,6 +103,19 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 Rectangle::new(Point::new(0,0), Size::new(0,0)),
             )
         },
+        "ibmpc" => {
+            Eggs::new(
+                EGGS_TYPE_IBMPC,
+                "./assets/ibmpc.svg", 
+                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::new(70,3), Size::new(64,58)), 
+                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                0.0, 
+                0.0, 
+                true,
+                Rectangle::new(Point::new(70,52), Size::new(54,12)),
+            )
+        },
         "moog" => {
             Eggs::new(
                 EGGS_TYPE_MOOG,
@@ -102,19 +129,6 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 Rectangle::new(Point::new(83,52), Size::new(41,12)),
             )
         },
-        "technics" => {
-            Eggs::new(
-                EGGS_TYPE_TECHNICS,
-                "./assets/sl1200.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(85,3), Size::new(39,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
-                -10.0, 
-                12.0, 
-                true,
-                Rectangle::new(Point::new(85,52), Size::new(39,12)),
-            )
-            },
         "reel2reel" => {
             Eggs::new(
                 EGGS_TYPE_REEL2REEL,
@@ -126,32 +140,6 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 true,
                 Rectangle::new(Point::new(72,52), Size::new(52,12)),
-            )
-            },
-        "vcr" => {
-            Eggs::new(
-                EGGS_TYPE_VCR,
-                "./assets/vcr2000z.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(4,2), Size::new(120,6)), 
-                Rectangle::new(Point::new(4,10), Size::new(120,6)), 
-                0.0, 
-                0.0, 
-                false, // should replace clock
-                Rectangle::new(Point::new(30,16), Size::new(48,12)),
-            )
-            },
-        "tubeamp" => {        
-            Eggs::new(
-                EGGS_TYPE_TUBEAMP,
-                "./assets/tubeampd.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(87,3), Size::new(37,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
-                0.0, 
-                100.0, 
-                true,
-                Rectangle::new(Point::new(87,52), Size::new(37,12)),
             )
             },
         "radio40" => {
@@ -180,6 +168,45 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 Rectangle::new(Point::new(74,52), Size::new(46,12)),
             )
             },
+        "scope" => {
+            Eggs::new(
+                EGGS_TYPE_SCOPE,
+                "./assets/scope.svg", 
+                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::new(65,3), Size::new(59,58)), 
+                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                0.0, 
+                10.0, 
+                true,
+                Rectangle::new(Point::new(65,52), Size::new(59,12)),
+            )
+        },
+        "technics" => {
+            Eggs::new(
+                EGGS_TYPE_TECHNICS,
+                "./assets/sl1200.svg", 
+                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::new(85,3), Size::new(39,58)), 
+                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                -10.0, 
+                12.0, 
+                true,
+                Rectangle::new(Point::new(85,52), Size::new(39,12)),
+            )
+            },
+        "tubeamp" => {        
+            Eggs::new(
+                EGGS_TYPE_TUBEAMP,
+                "./assets/tubeampd.svg", 
+                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::new(87,3), Size::new(37,58)), 
+                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                0.0, 
+                100.0, 
+                true,
+                Rectangle::new(Point::new(87,52), Size::new(37,12)),
+            )
+            },
         "tvtime" => {
             Eggs::new(
                 EGGS_TYPE_TVTIME,
@@ -193,32 +220,19 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 Rectangle::new(Point::new(89,52), Size::new(35,12)),
             )
             },
-        "ibmpc" => {
+        "vcr" => {
             Eggs::new(
-                EGGS_TYPE_IBMPC,
-                "./assets/ibmpc.svg", 
+                EGGS_TYPE_VCR,
+                "./assets/vcr2000z.svg", 
                 Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(70,3), Size::new(64,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::new(4,2), Size::new(120,6)), 
+                Rectangle::new(Point::new(4,10), Size::new(120,6)), 
                 0.0, 
                 0.0, 
-                true,
-                Rectangle::new(Point::new(70,52), Size::new(54,12)),
+                false, // should replace clock
+                Rectangle::new(Point::new(30,16), Size::new(48,12)),
             )
-        },
-        "bass" => {
-            Eggs::new(
-                EGGS_TYPE_BASS,
-                "./assets/bass.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(4,4), Size::new(120,6)), 
-                Rectangle::new(Point::new(4,12), Size::new(120,6)), 
-                48.0, 
-                88.0, 
-                false,
-                Rectangle::new(Point::new(64,26), Size::new(48,12)),
-            )
-        },
+            },
         _ => {
             Eggs::new(
                 EGGS_TYPE_UNKNOWN,
@@ -332,15 +346,25 @@ impl Eggs {
             now.second() as f64 + now.timestamp_subsec_nanos() as f64 / 1_000_000_000.0) * 12.0;
         data = data.replace("{{seconds-angle}}", seconds_angle.to_string().as_str());
         if seconds%2.0 == 0.0 {
+            data = data.replace("{{flip}}", "1");
+            data = data.replace("{{flip-odd}}", "-1");
+            data = data.replace("{{flip-even}}", "1");
             data = data.replace("{{blink-even}}", "1.0");
             data = data.replace("{{ripple-even}}", "-1.0");
             data = data.replace("{{ripple-odd}}", "0.0");
         } else {
+            data = data.replace("{{flip}}", "-1");
+            data = data.replace("{{flip-odd}}", "1");
+            data = data.replace("{{flip-even}}", "-1");
             data = data.replace("{{blink-even}}", "0.0");
             data = data.replace("{{ripple-even}}", "0.0");
             data = data.replace("{{ripple-odd}}", "1.0");
         }
 
+        data = data.replace("{{track-percent}}", track_percent.to_string().as_str());
+        let track_percent_whole = (track_percent * 100.0).floor() as u8;
+        data = data.replace("{{track-percent-whole}}", track_percent_whole.to_string().as_str());
+        
         // note that right->left (-ve) and left->right (+ve) is defined via -ve , -{{progress}}, in the SVG
         let linear_pct = self.calc_progress_angle_linear(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
         data = data.replace("{{track-progress}}", linear_pct.to_string().as_str());
@@ -412,7 +436,7 @@ impl Eggs {
     pub fn get_artist_rect(&self) -> Rectangle {
         self.artist_rect
     }
-    
+
     pub fn get_time_rect(&self) -> Rectangle {
         self.time_rect
     }

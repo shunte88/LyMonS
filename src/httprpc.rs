@@ -3,6 +3,7 @@ use serde_json::{json, Value, Error as SerdeJsonError};
 use reqwest::{Client, header, Error as ReqwestError};
 use std::fmt::{self, Display, Formatter};
 use std::time::Duration;
+use std::thread;
 
 /// Custom error type for SlimInfoClient operations.
 #[derive(Debug)]
@@ -117,6 +118,28 @@ impl SlimInfoClient {
         }
     }
 
+    async fn post_with_retries(&mut self, url: String, request_body: String, max_retries: u8) -> Result<reqwest::Response, reqwest::Error> {
+        let mut retries = 0;
+        loop {
+            match self.client // Use self.client
+                .post(&url)
+                .body(request_body.clone())
+                .send()
+                .await {
+                Ok(response) => {
+                    return Ok(response);
+                }
+                Err(e) => {
+                    retries += 1;
+                    if retries >= max_retries {
+                        return Err(e); // max retries reached
+                    }
+                    thread::sleep(Duration::from_millis(2500));
+                }
+            }
+        }
+    }
+
     /// Sends a POST request to a LMS Server service with a SlimRequest payload.
     ///
     /// # Arguments
@@ -164,12 +187,10 @@ impl SlimInfoClient {
         let request_body = serde_json::to_string(&slim_request)
             .map_err(SlimInfoClientError::SerializationError)?;
 
-        // Send the POST request using the client from the struct
-        let response = self.client // Use self.client
-            .post(&url)
-            .body(request_body)
-            .send()
-            .await?; // Converts ReqwestError to SlimInfoClientError
+        // Send the POST request with retries
+        let response = self.post_with_retries(url, request_body, 3)
+            .await
+            .map_err(|e| SlimInfoClientError::HttpRequestError(e))?; // gave up after 3 attempts!
 
         // Check for HTTP status code
         response.error_for_status_ref()?;
