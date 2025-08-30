@@ -71,15 +71,24 @@ use tokio::sync::mpsc::error::TryRecvError;
 
 /// simple state carried across calls (last metrics + peak-hold)
 #[derive(Debug, Clone)]
-pub struct PeakState {
+pub struct LastVizState {
     pub last_metric: [i32; 2],
     pub hold: [u8; 2],
+    pub last_bands_l: Vec<u8>,
+    pub last_bands_r: Vec<u8>,
     pub init: bool,
 }
 
-impl Default for PeakState {
+impl Default for LastVizState {
     fn default() -> Self {
-        Self { last_metric: [i32::MIN; 2], hold: [0, 0], init: true }
+        // need to map bands and capacity
+        Self { 
+            last_metric: [i32::MIN; 2], 
+            hold: [0, 0], 
+            last_bands_l: Vec::new(),
+            last_bands_r: Vec::new(),
+            init: true 
+        }
     }
 }
 
@@ -1164,19 +1173,20 @@ impl OledDisplay {
 
     fn draw_peak_pair(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        l_level: u8, r_level: u8, l_hold: u8, r_hold: u8, peak_state: &mut PeakState
+        l_level: u8, r_level: u8, l_hold: u8, r_hold: u8, last_viz_state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
 
         // we implement darw and erase, only initialize on first call
-        if peak_state.init {
+        if last_viz_state.init {
             let raw_image = ImageRaw::<BinaryColor>::new(imgdata::PEAK_RMS_RAW_DATA, 128);
             Image::new(&raw_image, Point::new(0, 0))
                 .draw(display)
                 .map_err(|e| DisplayDrawingError::from(e))?;
-            peak_state.init = false;
+            last_viz_state.init = false;
 
         }
 
+        // 0..PEAK_METER_LEVELS_MAX
         let level_brackets: [i16; 19] = [
             -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
             -4,  -3,  -2,  -1,  0,   2,   3,  5,  8];
@@ -1185,24 +1195,26 @@ impl OledDisplay {
         let mut xpos = 15;
         let ypos:[u8;2] = [7, 40];
 
-        if peak_state.last_metric[0] == l_level as i32 &&
-            peak_state.last_metric[1] == r_level as i32 &&
-            peak_state.hold[0] == l_hold &&
-            peak_state.hold[1] == r_hold {
+        if last_viz_state.last_metric[0] == l_level as i32 &&
+            last_viz_state.last_metric[1] == r_level as i32 &&
+            last_viz_state.hold[0] == l_hold &&
+            last_viz_state.hold[1] == r_hold {
             return Ok(false);
         }
 
-        peak_state.last_metric[0] = l_level as i32; 
-        peak_state.last_metric[1] = r_level as i32; 
-        peak_state.hold[0] = l_hold;
-        peak_state.hold[1] = r_hold;
+        last_viz_state.last_metric[0] = l_level as i32; 
+        last_viz_state.last_metric[1] = r_level as i32; 
+        last_viz_state.hold[0] = l_hold;
+        last_viz_state.hold[1] = r_hold;
 
         for l in level_brackets {
             let nodeo = if l < 0 {5} else {7};
             let nodew = if l < 0 {2} else {4};
             for c in 0..2 {
                 // levels are 0..48 - adjust to fit the display scaling
-                let mv = level_brackets[0] as i32 + peak_state.last_metric[c];
+                // PEAK_METER_LEVELS_MAX
+                //println!("{}", -PEAK_METER_LEVELS_MAX + last_viz_state.last_metric[c] / PEAK_METER_LEVELS_MAX as i32 )
+                let mv = level_brackets[0] as i32 + last_viz_state.last_metric[c];
                 let color = if mv >= l as i32 {
                     BinaryColor::On
                 } else {
@@ -1214,7 +1226,6 @@ impl OledDisplay {
                     color,
                     Some(0), Some(BinaryColor::Off))
                     .map_err(|e| DisplayDrawingError::from(e))?;
-                //info!("{:>2} {:>5.1} {:>3} mv={:>5.1} {:?}", c, peak_state.last_metric[c], l, mv , color ); 
             }
             xpos += nodeo;
         }
@@ -1223,16 +1234,63 @@ impl OledDisplay {
 
     fn draw_peak_mono(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        level: u8, hold: u8
+        level: u8, hold: u8, 
+        last_viz_state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
-        Ok(false)
+        // we implement draw and erase, only initialize on first call
+        if last_viz_state.init {
+            let raw_image = ImageRaw::<BinaryColor>::new(imgdata::PEAK_MONO_RMS_RAW_DATA, 128);
+            Image::new(&raw_image, Point::new(0, 0))
+                .draw(display)
+                .map_err(|e| DisplayDrawingError::from(e))?;
+            last_viz_state.init = false;
+
+        }
+
+        let level_brackets: [i16; 19] = [
+            -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
+            -4,  -3,  -2,  -1,  0,   2,   3,  5,  8];
+
+        let hbar = 34;
+        let mut xpos = 15;
+        let ypos = 23;
+
+        if last_viz_state.last_metric[0] == level as i32 && 
+            last_viz_state.hold[0] == hold {
+            return Ok(false);
+        }
+
+        last_viz_state.last_metric[0] = level as i32; 
+        last_viz_state.hold[0] = hold;
+
+        for l in level_brackets {
+            let nodeo = if l < 0 {5} else {7};
+            let nodew = if l < 0 {2} else {4};
+            // levels are 0..48 - adjust to fit the display scaling
+            let mv = level_brackets[0] as i32 + last_viz_state.last_metric[0];
+            let color = if mv >= l as i32 {
+                BinaryColor::On
+            } else {
+                BinaryColor::Off
+            };
+            Self::draw_rectangle_internal(
+                display,
+                Point::new(xpos, ypos),
+                nodew, hbar,
+                color,
+                Some(0), Some(BinaryColor::Off))
+                .map_err(|e| DisplayDrawingError::from(e))?;
+            xpos += nodeo;
+        }
+        Ok(true)
     }
 
+    // need these interfaces to support Drawable
     fn draw_hist_pair(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
         bands_l: Vec<u8>, bands_r: Vec<u8>
     ) -> Result<bool, DisplayDrawingError> {
-        Ok(false)
+        Ok(false) // needs flush
     }
 
     fn draw_hist_mono(
@@ -1272,7 +1330,7 @@ impl OledDisplay {
     pub async fn update_and_draw_visualizer(&mut self) -> Result<(), DisplayDrawingError> {
 
         let mut init_clear = true;
-        let mut peak_state = PeakState::default();
+        let mut last_viz_state = LastVizState::default();
         // draw the active meter/visualization
         let mut need_flush = false;
         loop {
@@ -1281,14 +1339,14 @@ impl OledDisplay {
                 .map_err(|e| DisplayDrawingError::from(e))?;
             if init_clear {
                 self.display.clear_buffer();
-                println!("{:#?}", peak_state);
+                println!(">> {:#?}", last_viz_state);
                 //init_clear = false;
             }
             if frame.is_none() {
                 continue; //break;
             } else {
                 let frame = frame.unwrap();
-                if !frame.playing {
+                if !frame.playing { // should we hold on pause??? would need decay peaks impl.
                     break;
                 } else {
                     match frame.payload {
@@ -1301,9 +1359,9 @@ impl OledDisplay {
                         VizPayload::AioVuMono { db } => 
                             need_flush = Self::draw_aio_vu(&mut self.display, db)?,
                         VizPayload::PeakStereo { l_level, r_level, l_hold, r_hold } => 
-                            need_flush = Self::draw_peak_pair(&mut self.display, l_level, r_level, l_hold, r_hold, &mut peak_state)?,
+                            need_flush = Self::draw_peak_pair(&mut self.display, l_level, r_level, l_hold, r_hold, &mut last_viz_state)?,
                         VizPayload::PeakMono { level, hold } => 
-                            need_flush = Self::draw_peak_mono(&mut self.display, level, hold )?,
+                            need_flush = Self::draw_peak_mono(&mut self.display, level, hold, &mut last_viz_state )?,
                         VizPayload::HistStereo { bands_l, bands_r } => 
                             need_flush = Self::draw_hist_pair(&mut self.display, bands_l, bands_r)?,
                         VizPayload::HistMono { bands } => 
@@ -1318,7 +1376,7 @@ impl OledDisplay {
                 }
             }
             if init_clear {
-                println!("{:#?}", peak_state);
+                println!("<< {:#?}", last_viz_state);
                 init_clear = false;
             }
 

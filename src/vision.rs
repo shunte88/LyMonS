@@ -46,7 +46,7 @@ const DECAY_STEPS_PER_FRAME: u8 = 1;       // visual fall rate (levels / frame)
 const LOCK_TRY_WINDOW_MS: u32 = 5;         // total budget for try-loop
 
 // Timings
-pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~50 FPS
+pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~60 FPS
 pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
 
 // --- internal RAII read-guard used by timed/try lock paths ---
@@ -143,7 +143,7 @@ impl SpectrumEngine {
 
         let band_edges = Self::build_log_bands(sr, nfft, bands);
         Self { sr, nfft, fft, window, buf, scratch, mags, bands, band_edges ,
-            levels_l: vec![0; bands], levels_r: vec![0;bands],
+            levels_l: vec![0; bands], levels_r: vec![0; bands],
             last_levels_l: vec![0; bands], last_levels_r: vec![0; bands],
 }
     }
