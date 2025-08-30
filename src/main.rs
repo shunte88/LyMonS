@@ -6,12 +6,14 @@ use env_logger::Env;
 //use clap::Parser;
 use clap::{Arg, ArgAction, Command};
 use chrono::{Timelike, Local};
+use local_ip_address::{local_ip};
 
 #[cfg(unix)] // Only compile this block on Unix-like systems
 use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
 
 // move these to mod.rs
 mod display;
+mod mac_addr;
 mod metrics;
 mod constants;
 mod imgdata;
@@ -25,12 +27,16 @@ mod climacell;
 mod geoloc;
 mod translate;
 mod eggs;
-mod visualizers;
-mod histogram; // core into visualizers
+mod vision;
+mod beacon;
+mod visualizer;
 mod svgimage;
+mod shm_path;
+mod func_timer;
 
-use mac_address::get_mac_address;
 use sliminfo::{LMSServer, TagID};
+use mac_addr::{get_mac_addr,get_mac_addr_for};
+use beacon::{LmsConfig, spawn_status_beacon};
 
 include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
 
@@ -79,11 +85,6 @@ fn check_half_hour(test:&String, active: bool) -> u8 {
 
 }
 
-fn get_mac_addr() -> String {
-    let ma =  get_mac_address().unwrap();
-    format!("{:?}", ma)
-}
-
 #[tokio::main] // Requires the `tokio` runtime with `macros` and `rt-multi-thread` features
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
@@ -96,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .action(ArgAction::SetTrue)
         .long("debug")
         .short('v')
-        .alias("verbose") // Use alias for verbose
+        .alias("verbose") 
         .help("Enable debug log level")
         .required(false))
         .arg(Arg::new("name")
@@ -184,10 +185,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .default_value("/dev/i2c-1") // Default I2C bus path for Raspberry Pi
         .help("I2C bus device path for OLED display (e.g., /dev/i2c-1)")
         .required(false))
-        .after_help("LyMonR:\
+        .arg(Arg::new("viz")
+        .short('a')
+        .long("viz")
+        .help("Visualization, meters, VU, Peak, Histograms, and more")
+        .value_parser(
+            ["vu_stereo",    // two VU meters (L/R)
+            "vu_mono",       // downmix to mono VU
+            "peak_stereo",   // two peak meters with hold/decay
+            "peak_mono",     // mono peak meter with hold/decay
+            "hist_stereo",   // two histogram bars (L/R)
+            "hist_mono",     // mono histogram (downmix)
+            "combination",   // L/R VU with a central mono peak meter
+            "aio_vu_mono",   // All In One with downmix VU
+            "aio_hist_mono", // All In One with downmix histogram,
+            "no_viz"]
+            )
+        .default_value("no_viz")
+        .required(false))
+        .after_help("LyMonS:\
             \nLMS monitor\
             \n\n\tDisplay LMS details and animations\
-            \n\tClock, Weather and more\
+            \n\tClock, Weather, Meters, and more\
             \n\n\
             CONTROLS:\
             \n\ttodo.")
@@ -204,8 +223,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let clock_font = matches.get_one::<String>("font").unwrap();
     let i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
     let easter_egg = matches.get_one::<String>("eggs").unwrap();
-
-
+    let viz_type = matches.get_one::<String>("viz").unwrap();
+    
     /*
 	let args = Cli::parse();
 	let config = Config::get();
@@ -230,13 +249,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         show_metrics, 
         easter_egg)?;
 
+    let inet =  local_ip().unwrap();
+    let mac_addr = get_mac_addr();
+    let eth0_mac_addr = get_mac_addr_for("eth0").unwrap();
+    let wlan0_mac_addr = get_mac_addr_for("wlan0").unwrap();
+
+    oled_display.connections(
+        inet.to_string().as_str(),
+        eth0_mac_addr.clone().as_str(),
+        wlan0_mac_addr.clone().as_str()
+    );
+ 
     oled_display.splash(
         show_splash,
         &format!("v{}",env!("CARGO_PKG_VERSION")).as_str(),
         BUILD_DATE
     ).unwrap();
-
-    let mac_addr = get_mac_addr();
 
     if weather_config != "" {
         oled_display.setup_weather(weather_config).await?;
@@ -257,10 +285,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // sleep duration for playing, visualizer, and easter eggs
     let scrolling_poll_duration = Duration::from_millis(50);
     // clock display sleep duration
-    let clock_poll_duration = Duration::from_millis(300);
+    let clock_poll_duration = Duration::from_millis(100);
 
     // The polling thread is now running in the background if init_server was successful.
     info!("LMS Server communication initialized.");
+
+    let lms = lms_arc.lock().await;
+    let lc = LmsConfig::new(
+        lms.host.to_string().as_str(),
+        lms.port,
+        lms.player_mac(),
+        Duration::from_millis(100)
+    );
+    drop(lms);
+    
+    let (status_cmd, playing_rx) = beacon::spawn_status_beacon(lc)?;
+    oled_display.setup_visualizer(viz_type, playing_rx).await?;
+
 
     // Main application loop
     tokio::select! {
@@ -292,7 +333,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut this_mode = "scrolling";
 
                     if egg_type == eggs::EGGS_TYPE_UNKNOWN {
-                        oled_display.set_display_mode(display::DisplayMode::Scrolling).await; // Set mode
+                        if viz_type == "no_viz" {
+                            oled_display.set_display_mode(display::DisplayMode::Scrolling).await; // Set mode
+                        } else {
+                            oled_display.set_display_mode(display::DisplayMode::Visualizer).await; // Set mode
+                            this_mode = "vizzy";
+                        }
                     } else {
                         oled_display.set_display_mode(display::DisplayMode::EasterEggs).await; // Set mode
                         this_mode = "eggy"
@@ -400,6 +446,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     info!("Main application exiting. Clearing display and stopping polling thread.");
+    let _ = status_cmd.try_send(beacon::StatusCmd::Shutdown);
 
     // Clear the display on shutdown
     oled_display.clear();

@@ -1,473 +1,796 @@
-//! Rust translation of vision.c using the libc crate and rustfft.
+// vision.rs
+// Linux-only reader for Squeezelite visualization shared memory.
+//
+// Cargo dependencies:
+//   memmap2 = "0.9"
+//   libc    = "0.2"
+//
+// Behavior:
+// - scans /dev/shm for "squeezelite-*" and maps to it
 
-use libc::{
-    c_char, c_int, c_void, close, ioctl, mmap, munmap, pthread_rwlock_rdlock, pthread_rwlock_t,
-    pthread_rwlock_unlock, shm_open, socket, time, time_t, AF_INET, MAP_FAILED, MAP_SHARED, O_RDWR,
-    PROT_READ, PROT_WRITE, SOCK_DGRAM, SIOCGIFCONF, SIOCGIFHWADDR,
-};
-use rustfft::{num_complex::Complex, Fft, FftPlanner};
-use std::ffi::CString;
-use std::mem;
+use libc::{open, pthread_rwlock_t, pthread_rwlock_tryrdlock, pthread_rwlock_unlock, time_t, EBUSY};
+use memmap2::{MmapMut, MmapOptions};
+use std::fs::OpenOptions;
+use std::io;
+use std::path::PathBuf;
+use std::mem::size_of;
+use log::{info, error};
 use std::ptr;
-use std::slice;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{fence, Ordering};
+use std::time::{Duration, Instant};
+use chrono::{DateTime, Utc};
+use crate::func_timer::FunctionTimer;
+use std::thread::sleep;
+use rustfft::{FftPlanner, num_complex::Complex, Fft};
+use std::sync::Arc;
 
-pub const VIS_BUF_SIZE = 16384;        // Predefined in Squeezelite.
-pub const PEAK_METER_LEVELS_MAX = 48;  // Number of peak meter intervals
-pub const SPECTRUM_POWER_MAP_MAX = 32; // Number of spectrum bands
-pub const METER_CHANNELS = 2;          // Number of metered channels.
-pub const OVERLOAD_PEAKS = 3; // Number of consecutive 0dBFS peaks for overload.
-pub const X_SCALE_LOG = 20;
-pub const MAX_SAMPLE_WINDOW = 1024 * X_SCALE_LOG;
-pub const MAX_SUBBANDS = MAX_SAMPLE_WINDOW / 2 / X_SCALE_LOG;
-pub const MIN_SUBBANDS = 16;
-pub const MIN_FFT_INPUT_SAMPLES = 128;
+use crate::shm_path::find_squeezelite_shm_path;
 
-enum VIZMODES {
-    VEMODE_NA = -1,
-    VEMODE_RN = 0,
-    VEMODE_VU = 1,
-    VEMODE_PK = 2,
-    VEMODE_SA = 3,
-    VEMODE_ST = 4,
-    VEMODE_SM = 5,
-    VEMODE_MX = 6,
-    VEMODE_A1 = 7,
-    VEMODE_A1S = 8,
-    VEMODE_A1V = 9,
-}                  // note all-in-one modes out of "bounds"
+const VIS_BUF_SIZE:usize = 16_384;         // Predefined in Squeezelite.
+pub const PEAK_METER_LEVELS_MAX:u8 = 48;   // Number of peak meter intervals
+pub const SPECTRUM_POWER_MAP_MAX:u8 = 32;  // Number of spectrum bands
+pub const METER_CHANNELS:usize = 2;        // Number of metered channels.
+pub const OVERLOAD_PEAKS:u8 = 3;           // Number of consecutive 0dBFS peaks for overload.
+pub const X_SCALE_LOG:usize = 20;
+pub const MAX_SAMPLE_WINDOW:usize = 1024 * X_SCALE_LOG;
+pub const MAX_SUBBANDS:usize = MAX_SAMPLE_WINDOW as usize/ METER_CHANNELS / X_SCALE_LOG;
+pub const MIN_SUBBANDS:usize = 16;
 
-struct peak_meter_t {
-    int_time: u16,  // Integration time (ms).
-    samples: u16,   // Samples for integration time.
-    hold_time: u16, // Peak hold time (ms).
-    hold_incs: u16, // Hold time counter.
-    fall_time: u16, // Fall time (ms).
-    fall_incs: u16, // Fall time counter.
-    over_peaks: u16, // Number of consecutive 0dBFS samples for overload.
-    over_time: u16, // Overload indicator time (ms).
-    over_incs: u16, // Overload indicator count.
-    num_levels: u8, // Number of display levels
-    floor: i8,      // Noise floor for meter (dB).
-    reference: u16, // Reference level.
-    overload: Vec(METER_CHANNELS, bool),    // Overload flags.
-    dBfs: Vec(METER_CHANNELS, i8),          // dBfs values.
-    bar_index: Vec(METER_CHANNELS, u8),     // Index for bar display.
-    dot_index: Vec(METER_CHANNELS, u8),     // Index for dot display (peak hold).
-    elapsed: Vec(METER_CHANNELS, u32),      // Elapsed time (us).
-    scale: Vec(PEAK_METER_LEVELS_MAX, u16), // Scale intervals.
+const MIN_FFT_INPUT_SAMPLES:usize = 128;
+const MAX_FFT_INPUT_SAMPLES: usize = 4096; // cap for perf
+const SPECTRUM_MIN_HZ: f32 = 20.0;         // start of spectrum
+const EPS: f32 = 1e-12;
+const FLOOR_DB: f32 = -72.0;               // meter floor
+const CEIL_DB: f32 =   0.0;                // ~0 dBFS
+const DECAY_STEPS_PER_FRAME: u8 = 1;       // visual fall rate (levels / frame)
+const LOCK_TRY_WINDOW_MS: u32 = 5;         // total budget for try-loop
+
+// Timings
+pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~50 FPS
+pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
+
+// --- internal RAII read-guard used by timed/try lock paths ---
+struct ReadGuard {
+    p: *mut pthread_rwlock_t,
 }
-
-struct bin_chan_t {
-    bin: Vec(METER_CHANNELS, Vec(MAX_SUBBANDS, float64)),
-}
-
-struct {
-    metric: Vec(METER_CHANNELS, i32),
-    percent: Vec(METER_CHANNELS, float64),
-    erase: Vec(METER_CHANNELS, bool),
-}
-
-/*
-struct vissy_meter_t {
-    vis_type_t meter_type;
-    char channel_name[METER_CHANNELS][2];
-    int is_mono;
-    int64_t sample_accum[METER_CHANNELS]; // VU raw peak values.
-    int8_t floor;                         // Noise floor for meter (dB).
-    uint16_t reference;                   // Reference level.
-    int64_t dBfs[METER_CHANNELS];         // dBfs values.
-    int64_t dB[METER_CHANNELS];           // dB values.
-    int64_t linear[METER_CHANNELS];       // linear dB (min->max)
-    uint8_t rms_bar[METER_CHANNELS];
-    uint8_t rms_levels;
-    char rms_charbar[METER_CHANNELS][PEAK_METER_LEVELS_MAX + 1];
-    int16_t rms_scale[PEAK_METER_LEVELS_MAX];
-    int32_t power_map[SPECTRUM_POWER_MAP_MAX];
-    int channel_width[METER_CHANNELS];
-    int bar_size[METER_CHANNELS];
-    int subbands_in_bar[METER_CHANNELS];
-    int num_bars[METER_CHANNELS];
-    int channel_flipped[METER_CHANNELS];
-    int clip_subbands[METER_CHANNELS];
-    int num_subbands;
-    int sample_window;
-    int num_windows;
-    double filter_window[MAX_SAMPLE_WINDOW];
-    double preemphasis[MAX_SUBBANDS];
-    int decade_idx[MAX_SUBBANDS];
-    int decade_len[MAX_SUBBANDS];
-    int numFFT[METER_CHANNELS];
-    int sample_bin_chan[METER_CHANNELS][MAX_SUBBANDS];
-    float avg_power[2 * MAX_SUBBANDS];
-    kiss_fft_cfg cfg;
-};
-
-*/
-
-mod visdata {
-    use super::Fft;
-    use std::sync::Arc;
-
-    pub const VIS_BUF_SIZE: usize = 8192;
-    pub const METER_CHANNELS: usize = 2;
-    pub const MAX_SUBBANDS: usize = 64;
-    pub const MAX_SAMPLE_WINDOW: usize = 4096;
-    pub const MIN_SUBBANDS: usize = 16;
-    pub const X_SCALE_LOG: usize = 4;
-    pub const MIN_FFT_INPUT_SAMPLES: usize = 256;
-
-    #[repr(C)]
-    pub struct vissy_meter_t {
-        pub channel_width: [u32; METER_CHANNELS],
-        pub bar_size: [u32; METER_CHANNELS],
-        pub num_subbands: i32,
-        pub clip_subbands: [bool; METER_CHANNELS],
-        pub num_bars: [i32; METER_CHANNELS],
-        pub subbands_in_bar: [i32; METER_CHANNELS],
-        pub is_mono: bool,
-        pub sample_window: i32,
-        pub num_windows: i32,
-        // --- FFT related fields ---
-        #[repr(C)]
-        pub fft_plan: Option<Arc<dyn Fft<f32>>>,
-        pub filter_window: [f32; MAX_SAMPLE_WINDOW],
-        // --- End FFT ---
-        pub decade_idx: [i32; MAX_SUBBANDS],
-        pub decade_len: [i32; MAX_SUBBANDS],
-        pub preemphasis: [f64; MAX_SUBBANDS],
-        pub reference: f64,
-        pub floor: f64,
-        pub sample_accum: [u64; METER_CHANNELS],
-        pub sample_bin_chan: [[i32; MAX_SUBBANDS]; METER_CHANNELS],
-        pub avg_power: [f32; MAX_SUBBANDS * 2],
-        pub dB: [f64; METER_CHANNELS],
-        pub dBfs: [f64; METER_CHANNELS],
-        pub linear: [i32; METER_CHANNELS],
-        pub rms_scale: [i32; METER_CHANNELS],
-        pub power_map: [i32; 32],
+impl Drop for ReadGuard {
+    fn drop(&mut self) {
+        unsafe { let _ = pthread_rwlock_unlock(self.p); }
     }
 }
 
-use visdata::*;
-
-const VUMETER_DEFAULT_SAMPLE_WINDOW: usize = 1024 * 2;
-
+/// The shared memory structure.
 #[repr(C)]
-struct vis_t {
-    rwlock: pthread_rwlock_t,
+struct VisT {
+    rwlock: pthread_rwlock_t, // initialized with PTHREAD_PROCESS_SHARED by writer
     buf_size: u32,
     buf_index: u32,
-    running: bool,
+    running: u8, // C99 bool (0/1)
+    // padding likely here
     rate: u32,
-    updated: time_t,
+    updated: time_t,          // platform time_t
     buffer: [i16; VIS_BUF_SIZE],
 }
 
-static mut VIS_MMAP: *mut vis_t = ptr::null_mut();
-static mut VIS_FD: c_int = -1;
-static MAC_ADDRESS: Mutex<Option<String>> = Mutex::new(None);
+#[derive(Clone, Debug)]
+pub struct VisFrame {
+    pub sample_rate: u32,
+    pub timestamp: i64, // normalized for convenience
+    pub running: bool,
+    /// Interleaved i16 samples, linearized oldest→newest
+    pub samples: Vec<i16>,
+}
 
-fn get_mac_address_shmem() -> Option<String> {
-    unsafe {
-        let sd = socket(AF_INET, SOCK_DGRAM, 0);
-        if sd < 0 {
+pub struct VisReader {
+    _mmap: MmapMut,    // keep mapping alive
+    shm_path: PathBuf,
+    base: *const VisT, // mapped struct base
+    last_seen: time_t,
+    last_idx: u32,
+    last_progress: Instant, // for stale detection
+    // reusable stereo scratch
+    samples_l: Vec<i16>,
+    samples_r: Vec<i16>,
+}
+
+// These are safe because we only do read access and the OS rwlock is process-shared.
+unsafe impl Send for VisReader {}
+unsafe impl Sync for VisReader {}
+
+pub struct SpectrumEngine {
+    sr: u32,
+    nfft: usize,
+    fft: Arc<dyn Fft<f32> + Send + Sync>,
+    window: Vec<f32>,
+    buf: Vec<Complex<f32>>,
+    scratch: Vec<Complex<f32>>,
+    mags: Vec<f32>,                // length nfft/2
+    bands: usize,
+    band_edges: Vec<(usize, usize)>,
+    levels_l: Vec<u8>,
+    levels_r: Vec<u8>,
+    last_levels_l: Vec<u8>,
+    last_levels_r: Vec<u8>,
+}
+
+impl SpectrumEngine {
+    pub fn new(sr: u32, samples_len: usize, bands: usize) -> Self {
+        let nmax = samples_len.clamp(MIN_FFT_INPUT_SAMPLES, MAX_FFT_INPUT_SAMPLES);
+        let nfft = 1usize.next_power_of_two()
+            .min(nmax).min(MAX_FFT_INPUT_SAMPLES)
+            .min(
+                if samples_len == 0 { 
+                    MIN_FFT_INPUT_SAMPLES 
+                } else { 
+                    samples_len
+                }.next_power_of_two())
+            .max( MIN_FFT_INPUT_SAMPLES);
+
+        let mut planner = FftPlanner::<f32>::new();
+        let fft: Arc<dyn Fft<f32> + Send + Sync> = planner.plan_fft_forward(nfft);
+
+        // Hann window
+        let window = (0..nfft)
+            .map(|i| {
+                let x = std::f32::consts::TAU * (i as f32) / (nfft as f32);
+                0.5 * (1.0 - x.cos())
+            })
+            .collect::<Vec<_>>();
+
+        let buf = vec![Complex::<f32>::new(0.0, 0.0); nfft];
+        let scratch = vec![Complex::<f32>::new(0.0, 0.0); fft.get_inplace_scratch_len()];
+        let mags = vec![0.0; nfft / 2];
+
+        let band_edges = Self::build_log_bands(sr, nfft, bands);
+        Self { sr, nfft, fft, window, buf, scratch, mags, bands, band_edges ,
+            levels_l: vec![0; bands], levels_r: vec![0;bands],
+            last_levels_l: vec![0; bands], last_levels_r: vec![0; bands],
+}
+    }
+
+    pub fn ensure(&mut self, sr: u32, samples_len: usize) {
+        if self.sr == sr && self.nfft <= samples_len && self.nfft <= MAX_FFT_INPUT_SAMPLES { return; }
+        *self = Self::new(sr, samples_len, self.bands);
+    }
+
+    pub fn build_log_bands(sr: u32, nfft: usize, bands: usize) -> Vec<(usize, usize)> {
+        let nyq = sr as f32 / 2.0;
+        let fmin = SPECTRUM_MIN_HZ.min(nyq - 1.0).max(1.0);
+        let fmax = (nyq * 0.98).max(fmin + 1.0);
+        let mut edges = Vec::with_capacity(bands + 1);
+        for i in 0..=bands {
+            let t = i as f32 / (bands as f32);
+            // log spacing
+            let f = fmin * (fmax / fmin).powf(t);
+            let k = ((f * (nfft as f32) / (sr as f32)).floor() as isize)
+                .clamp(1, (nfft as isize / 2) - 1) as usize;
+            edges.push(k);
+        }
+        // turn to (start,end) per band, ensure non-empty ranges
+        let mut out = Vec::with_capacity(bands);
+        for i in 0..bands {
+            let mut a = edges[i];
+            let mut b = edges[i + 1];
+            if b <= a { b = (a + 1).min(nfft / 2); }
+            out.push((a, b));
+        }
+        out
+    }
+
+    /// Compute band dB (per-channel) from newest `nfft` samples of `pcm`.
+    pub fn compute_db(&mut self, pcm: &[i16]) -> Vec<f32> {
+        let n = self.nfft.min(pcm.len());
+        let start = pcm.len() - n;
+
+        // time-domain buffer with window
+        for i in 0..n {
+            let s = pcm[start + i] as f32 / (i16::MAX as f32);
+            self.buf[i].re = s * self.window[i];
+            self.buf[i].im = 0.0;
+        }
+        for i in n..self.nfft {
+            self.buf[i].re = 0.0;
+            self.buf[i].im = 0.0;
+        }
+
+        // FFT
+        self.fft.process_with_scratch(&mut self.buf, &mut self.scratch);
+
+        // magnitudes (one-sided)
+        let half = self.nfft / 2;
+        for k in 0..half {
+            self.mags[k] = self.buf[k].re.hypot(self.buf[k].im);
+        }
+
+        // simple energy sum per band, then 20*log10 (amplitude) or 10*log10 (power)
+        // We'll use amplitude dBFS here; switch to power by squaring + 10*log10.
+        let mut bands_db = vec![0.0; self.bands];
+        for (bi, (a, b)) in self.band_edges.iter().enumerate() {
+            let mut acc = 0.0f32;
+            for k in *a..*b {
+                acc += self.mags[k].max(0.0);
+            }
+            // Normalize roughly by number of bins to keep levels sane
+            let avg = acc / ((*b - *a) as f32).max(1.0);
+            let db = 20.0 * (avg.max(EPS)).log10(); // 0 dBFS ≈ full-scale tone (approx; Hann attenuates a bit)
+            bands_db[bi] = db;
+        }
+        bands_db
+    }     
+
+    /// Compute dBFS bands for one channel from the newest `nfft` samples.
+    pub fn compute_db_bands(&mut self, pcm: &[i16]) -> Vec<f32> {
+        let need = self.nfft.min(pcm.len());
+        let start = pcm.len().saturating_sub(need);
+
+        // windowed real signal into buf
+        for i in 0..need {
+            let s = (pcm[start + i] as f32) / (i16::MAX as f32);
+            self.buf[i].re = s * self.window[i];
+            self.buf[i].im = 0.0;
+        }
+        for i in need..self.nfft {
+            self.buf[i].re = 0.0;
+            self.buf[i].im = 0.0;
+        }
+
+        // FFT
+        self.fft.process_with_scratch(&mut self.buf, &mut self.scratch);
+
+        // magnitude^2 (power), one-sided
+        let half = self.nfft / 2;
+        for k in 0..half {
+            let re = self.buf[k].re;
+            let im = self.buf[k].im;
+            self.mags[k] = re.mul_add(re, im * im);
+        }
+
+        // sum power per band, normalize roughly by bin count, convert to dBFS
+        let mut out = vec![FLOOR_DB; self.bands];
+        for (bi, (a, b)) in self.band_edges.iter().enumerate() {
+            let mut acc = 0.0f32;
+            for k in *a..*b { acc += self.mags[k]; }
+            let avg = acc / ((*b - *a) as f32).max(1.0);
+            // Hann window & FFT scaling shift absolute level; for visuals we just want monotonic
+            out[bi] = 10.0 * (avg.max(EPS)).log10(); // power dB
+        }
+        out
+    }
+
+    /// Compute **meter levels** [0..=PEAK_METER_LEVELS_MAX] per band with simple falloff.
+    pub fn compute_levels(&mut self, left: &[i16], right: &[i16]) -> (Vec<u8>, Vec<u8>) {
+        let db_l = self.compute_db_bands(left);
+        let db_r = self.compute_db_bands(right);
+
+        self.levels_l = self.last_levels_l.clone();
+        self.levels_r = self.last_levels_r.clone();
+        
+        // Map to levels
+        let mut lv_l = vec![0u8; self.bands];
+        let mut lv_r = vec![0u8; self.bands];
+        for i in 0..self.bands {
+            lv_l[i] = db_to_level(db_l[i]);
+            lv_r[i] = db_to_level(db_r[i]);
+
+            // peak-hold with decay (visual smoothing)
+            lv_l[i] = lv_l[i].max(self.last_levels_l[i].saturating_sub(DECAY_STEPS_PER_FRAME));
+            lv_r[i] = lv_r[i].max(self.last_levels_r[i].saturating_sub(DECAY_STEPS_PER_FRAME));
+        }
+        self.last_levels_l.copy_from_slice(&lv_l);
+        self.last_levels_r.copy_from_slice(&lv_r);
+        (lv_l, lv_r)
+    }
+
+}
+
+impl VisReader {
+    /// Discover the active Squeezelite shm in /dev/shm and map it.
+    pub fn new() -> io::Result<Self> {
+
+        // Discover the active squeezelite segment (e.g., "/dev/shm/squeezelite-aa:bb:cc:dd:ee:ff")
+        let shm_path = find_squeezelite_shm_path()?;
+
+        // IMPORTANT: open RDWR
+        let file = OpenOptions::new()
+            .read(true).write(true)
+            .open(&shm_path)?;
+
+        // Sanity: ensure the region is at least one VisT
+        let len = file.metadata()?.len() as usize;
+        if len < size_of::<VisT>() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("squeezelite shm too small: {} < {}", len, size_of::<VisT>()),
+            ));
+        }
+
+        // Map writable so the rwlock works; we still only *read* audio data
+        let mmap = unsafe { MmapOptions::new().len(size_of::<VisT>()).map_mut(&file)? };
+        let base = mmap.as_ptr() as *const VisT;
+
+        Ok(Self {
+            _mmap: mmap, // NOTE: field type should be memmap2::MmapMut
+            shm_path,
+            base,
+            last_seen: 0,
+            last_idx: u32::MAX,
+            last_progress: Instant::now(),
+            samples_l: Vec::with_capacity(VIS_BUF_SIZE / 2),
+            samples_r: Vec::with_capacity(VIS_BUF_SIZE / 2),
+        })
+    }
+
+    #[inline]
+    fn sd(&self) -> &VisT {
+        // Safety: base points into a live read-only mapping of VisT.
+        unsafe { &*self.base }
+    }
+
+    /// Never blocks indefinitely: quick try loop, else fallback to an unlocked,
+    /// double-checked snapshot. Returns None if no new, stable data.
+    pub fn snapshot_if_new(&mut self) -> io::Result<Option<VisFrame>> {
+        //let _ = FunctionTimer::new("vision::snapshot_if_new");
+        use libc::pthread_rwlock_t;
+
+        let mut out: Option<VisFrame> = None;
+        let mut new_stamp: libc::time_t = 0;
+        let mut new_idx: u32 = self.last_idx;
+
+        // ----- inner scope: borrow &self and any lock guard only here -----
+        {
+            let sd = self.sd();
+            let p = &sd.rwlock as *const _ as *mut pthread_rwlock_t;
+
+            match unsafe { lock_read_best_effort(p, LOCK_TRY_WINDOW_MS) }? {
+                Some(_guard) => {
+                    let updated = sd.updated;
+                    let idx_u32 = sd.buf_index;
+
+                    if (updated != 0 && updated != self.last_seen) || (idx_u32 != self.last_idx) {
+                        let size = (sd.buf_size as usize).min(VIS_BUF_SIZE);
+                        let rate = sd.rate;
+                        let running = sd.running != 0;
+                        let idx = if size > 0 { (sd.buf_index as usize) % size } else { 0 };
+
+                        if header_looks_good(size, idx, rate) {
+                            let mut samples = Vec::with_capacity(size);
+                            if size > 0 {
+                                samples.extend_from_slice(&sd.buffer[idx..size]);
+                                samples.extend_from_slice(&sd.buffer[..idx]);
+                            }
+                            out = Some(VisFrame {
+                                sample_rate: rate,
+                                timestamp: updated as i64,
+                                running,
+                                samples,
+                            });
+                            new_stamp = updated;
+                            new_idx = idx_u32;
+                        }
+                    }
+                    // _guard drops here
+                }
+                None => {
+                    // Unlocked fallback AFTER we drop the borrow below
+                }
+            }
+        } // ----- borrow on &self (sd) ends here -----
+
+        // If we didn't get a frame under lock, try the unlocked double-check path.
+        if out.is_none() {
+            if let Some(frame) = self.unlocked_snapshot_if_new() {
+                new_stamp = frame.timestamp as libc::time_t;
+                out = Some(frame);
+            }
+        }
+        // Now it's safe to mutate self.
+        if out.is_some() {
+            self.last_seen = new_stamp;
+            self.last_idx = new_idx;
+            self.last_progress = std::time::Instant::now();
+        }
+        Ok(out)
+    }
+
+    fn unlocked_snapshot_if_new_using_index(&self) -> Option<VisFrame> {
+        let sd = self.sd();
+
+        let upd1 = unsafe { std::ptr::read_volatile(&sd.updated) };
+        let size_raw = unsafe { std::ptr::read_volatile(&sd.buf_size) } as usize;
+        let size = size_raw.min(VIS_BUF_SIZE);
+        let idx1_u32 = unsafe { std::ptr::read_volatile(&sd.buf_index) };
+        let rate = unsafe { std::ptr::read_volatile(&sd.rate) };
+        let running = unsafe { std::ptr::read_volatile(&sd.running) } != 0;
+
+        if size == 0 { return None; }
+
+        // consider new if either updated advanced OR index advanced
+        let changed = (upd1 != 0 && upd1 != self.last_seen) || (idx1_u32 != self.last_idx);
+
+        if !changed || !header_looks_good(size, idx1_u32 as usize % size, rate) {
             return None;
         }
 
-        let mut mac = [0u8; 6];
-        let mut ifc: libc::ifconf = mem::zeroed();
-        let mut ifs: [libc::ifreq; 3] = mem::zeroed();
+        std::sync::atomic::fence(Ordering::Acquire);
 
-        ifc.ifc_len = mem::size_of_val(&ifs) as i32;
-        ifc.ifc_buf = ifs.as_mut_ptr() as *mut c_char;
+        let idx = (idx1_u32 as usize) % size;
+        let mut samples = Vec::with_capacity(size);
+        samples.extend_from_slice(&sd.buffer[idx..size]);
+        samples.extend_from_slice(&sd.buffer[..idx]);
 
-        if ioctl(sd, SIOCGIFCONF, &mut ifc) == 0 {
-            let ifend = (ifs.as_ptr() as *const u8).add(ifc.ifc_len as usize) as *const libc::ifreq;
-            let mut ifr = ifc.ifc_req;
+        std::sync::atomic::fence(Ordering::Acquire);
 
-            while ifr < ifend {
-                if (*ifr).ifr_ifru.ifru_addr.sa_family as i32 == AF_INET {
-                    let mut ifreq: libc::ifreq = mem::zeroed();
-                    ptr::copy_nonoverlapping(
-                        (*ifr).ifr_name.as_ptr(),
-                        ifreq.ifr_name.as_mut_ptr(),
-                        libc::IFNAMSIZ,
-                    );
+        let upd2 = unsafe { std::ptr::read_volatile(&sd.updated) };
+        let idx2_u32 = unsafe { std::ptr::read_volatile(&sd.buf_index) };
 
-                    if ioctl(sd, SIOCGIFHWADDR, &mut ifreq) == 0 {
-                        mac.copy_from_slice(slice::from_raw_parts(
-                            ifreq.ifr_ifru.ifru_hwaddr.sa_data.as_ptr() as *const u8,
-                            6,
-                        ));
-                        if mac.iter().sum::<u8>() != 0 {
-                            break;
-                        }
-                    }
+        // accept only if stable snapshot (both match) to avoid tearing
+        if upd2 == upd1 && idx2_u32 == idx1_u32 {
+            Some(VisFrame {
+                sample_rate: rate,
+                timestamp: upd2 as i64,
+                running,
+                samples,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// De-interleaves to (left, right) and invokes `f` only when new data arrive.
+    /// Returns Ok(true) if called, Ok(false) if nothing new.
+    pub fn with_data<F>(&mut self, f: F) -> io::Result<bool>
+    where
+        F: FnOnce(&[i16], &[i16]),
+    {
+        match self.snapshot_if_new()? {
+            Some(frame) => {
+                let n = frame.samples.len() / 2; // ignore odd tail if any
+                self.samples_l.resize(n, 0);
+                self.samples_r.resize(n, 0);
+
+                for (i, pair) in frame.samples.chunks_exact(2).enumerate() {
+                    self.samples_l[i] = pair[0];
+                    self.samples_r[i] = pair[1];
                 }
-                ifr = (ifr as *const u8).add(mem::size_of::<libc::ifreq>()) as *const libc::ifreq;
+
+                f(&self.samples_l, &self.samples_r);
+                Ok(true)
             }
+            None => Ok(false),
         }
-
-        close(sd);
-
-        Some(format!(
-            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-        ))
     }
-}
 
-fn vissy_reopen() {
-    unsafe {
-        if !VIS_MMAP.is_null() {
-            munmap(VIS_MMAP as *mut c_void, mem::size_of::<vis_t>());
-            VIS_MMAP = ptr::null_mut();
+    /// Variant that also provides the frame header to the closure.
+    pub fn with_data_extended<F>(&mut self, f: F) -> io::Result<bool>
+    where
+        F: FnOnce(&VisFrame, &[i16], &[i16]),
+    {
+        if let Some(frame) = self.snapshot_if_new()? {
+            let n = frame.samples.len() / 2;
+            self.samples_l.resize(n, 0);
+            self.samples_r.resize(n, 0);
+            for (i, p) in frame.samples.chunks_exact(2).enumerate() {
+                self.samples_l[i] = p[0];
+                self.samples_r[i] = p[1];
+            }
+            f(&frame, &self.samples_l, &self.samples_r);
+            Ok(true)
+        } else {
+            Ok(false)
         }
+    }
 
-        if VIS_FD != -1 {
-            close(VIS_FD);
-            VIS_FD = -1;
-        }
-
-        let mut mac_lock = MAC_ADDRESS.lock().unwrap();
-        if mac_lock.is_none() {
-            *mac_lock = get_mac_address_shmem();
-        }
-
-        if let Some(mac) = mac_lock.as_deref() {
-            let shm_path_str = format!("/squeezelite-{}", mac);
-            let shm_path = CString::new(shm_path_str).unwrap();
-
-            VIS_FD = shm_open(shm_path.as_ptr(), O_RDWR, 0o666);
-            if VIS_FD > 0 {
-                VIS_MMAP = mmap(
-                    ptr::null_mut(),
-                    mem::size_of::<vis_t>(),
-                    PROT_READ | PROT_WRITE,
-                    MAP_SHARED,
-                    VIS_FD,
-                    0,
-                ) as *mut vis_t;
-
-                if VIS_MMAP == MAP_FAILED as *mut vis_t {
-                    close(VIS_FD);
-                    VIS_FD = -1;
-                    VIS_MMAP = ptr::null_mut();
+    /// Deinterleave with optional channel swap; returns (L, R) slices to your closure.
+    pub fn with_data_swapped<F>(&mut self, swap_lr: bool, f: F) -> std::io::Result<bool>
+    where
+        F: FnOnce(&[i16], &[i16]),
+    {
+        if let Some(frame) = self.snapshot_if_new()? {
+            let n = frame.samples.len() / 2;
+            self.samples_l.resize(n, 0);
+            self.samples_r.resize(n, 0);
+            for (i, pair) in frame.samples.chunks_exact(2).enumerate() {
+                if swap_lr {
+                    self.samples_l[i] = pair[1];
+                    self.samples_r[i] = pair[0];
+                } else {
+                    self.samples_l[i] = pair[0];
+                    self.samples_r[i] = pair[1];
                 }
             }
-        }
-    }
-}
-
-pub fn vissy_close() {
-    unsafe {
-        if VIS_FD != -1 {
-            close(VIS_FD);
-            VIS_FD = -1;
-            VIS_MMAP = ptr::null_mut();
-        }
-    }
-}
-
-pub fn vissy_check() {
-    static mut LAST_OPEN: time_t = 0;
-    unsafe {
-        let now = time(ptr::null_mut());
-
-        if VIS_MMAP.is_null() {
-            if now - LAST_OPEN > 5 {
-                vissy_reopen();
-                LAST_OPEN = now;
-            }
-            if VIS_MMAP.is_null() {
-                return;
-            }
-        }
-
-        pthread_rwlock_rdlock(&mut (*VIS_MMAP).rwlock);
-        let running = (*VIS_MMAP).running;
-        let updated = (*VIS_MMAP).updated;
-        pthread_rwlock_unlock(&mut (*VIS_MMAP).rwlock);
-
-        if running && (now - updated > 5) {
-            vissy_reopen();
-            LAST_OPEN = now;
-        }
-    }
-}
-
-fn vissy_lock() {
-    unsafe {
-        if !VIS_MMAP.is_null() {
-            pthread_rwlock_rdlock(&mut (*VIS_MMAP).rwlock);
-        }
-    }
-}
-
-fn vissy_unlock() {
-    unsafe {
-        if !VIS_MMAP.is_null() {
-            pthread_rwlock_unlock(&mut (*VIS_MMAP).rwlock);
-        }
-    }
-}
-
-fn vissy_is_playing() -> bool {
-    unsafe {
-        if VIS_MMAP.is_null() {
-            false
+            f(&self.samples_l, &self.samples_r);
+            Ok(true)
         } else {
-            (*VIS_MMAP).running
+            Ok(false)
         }
     }
-}
 
-pub fn vissy_get_rate() -> u32 {
-    unsafe {
-        if VIS_MMAP.is_null() {
+    /// Optional: re-scan and remap when the writer has likely restarted and data have gone stale.
+    pub fn reopen_if_stale(&mut self) -> io::Result<()> {
+        //let _ = FunctionTimer::new("vision::reopen_if_stale");
+        if self.last_progress.elapsed() < POLL_IDLE{
+            return Ok(());
+        }
+        let shm_path = self.shm_path.clone();
+        let file = OpenOptions::new().read(true).write(true).open(&shm_path)?;
+        let mmap = unsafe { MmapOptions::new().len(size_of::<VisT>()).map_mut(&file)? };
+        self._mmap = mmap;
+        self.base = self._mmap.as_ptr() as *const VisT;
+        self.last_progress = Instant::now();
+        Ok(())
+    }
+
+    // ---------- unlocked (seqlock-style) snapshot fallback ----------
+    fn unlocked_snapshot_if_new(&self) -> Option<VisFrame> {
+        //let _ = FunctionTimer::new("vision::unlocked_snapshot_if_new");
+        let sd = self.sd();
+
+        // read updated once (volatile)
+        let first = unsafe { ptr::read_volatile(&sd.updated) };
+        if first == 0 || first == self.last_seen {
+            return None;
+        }
+
+        fence(Ordering::Acquire);
+
+        let raw_size = unsafe { ptr::read_volatile(&sd.buf_size) } as usize;
+        let size = raw_size.min(VIS_BUF_SIZE);
+        let rate = unsafe { ptr::read_volatile(&sd.rate) };
+        let running = unsafe { ptr::read_volatile(&sd.running) } != 0;
+        let idx = if size > 0 {
+            (unsafe { ptr::read_volatile(&sd.buf_index) } as usize) % size
+        } else {
             0
+        };
+
+        if !header_looks_good(size, idx, rate) {
+            return None;
+        }
+
+        let mut samples = Vec::with_capacity(size);
+        if size > 0 {
+            samples.extend_from_slice(&sd.buffer[idx..size]);
+            samples.extend_from_slice(&sd.buffer[..idx]);
+        }
+
+        fence(Ordering::Acquire);
+
+        // read updated again — accept only if unchanged
+        let second = unsafe { ptr::read_volatile(&sd.updated) };
+        if second == first && second != self.last_seen {
+            Some(VisFrame {
+                sample_rate: rate,
+                timestamp: second as i64,
+                running,
+                samples,
+            })
         } else {
-            (*VIS_MMAP).rate
+            None
         }
     }
+
 }
 
-fn vissy_get_buffer() -> *const i16 {
-    unsafe {
-        if VIS_MMAP.is_null() {
-            ptr::null()
-        } else {
-            (*VIS_MMAP).buffer.as_ptr()
+#[inline]
+fn header_looks_good(size: usize, idx: usize, rate: u32) -> bool {
+    //let _ = FunctionTimer::new("vision::header_looks_good");
+    (1..=VIS_BUF_SIZE).contains(&size)
+        && idx < size
+        && (8_000..=384_000).contains(&rate)
+}
+
+// Try to acquire a read lock without stalling the loop.
+// Returns Some(ReadGuard) when locked, None on timeout, or Err on hard error.
+unsafe fn lock_read_best_effort(
+    p: *mut pthread_rwlock_t,
+    window_ms: u32,
+) -> io::Result<Option<ReadGuard>> {
+    //let _ = FunctionTimer::new("vision::lock_read_best_effort");
+    let rc = pthread_rwlock_tryrdlock(p);
+    if rc == 0 {
+        return Ok(Some(ReadGuard { p }));
+    }
+    if rc != EBUSY {
+        return Err(io::Error::from_raw_os_error(rc));
+    }
+
+    let deadline = Instant::now() + Duration::from_millis(window_ms as u64);
+    while Instant::now() < deadline {
+        let rc2 = pthread_rwlock_tryrdlock(p);
+        if rc2 == 0 {
+            return Ok(Some(ReadGuard { p }));
         }
-    }
-}
-
-fn vissy_get_buffer_len() -> u32 {
-    unsafe {
-        if VIS_MMAP.is_null() {
-            0
-        } else {
-            (*VIS_MMAP).buf_size
+        if rc2 != EBUSY {
+            return Err(io::Error::from_raw_os_error(rc2));
         }
+        // short nap yields CPU and keeps shutdown responsive
+        sleep(POLL_IDLE);
     }
+    Ok(None) // let caller fall back to unlocked snapshot
 }
 
-fn vissy_get_buffer_idx() -> u32 {
-    unsafe {
-        if VIS_MMAP.is_null() {
-            0
-        } else {
-            (*VIS_MMAP).buf_index
-        }
+/// Fast peak/RMS helpers (reuse your slices each call)
+pub fn peak_and_rms(ch: &[i16]) -> (i16, f32) {
+    let mut peak = 0i32;
+    let mut sumsq = 0f64;
+    for &s in ch {
+        let v = s as i32;
+        let a = v.abs();
+        if a > peak { peak = a; }
+        sumsq += (v as f64) * (v as f64);
     }
+    let n = ch.len().max(1) as f64;
+    let rms = (sumsq / n).sqrt() as f32;
+    (peak.clamp(0, i16::MAX as i32) as i16, rms)
 }
 
-pub fn vissy_meter_init(vissy_meter: &mut vissy_meter_t) {
-    // ... (logic for calculating num_subbands, num_bars etc. remains the same)
-
-    // Setup rustfft plan
-    let mut planner = FftPlanner::<f32>::new();
-    vissy_meter.fft_plan = Some(
-        planner.plan_fft_forward(vissy_meter.sample_window as usize),
-    );
-
-    // --- The rest of the initialization logic from the C version ---
-    let const1 = 0.54;
-    let const2 = 0.46;
-    for w in 0..vissy_meter.sample_window as usize {
-        let twopi = std::f64::consts::PI * 2.0;
-        vissy_meter.filter_window[w] = (const1
-            - (const2 * (twopi * w as f64 / vissy_meter.sample_window as f64).cos()))
-            as f32;
-    }
-    // ... (decade and preemphasis calculations would go here)
+/// Map dBFS to integer meter steps [0..=PEAK_METER_LEVELS_MAX]
+#[inline]
+fn db_to_level(db: f32) -> u8 {
+    let x = ((db - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0);
+    (x * (PEAK_METER_LEVELS_MAX as f32)).round() as u8
 }
 
-pub fn vissy_meter_calc(vissy_meter: &mut vissy_meter_t, samode: bool) -> bool {
-    vissy_check();
+pub fn dbfs(x: f32) -> f32 {
+    let refv = i16::MAX as f32;
+    20.0 * (x.max(1e-9) / refv).log10()
+}
 
-    for channel in 0..METER_CHANNELS {
-        vissy_meter.sample_accum[channel] = 0;
-        // ... reset other fields
+fn stereo_channel_peak_rms(samples_l: &[i16],samples_r: &[i16]) -> ((i16, f32), (i16, f32)) {
+    // Returns ((peak_l, rms_l), (peak_r, rms_r)), RMS in raw amplitude units (0..=32767)
+    let mut peak_l: i32 = 0;
+    let mut peak_r: i32 = 0;
+    let mut sumsq_l: f64 = 0.0;
+    let mut sumsq_r: f64 = 0.0;
+    let mut n: usize = 0;
+
+    for idx in 0..samples_l.len() {
+        let l = samples_l[idx] as i32;
+        let r = samples_r[idx] as i32;
+        let la = l.abs();
+        let ra = r.abs();
+        if la > peak_l { peak_l = la; }
+        if ra > peak_r { peak_r = ra; }
+        sumsq_l += (l as f64) * (l as f64);
+        sumsq_r += (r as f64) * (r as f64);
+        n += 1;
     }
 
-    let num_samples = VUMETER_DEFAULT_SAMPLE_WINDOW;
-    let mut buffer: Vec<Complex<f32>> = vec![Complex::default(); num_samples];
-    let mut ret = false;
+    if n == 0 {
+        return ((0, 0.0), (0, 0.0));
+    }
 
-    vissy_lock();
-    if vissy_is_playing() {
-        ret = true;
-        unsafe {
-            let mut offs =
-                vissy_get_buffer_idx() as i32 - (num_samples * 2) as i32;
-            while offs < 0 {
-                offs += vissy_get_buffer_len() as i32;
-            }
+    let rms_l = (sumsq_l / n as f64).sqrt() as f32;
+    let rms_r = (sumsq_r / n as f64).sqrt() as f32;
+    ((peak_l.clamp(0, i16::MAX as i32) as i16, rms_l),
+     (peak_r.clamp(0, i16::MAX as i32) as i16, rms_r))
+    
+}
 
-            let mut ptr = vissy_get_buffer().offset(offs as isize);
-            let mut samples_until_wrap = vissy_get_buffer_len() as isize - offs as isize;
+fn stereo_peak_rms(samples: &[i16]) -> ((i16, f32), (i16, f32)) {
+    // Returns ((peak_l, rms_l), (peak_r, rms_r)), RMS in raw amplitude units (0..=32767)
+    let mut peak_l: i32 = 0;
+    let mut peak_r: i32 = 0;
+    let mut sumsq_l: f64 = 0.0;
+    let mut sumsq_r: f64 = 0.0;
+    let mut n: usize = 0;
 
-            for i in 0..num_samples {
-                let sample_l = (*ptr.offset(0) >> 7) as f32;
-                let sample_r = (*ptr.offset(1) >> 7) as f32;
+    for chunk in samples.chunks_exact(2) {
+        let l = chunk[0] as i32;
+        let r = chunk[1] as i32;
+        let la = l.abs();
+        let ra = r.abs();
+        if la > peak_l { peak_l = la; }
+        if ra > peak_r { peak_r = ra; }
+        sumsq_l += (l as f64) * (l as f64);
+        sumsq_r += (r as f64) * (r as f64);
+        n += 1;
+    }
 
-                // Combine stereo into a complex signal for one FFT
-                buffer[i] = Complex::new(
-                    sample_l * vissy_meter.filter_window[i],
-                    sample_r * vissy_meter.filter_window[i],
+    if n == 0 {
+        return ((0, 0.0), (0, 0.0));
+    }
+    let rms_l = (sumsq_l / n as f64).sqrt() as f32;
+    let rms_r = (sumsq_r / n as f64).sqrt() as f32;
+    ((peak_l.clamp(0, i16::MAX as i32) as i16, rms_l),
+     (peak_r.clamp(0, i16::MAX as i32) as i16, rms_r))
+    
+}
+
+pub fn test_data_stream() -> std::io::Result<()> {
+
+    let breaker = Instant::now() + Duration::from_secs(30);
+    let mut reader = VisReader::new().unwrap();
+    info!("== Peak ===|== dBFS ===|== RMS ==|== dBFS ===|");
+    loop {
+        match reader.with_data_extended(|frame, l, r| {
+            if frame.running {
+                let ((peak_l, rms_l), (peak_r, rms_r)) = stereo_channel_peak_rms(&l, &r);
+                info!(
+                    "{:>5}|{:>5}|{:>5.1}|{:>5.1}|{:>4.0}|{:>4.0}|{:>5.1}|{:>5.1}|",
+                    peak_l, peak_r,
+                    dbfs(peak_l as f32), dbfs(peak_r as f32),
+                    rms_l, rms_r,
+                    dbfs(rms_l), dbfs(rms_r),
                 );
-
-                ptr = ptr.offset(2);
-                samples_until_wrap -= 2;
-                if samples_until_wrap <= 0 {
-                    ptr = vissy_get_buffer();
-                    samples_until_wrap = vissy_get_buffer_len() as isize;
+            }else{sleep(POLL_ENABLED);}
+        }){
+            Ok(true) => {
+                // processed a fresh frame
+            }
+            Ok(false) => {
+                // no new data; small nap and try to recover if stale
+                sleep(POLL_ENABLED);
+                if let Err(e) = reader.reopen_if_stale() {
+                    error!("reopen_if_stale error: {e}");
                 }
             }
+            Err(_) => {}
+        }
+        if breaker < Instant::now() {
+            info!("testing completed.");
+            return Ok(());
         }
     }
-    vissy_unlock();
 
-    if ret {
-        if samode {
-            if let Some(plan) = &vissy_meter.fft_plan {
-                plan.process(&mut buffer);
+}
 
-                // --- Process FFT output ---
-                let mut avg_ptr = 0;
-                for s in 0..vissy_meter.num_subbands as usize {
-                    let mut kr_sum = 0.0;
-                    let mut ki_sum = 0.0;
+pub fn test_data_stream_with_histogram() -> std::io::Result<()> {
 
-                    for x in vissy_meter.decade_idx[s] as usize
-                        ..vissy_meter.decade_idx[s] as usize + vissy_meter.decade_len[s] as usize
-                    {
-                        let ck = buffer[x];
-                        let cnk = buffer[vissy_meter.sample_window as usize - x];
+    let mut eng: Option<SpectrumEngine> = None;
+    let breaker = Instant::now() + Duration::from_secs(30);
+    let mut reader = VisReader::new().unwrap();
 
-                        // Reconstruct left channel from complex FFT result
-                        let l_r = (ck.re + cnk.re) / 2.0;
-                        let l_i = (ck.im - cnk.im) / 2.0;
-                        kr_sum += l_r * l_r + l_i * l_i;
-
-                        // Reconstruct right channel
-                        let r_r = (ck.im + cnk.im) / 2.0;
-                        let r_i = (cnk.re - ck.re) / 2.0;
-                        ki_sum += r_r * r_r + r_i * r_i;
-                    }
-
-                    vissy_meter.avg_power[avg_ptr] = kr_sum / vissy_meter.decade_len[s] as f32;
-                    vissy_meter.avg_power[avg_ptr + 1] = ki_sum / vissy_meter.decade_len[s] as f32;
-                    
-                    avg_ptr += 2;
+    info!("== Peak ===|== dBFS ===|== RMS ==|== dBFS ===| Histogram (FIRST 8)  |");
+    loop {
+        match reader.with_data_extended(|frame, l, r| {
+            if frame.running {
+                let bands = SPECTRUM_POWER_MAP_MAX as usize;
+                if eng.is_none() {
+                    eng = Some(SpectrumEngine::new(frame.sample_rate, l.len(), bands));
+                } else {
+                    eng.as_mut().unwrap().ensure(frame.sample_rate, l.len());
                 }
-                 // ... (Further processing like preemphasis and mapping to bars)
-            }
-        }
-        // ... (Calculate dB, dBfs, etc.)
-    }
+                let e = eng.as_mut().unwrap();
+                //Peaks / RMS
+                let ((pk_l, rms_l), (pk_r, rms_r)) = stereo_channel_peak_rms(l,r);
 
-    ret
+            // Histograms (32 bands, log spaced)
+            let hist_l = e.compute_db(l);
+            let hist_r = e.compute_db(r);
+
+            // quick publish: show a few bands; swap to your bus/IPC as needed
+            let show = 8.min(hist_l.len());
+            let mut line = String::new();
+            for i in 0..show {
+                line.push_str(&format!("{:5.1}/{:5.1} ", hist_l[i], hist_r[i]));
+            }
+
+            info!(
+                "{:>5}|{:>5}|{:>5.1}|{:>5.1}|{:>4.0}|{:>4.0}|{:>5.1}|{:>5.1}| H[0..{}]: {}",
+                pk_l, pk_r, dbfs(pk_l as f32), dbfs(pk_r as f32),
+                rms_l, rms_r, dbfs(rms_l), dbfs(rms_r),
+                show-1, line
+            );
+
+        }
+        }) {
+            Ok(true) => {
+                // processed a fresh frame
+            }
+            Ok(false) => {
+                // no new data; small nap and try to recover if stale
+                std::thread::sleep(POLL_ENABLED);
+                if let Err(e) = reader.reopen_if_stale() {
+                    error!("reopen_if_stale error: {e}");
+                }
+            }
+            Err(_) => {}
+        }
+        if breaker < Instant::now() {
+            info!("testing completed.");
+            return Ok(());
+        }
+           
+    }
 }

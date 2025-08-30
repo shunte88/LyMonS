@@ -1,3 +1,4 @@
+
 use serde_json::{json, Value};
 use serde::{Deserialize};
 use std::net::{UdpSocket, SocketAddrV4, Ipv4Addr, IpAddr};
@@ -517,6 +518,14 @@ impl LMSServer {
 
     pub fn ask_refresh(&mut self) {
         self.refresh = true;
+    }
+
+    pub fn player_mac(&self) -> &str {
+        if self.active_player != usize::MAX {
+            return &self.players[self.active_player]
+                .player_id.as_str();
+        }
+        ""
     }
 
     /// fetch the current status inclusive of populating tag details

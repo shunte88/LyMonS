@@ -1,6 +1,8 @@
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use chrono::{Timelike, DateTime, Local};
+//use embedded_graphics_core::draw_target::DrawTarget;
+//use embedded_graphics_framebuf::FrameBuf;
 use embedded_graphics::{
     image::{Image, ImageRaw},
     mono_font::{
@@ -8,7 +10,6 @@ use embedded_graphics::{
             FONT_4X6,
             FONT_5X8, 
             FONT_6X10,
-            //FONT_6X13,
             FONT_7X14,
             FONT_6X13_BOLD}, 
         MonoFont, 
@@ -17,7 +18,7 @@ use embedded_graphics::{
     }, 
     pixelcolor::BinaryColor, 
     prelude::*, 
-    primitives::{PrimitiveStyleBuilder, Rectangle}, 
+    primitives::{PrimitiveStyleBuilder, Rectangle, Circle, Line}, 
     text::{self, 
         renderer::TextRenderer, 
         Baseline, 
@@ -31,7 +32,8 @@ use embedded_text::{
     TextBox,
 };
 
-use linux_embedded_hal::I2cdev;
+use linux_embedded_hal::{I2cdev, I2CError as LinuxI2CError};
+
 use ssd1306::{
     mode::{self, BufferedGraphicsMode},
     prelude::*,
@@ -47,11 +49,12 @@ use std::fmt; // Import fmt for Display trait
 use std::thread::sleep;
 use tokio::sync::Mutex as TokMutex;
 use std::sync::Arc;
+use tokio::sync::mpsc::{self, Receiver};
 use std::fs; // move this to svgimage
 
 use display_interface::DisplayError;
 
-use crate::{imgdata};   // imgdata, glyphs and such
+use crate::imgdata;   // imgdata, glyphs and such
 use crate::constants; // constants
 use crate::climacell; // weather glyphs - need to move to SVG impl.
 use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
@@ -61,6 +64,24 @@ use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode, GAP_BETWE
 use crate::svgimage::{SvgImageRenderer, SvgImageError};
 use crate::metrics::{MachineMetrics};
 use crate::eggs::{Eggs, set_easter_egg};
+use crate::visualizer::{VizPayload, Visualizer, VizFrameOut};
+use crate::beacon::PlayingEvent;
+use crate::vision::PEAK_METER_LEVELS_MAX;
+use tokio::sync::mpsc::error::TryRecvError;
+
+/// simple state carried across calls (last metrics + peak-hold)
+#[derive(Debug, Clone)]
+pub struct PeakState {
+    pub last_metric: [i32; 2],
+    pub hold: [u8; 2],
+    pub init: bool,
+}
+
+impl Default for PeakState {
+    fn default() -> Self {
+        Self { last_metric: [i32::MIN; 2], hold: [0, 0], init: true }
+    }
+}
 
 /// Represents the audio bitrate mode for displaying the correct glyph.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -92,14 +113,7 @@ pub enum ShuffleMode {
 #[allow(dead_code)]
 pub enum DisplayMode {
     #[allow(dead_code)]
-    VUMeters,       // TBD - a stereo pair of VU meters - device scaled
-    #[allow(dead_code)]
-    VUDownmix,      // TBD - a VU downmix meter - single VU
-    #[allow(dead_code)]
-    Histograms,     // TBD - a stereo pair of histograms
-    #[allow(dead_code)]
-    HistoDownmix,   // TBD - a histogram downmix - single histogram
-    #[allow(dead_code)]
+    Visualizer,     // visualizations - meters, meteres, meters
     EasterEggs,     // TBD - our world famous easter eggs
     Scrolling,      // Done - our world famous Now Playing mode
     Clock,          // Done - our world famous Clock mode
@@ -111,30 +125,46 @@ pub enum DisplayMode {
 #[derive(Debug)]
 pub enum DisplayDrawingError {
     /// An error originating from the `display-interface` crate.
+    InterfaceI2CError(String),
+    /// An error originating from the `display-interface` crate.
+    InitializationError(DisplayError),
+    /// An error originating from the `display-interface` crate.
     DrawingFailed(DisplayError),
-    /// A generic string error for other display-related failures.
-    Other(String),
     /// Error from SVG rendering.
     SvgError(crate::svgimage::SvgImageError),
     /// Error from Easter Egg rendering.
     EggsError(crate::eggs::EggsError),
     /// Error reading SVG file.
     IoError(std::io::Error),
+    /// An error originating from the `display-interface` crate.
+    VisualizerError(DisplayError),
+    /// A generic string error for other display-related failures.
+    Other(String),
 }
 
 impl fmt::Display for DisplayDrawingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            DisplayDrawingError::InterfaceI2CError(e) => write!(f, "Initialization {:?}", e),
+            DisplayDrawingError::InitializationError(e) => write!(f, "Initialization failed {:?}", e),
             DisplayDrawingError::DrawingFailed(e) => write!(f, "Display drawing error: {:?}", e),
-            DisplayDrawingError::Other(msg) => write!(f, "Display error: {}", msg),
+            DisplayDrawingError::VisualizerError(e) => write!(f, "Visualization error: {:?}", e),
             DisplayDrawingError::SvgError(e) => write!(f, "SVG rendering error: {}", e),
             DisplayDrawingError::EggsError(e) => write!(f, "Easter Egg error: {}", e),
             DisplayDrawingError::IoError(e) => write!(f, "IO error reading SVG file: {}", e),
+            DisplayDrawingError::Other(e) => write!(f, "Display error: {}", e),
         }
     }
 }
 
 impl Error for DisplayDrawingError {}
+
+// need to map SPI equivalent too
+impl From<LinuxI2CError> for DisplayDrawingError {
+    fn from(err: LinuxI2CError) -> Self {
+        DisplayDrawingError::InterfaceI2CError(format!("{:?}", err))
+    }
+}
 
 // Implement `From` for `display_interface::DisplayError` to automatically convert it
 impl From<DisplayError> for DisplayDrawingError {
@@ -207,6 +237,7 @@ pub struct OledDisplay {
     title: String,
     level: u8,
     pct: f64,
+    viz: Option<Visualizer>,
     easter_egg: Eggs,
     show_metrics: bool,
     device_metrics: MachineMetrics
@@ -225,10 +256,11 @@ impl OledDisplay {
         scroll_mode: &str, 
         clock_font: &str, 
         show_metrics: bool,
-        egg_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        egg_name: &str) -> Result<Self, DisplayDrawingError> {
         info!("Initializing Display on {}", i2c_bus_path);
 
-        let i2c = I2cdev::new(i2c_bus_path)?;
+        let i2c = I2cdev::new(i2c_bus_path)
+            .map_err(|e| DisplayDrawingError::InterfaceI2CError(e.to_string()))?;
         let interface = I2CDisplayInterface::new(i2c);
 
         /*
@@ -253,9 +285,9 @@ impl OledDisplay {
             DisplayRotation::Rotate0,
         ).into_buffered_graphics_mode();
 
-        display.init().map_err(|e| format!("Display init error: {:?}", e))?;
+        display.init().map_err(|e| DisplayDrawingError::InitializationError(e))?;
         display.clear_buffer();
-        display.flush().map_err(|e| format!("Display flush error: {:?}", e))?;
+        display.flush().map_err(|e| DisplayDrawingError::DrawingFailed(e))?;
 
         info!("Display initialized successfully.");
 
@@ -322,6 +354,7 @@ impl OledDisplay {
             title: String::new(),
             level: 1,
             pct: 0.00,
+            viz: None,
             easter_egg: set_easter_egg(egg_name),
             show_metrics,
             device_metrics: MachineMetrics::default()
@@ -471,7 +504,7 @@ impl OledDisplay {
                 "ibmpc"] {
 
                 self.easter_egg = set_easter_egg(egg);
-                self.clear();
+                self.display.clear_buffer();
 
                 for i in 0..100 { 
                     let pct = i as f64 / 100.0; 
@@ -488,6 +521,55 @@ impl OledDisplay {
             self.flush().unwrap();
 
         }
+    }
+
+    /// Displays IP and MAC address.
+    pub fn connections(&mut self, inet:&str, eth0_mac_addr:&str, wlan0_mac_addr:&str) {
+
+        info!("This IP ....: {}", inet);
+        info!("This MAC ...: {}, eth0", eth0_mac_addr);
+        info!("This MAC ...: {}, wlan0", wlan0_mac_addr);
+
+        self.set_brightness(255).unwrap();
+        self.display.clear_buffer();
+        let character_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+        let textbox_style = 
+            TextBoxStyleBuilder::new()
+            .alignment(HorizontalAlignment::Center)
+            .vertical_alignment(VerticalAlignment::Middle)
+            .build();
+
+        self.draw_line(1, Point::new(2,6), Point::new(124,6), BinaryColor::On).unwrap();
+        let mut rect = Rectangle::new(Point::new(2,9), Size::new(124,10));
+        let mut text_box = TextBox::with_textbox_style(
+            inet, 
+            rect, 
+            character_style, 
+            textbox_style);
+        text_box.draw(&mut self.display)
+            .map_err(DisplayDrawingError::DrawingFailed).unwrap();
+        rect.top_left.y +=12;
+        text_box = TextBox::with_textbox_style(
+            eth0_mac_addr, 
+            rect, 
+            character_style, 
+            textbox_style);
+        text_box.draw(&mut self.display)
+            .map_err(DisplayDrawingError::DrawingFailed).unwrap();
+        rect.top_left.y +=12;
+        text_box = TextBox::with_textbox_style(
+            wlan0_mac_addr, 
+            rect, 
+            character_style, 
+            textbox_style);
+        text_box.draw(&mut self.display)
+            .map_err(DisplayDrawingError::DrawingFailed).unwrap();
+        rect.top_left.y +=12;
+        self.draw_line(1, Point::new(2,rect.top_left.y), Point::new(124,rect.top_left.y), BinaryColor::On).unwrap();
+        self.display.flush().unwrap();
+
+        sleep(Duration::from_millis(2500));
+
     }
 
     /// Displays a splash screen image and fades the brightness in.
@@ -529,11 +611,12 @@ impl OledDisplay {
             }
 
             // Ensure full brightness at the end
+            // make this dusk-dawn compatible
             self.set_brightness(255)?;
 
         } else {
 
-            self.flush()?;
+            self.display.flush().unwrap();
         
         }
         Ok(())
@@ -541,8 +624,8 @@ impl OledDisplay {
     }
 
     /// Flushes the buffer to the display, making changes visible.
-    pub fn flush(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.display.flush().map_err(|e| format!("Display flush error: {:?}", e))?;
+    pub fn flush(&mut self) -> Result<(), DisplayDrawingError> {
+        self.display.flush().map_err(|e| DisplayDrawingError::DrawingFailed(e))?;
         Ok(())
     }
 
@@ -579,10 +662,10 @@ impl OledDisplay {
     }
     
     // Public draw_text that can take optional font for backward compatibility with splash/other places
-    pub fn draw_text(&mut self, text: &str, x: i32, y: i32, font_opt: Option<&'static MonoFont>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn draw_text(&mut self, text: &str, x: i32, y: i32, font_opt: Option<&'static MonoFont>) -> Result<(), DisplayDrawingError> {
         let font = font_opt.unwrap_or(&FONT_5X8); // Default font if none provided
         Self::draw_text_internal(&mut self.display, text, x, y, font) // Call the refactored internal method
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+            .map_err(|e| DisplayDrawingError::from(e))
     }
     
     /// Clears a rectangular region of the display buffer to background color (BinaryColor::Off).
@@ -591,6 +674,24 @@ impl OledDisplay {
             .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
             .draw(display) // Draw on the passed mutable display reference
             .map_err(DisplayDrawingError::DrawingFailed) // Convert error
+    }
+
+    fn draw_line(&mut self, width: u32, start: Point, end: Point, color: BinaryColor) -> Result<(), Box<dyn std::error::Error>> {
+        let _= Line::new(start, end)
+            .into_styled(PrimitiveStyleBuilder::new().stroke_width(width).stroke_color(color).build())
+            .draw(&mut self.display)
+            .map_err(DisplayDrawingError::DrawingFailed);
+        Ok(())
+    }
+
+    pub async fn setup_visualizer(&mut self, viz_type: &str, rx: Receiver<PlayingEvent>) -> Result<(), Box<dyn std::error::Error>> {
+        self.viz = 
+            if viz_type != "no_viz" {
+                Some(Visualizer::spawn(viz_type, rx)?)
+            } else {
+                None
+            };
+        Ok(())
     }
 
     pub async fn setup_weather(&mut self, weather_config: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -623,14 +724,23 @@ impl OledDisplay {
     
     }
  
+    fn enable_vizualization(&mut self, on:bool) {
+        match self.viz.as_mut() {
+            Some(viz) => {
+                viz.enable(on);
+            },
+            None => {}
+        }
+    }
+
     /// Sets the current display mode (e.g., Clock or Scrolling).
     pub async fn set_display_mode(&mut self, mode: DisplayMode) {
         if self.current_mode != mode {
             info!("Changing display mode to {:?}", mode);
             self.current_mode = mode;
             // Clear the buffer when changing modes to avoid visual artifacts
-            self.clear();
-            let _ = self.flush(); // Attempt to flush, ignore error for mode change
+            self.display.clear_buffer();
+            self.display.flush().unwrap(); // Attempt to flush, ignore error for mode change
 
             // If switching to Clock or Weather, stop all text scrollers
             if mode == DisplayMode::Clock || mode == DisplayMode::EasterEggs || mode == DisplayMode::WeatherCurrent || mode == DisplayMode::WeatherForecast {
@@ -639,8 +749,10 @@ impl OledDisplay {
                 }
             }
 
-            if mode == DisplayMode::EasterEggs {
-                // Initialize animation state for Easter Eggs
+            if mode == DisplayMode::Visualizer {
+                self.enable_vizualization(true);
+            } else { 
+                self.enable_vizualization(false);   
             }
 
             // Reset clock digits so it redraws everything when switching to clock mode
@@ -664,11 +776,11 @@ impl OledDisplay {
     }
 
     /// Helper to draw an 8x8 glyph from raw byte data.
-    fn draw_glyph(&mut self, data: &'static [u8; 8], x: i32, y: i32) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_glyph(&mut self, data: &'static [u8; 8], x: i32, y: i32) -> Result<(), DisplayDrawingError> {
         let raw_image = ImageRaw::<BinaryColor>::new(data, constants::GLYPH_WIDTH);
         Image::new(&raw_image, Point::new(x, y))
             .draw(&mut self.display)
-            .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)
+            .map_err(|e| DisplayDrawingError::from(e))
     }
 
     /// Helper to draw a custom clock character using the currently loaded font.
@@ -1013,8 +1125,210 @@ impl OledDisplay {
         return weather_data.active;
     }
 
+    fn draw_vu_pair(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        l_db: f32, r_db: f32, h: bool
+    ) -> Result<bool, DisplayDrawingError> {
+        let raw_image = ImageRaw::<BinaryColor>::new(imgdata::VU2UP_RAW_DATA, 128);
+        Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)
+            .map_err(|e| DisplayDrawingError::from(e))?;
+        let xpos = 128 / 3;
+        Self::draw_text_internal(display, format!("{:<5.1}", l_db).as_str(), xpos, 32,&FONT_5X8).unwrap(); 
+        Self::draw_text_internal(display, format!("{:<5.1}", r_db).as_str(), 2*xpos, 32,&FONT_5X8).unwrap();
+        Ok(true)
+    }
+
+    fn draw_viz_combi(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        l_db: f32, r_db: f32, 
+        peak_level: u8, peak_hold: u8
+    ) -> Result<bool, DisplayDrawingError> {
+        let ret = Self::draw_vu_pair(display,l_db, r_db, false)?;
+        Ok(ret)
+    }
+
+    fn draw_vu_mono(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        db: f32
+    ) -> Result<bool, DisplayDrawingError> {
+        Ok(false)
+    }
+
+    fn draw_aio_vu(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        db: f32
+    ) -> Result<bool, DisplayDrawingError> {
+        Ok(false)
+    }
+
+    fn draw_peak_pair(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        l_level: u8, r_level: u8, l_hold: u8, r_hold: u8, peak_state: &mut PeakState
+    ) -> Result<bool, DisplayDrawingError> {
+
+        // we implement darw and erase, only initialize on first call
+        if peak_state.init {
+            let raw_image = ImageRaw::<BinaryColor>::new(imgdata::PEAK_RMS_RAW_DATA, 128);
+            Image::new(&raw_image, Point::new(0, 0))
+                .draw(display)
+                .map_err(|e| DisplayDrawingError::from(e))?;
+            peak_state.init = false;
+
+        }
+
+        let level_brackets: [i16; 19] = [
+            -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
+            -4,  -3,  -2,  -1,  0,   2,   3,  5,  8];
+
+        let hbar = 17;
+        let mut xpos = 15;
+        let ypos:[u8;2] = [7, 40];
+
+        if peak_state.last_metric[0] == l_level as i32 &&
+            peak_state.last_metric[1] == r_level as i32 &&
+            peak_state.hold[0] == l_hold &&
+            peak_state.hold[1] == r_hold {
+            return Ok(false);
+        }
+
+        peak_state.last_metric[0] = l_level as i32; 
+        peak_state.last_metric[1] = r_level as i32; 
+        peak_state.hold[0] = l_hold;
+        peak_state.hold[1] = r_hold;
+
+        for l in level_brackets {
+            let nodeo = if l < 0 {5} else {7};
+            let nodew = if l < 0 {2} else {4};
+            for c in 0..2 {
+                // levels are 0..48 - adjust to fit the display scaling
+                let mv = level_brackets[0] as i32 + peak_state.last_metric[c];
+                let color = if mv >= l as i32 {
+                    BinaryColor::On
+                } else {
+                    BinaryColor::Off};
+                Self::draw_rectangle_internal(
+                    display,
+                    Point::new(xpos, ypos[c] as i32),
+                    nodew, hbar,
+                    color,
+                    Some(0), Some(BinaryColor::Off))
+                    .map_err(|e| DisplayDrawingError::from(e))?;
+                //info!("{:>2} {:>5.1} {:>3} mv={:>5.1} {:?}", c, peak_state.last_metric[c], l, mv , color ); 
+            }
+            xpos += nodeo;
+        }
+        Ok(true)
+    }
+
+    fn draw_peak_mono(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        level: u8, hold: u8
+    ) -> Result<bool, DisplayDrawingError> {
+        Ok(false)
+    }
+
+    fn draw_hist_pair(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        bands_l: Vec<u8>, bands_r: Vec<u8>
+    ) -> Result<bool, DisplayDrawingError> {
+        Ok(false)
+    }
+
+    fn draw_hist_mono(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        bands: Vec<u8>
+    ) -> Result<bool, DisplayDrawingError> {
+        Ok(false)
+    }
+
+    fn draw_aio_hist(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        bands: Vec<u8>
+    ) -> Result<bool, DisplayDrawingError> {
+        Ok(false)
+    }
+
+    pub async fn drain_frame_queue(
+        &mut self
+    ) -> Result<Option<VizFrameOut>, DisplayDrawingError> {
+        let mut latest: Option<VizFrameOut> = None;
+        if let Some(viz) = self.viz.as_mut() {
+            loop {
+                match viz.rx.try_recv() {
+                    Ok(f) => latest = Some(f),  // keep latest
+                    Err(TryRecvError::Empty) => break,       // nothing waiting (non-blocking)
+                    Err(TryRecvError::Disconnected) => {
+                        // upstream ended; return None or surface an error
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(latest)
+    }
+
+    /// Updates and draws the visualization
+    pub async fn update_and_draw_visualizer(&mut self) -> Result<(), DisplayDrawingError> {
+
+        let mut init_clear = true;
+        let mut peak_state = PeakState::default();
+        // draw the active meter/visualization
+        let mut need_flush = false;
+        loop {
+            let frame = self.drain_frame_queue()
+                .await
+                .map_err(|e| DisplayDrawingError::from(e))?;
+            if init_clear {
+                self.display.clear_buffer();
+                println!("{:#?}", peak_state);
+                //init_clear = false;
+            }
+            if frame.is_none() {
+                continue; //break;
+            } else {
+                let frame = frame.unwrap();
+                if !frame.playing {
+                    break;
+                } else {
+                    match frame.payload {
+                        VizPayload::VuStereo { l_db, r_db } => 
+                            need_flush = Self::draw_vu_pair(&mut self.display, l_db, r_db, true)?,
+                        VizPayload::VuStereoWithCenterPeak { l_db, r_db, peak_level, peak_hold } => 
+                            need_flush = Self::draw_viz_combi(&mut self.display, l_db, r_db, peak_level, peak_hold)?,
+                        VizPayload::VuMono { db } => 
+                            need_flush = Self::draw_vu_mono(&mut self.display, db)?,
+                        VizPayload::AioVuMono { db } => 
+                            need_flush = Self::draw_aio_vu(&mut self.display, db)?,
+                        VizPayload::PeakStereo { l_level, r_level, l_hold, r_hold } => 
+                            need_flush = Self::draw_peak_pair(&mut self.display, l_level, r_level, l_hold, r_hold, &mut peak_state)?,
+                        VizPayload::PeakMono { level, hold } => 
+                            need_flush = Self::draw_peak_mono(&mut self.display, level, hold )?,
+                        VizPayload::HistStereo { bands_l, bands_r } => 
+                            need_flush = Self::draw_hist_pair(&mut self.display, bands_l, bands_r)?,
+                        VizPayload::HistMono { bands } => 
+                            need_flush = Self::draw_hist_mono(&mut self.display, bands)?,
+                        VizPayload::AioHistMono { bands } => 
+                            need_flush = Self::draw_aio_hist(&mut self.display, bands)?,
+                        _ => {}
+                    }
+                }
+                if need_flush {
+                    Self::flush_internal(&mut self.display).unwrap();
+                }
+            }
+            if init_clear {
+                println!("{:#?}", peak_state);
+                init_clear = false;
+            }
+
+        }
+        Ok(())
+
+    }
+
     /// Updates and draws the weather data to display. Only flushes if changes occurred.
-    pub async fn update_and_draw_weather(&mut self, show_current_weather: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update_and_draw_weather(&mut self, show_current_weather: bool) -> Result<(), DisplayDrawingError> {
 
         self.clear(); // Clear the screen completely for a new weather display
 
@@ -1139,7 +1453,7 @@ impl OledDisplay {
                         icon_w + 6, 9,
                         BinaryColor::Off,
                         Some(1), Some(BinaryColor::On))
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                    .map_err(|e| DisplayDrawingError::from(e))?;
 
                     // Draw Day of Week (left-aligned)
                     let day_width = Self::get_text_width_specific_font(&day_of_week, &FONT_4X6);
@@ -1153,7 +1467,7 @@ impl OledDisplay {
                         icon_w + 6, 18,
                         BinaryColor::Off,
                         Some(1), Some(BinaryColor::On))
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                    .map_err(|e| DisplayDrawingError::from(e))?;
 
                     // Draw Min/Max Temp (right-aligned)
                     let temp_width = Self::get_text_width_specific_font(&min_max_temp, &FONT_4X6);
@@ -1203,26 +1517,6 @@ impl OledDisplay {
     /// This method either renders the scrolling LMS text or the large digital clock.
     pub async fn render_frame(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         match self.current_mode {
-            DisplayMode::VUMeters => {
-                // Stero VU meters - needs audio metric data - FFT
-                self.clear(); // Clear for now
-                debug!("VUMeters functionality TBD.");
-            },
-            DisplayMode::VUDownmix => {
-                // single downmix (mono) VU meter - needs audio metric data - FFT
-                self.clear();
-                debug!("VUDownmix functionality TBD.");
-            },
-            DisplayMode::Histograms => {
-                // stereo histograms - needs audio metric data - FFT
-                self.clear();
-                debug!("Histograms functionality TBD.");
-            },
-            DisplayMode::HistoDownmix => {
-                // downmixed (mono) histogram - needs audio metric data - FFT
-                self.clear();
-                debug!("HistoDownmix functionality TBD.");
-            },
             DisplayMode::Clock => {
                 // When in clock mode, we pass the current local time to the clock drawing function.
                 self.update_and_draw_clock(chrono::Local::now())?;
@@ -1239,6 +1533,10 @@ impl OledDisplay {
             DisplayMode::WeatherCurrent => {
                 // When in weather mode, drawing is self contained
                 self.update_and_draw_weather(true).await?;
+            },
+            DisplayMode::Visualizer => {
+                // When in weather mode, drawing is self contained
+                self.update_and_draw_visualizer().await?;
             },
             DisplayMode::WeatherForecast => {
                 // When in weather mode, drawing is self contained
@@ -1451,6 +1749,8 @@ impl OledDisplay {
                     needs_flush = true;
 
                 }
+                // drain chatter from vizualizer
+                let _ =self.drain_frame_queue().await.unwrap();
                 
                 // Only flush if any drawing operation in this frame necessitated it
                 if needs_flush {
@@ -1463,3 +1763,4 @@ impl OledDisplay {
     }
 
 }
+

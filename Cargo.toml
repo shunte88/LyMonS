@@ -1,6 +1,6 @@
 [package]
 name = "LyMonS"
-version = "0.1.37"
+version = "0.1.39"
 edition = "2024"
 
 [build-dependencies]
@@ -44,6 +44,8 @@ rppal = { version = "0.14", optional = true }
 rpi-hal-emulated = { path = "../rpi-hal-emulated", optional = true }
 libc = "0.2.174"
 rustfft = "6.4.0"
+local-ip-address = "0.6.5"
+memmap2 = "0.9.8"
 
 [profile.release]
 opt-level = "z"       # prioritize size over speed (or use "s" for balanced)
