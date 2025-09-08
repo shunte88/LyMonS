@@ -1,6 +1,6 @@
 [package]
 name = "LyMonS"
-version = "0.1.40"
+version = "0.1.42"
 edition = "2024"
 
 [build-dependencies]

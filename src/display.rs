@@ -24,8 +24,7 @@
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use chrono::{Timelike, DateTime, Local};
-//use embedded_graphics_core::draw_target::DrawTarget;
-//use embedded_graphics_framebuf::FrameBuf;
+
 use embedded_graphics::{
     image::{Image, ImageRaw},
     mono_font::{
@@ -41,7 +40,7 @@ use embedded_graphics::{
     }, 
     pixelcolor::BinaryColor, 
     prelude::*, 
-    primitives::{PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, Circle, Line}, 
+    primitives::{PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, Circle, Arc as CircleArc, Line}, 
     text::{self, 
         renderer::TextRenderer, 
         Baseline, 
@@ -166,19 +165,28 @@ const CAP_HOLD: Duration = Duration::from_millis(1000);
 const CAP_DECAY_LPS: f32 = 64.0;
 const CAP_THICKNESS_PX: u32 = 1;
 
-fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize) {
+fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usize) {
     let now = Instant::now();
     let mut ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
     let mut ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
 
+    ensure(&mut state.draw_bands_m, n_m);
     ensure(&mut state.draw_bands_l, n_l);
     ensure(&mut state.draw_bands_r, n_r);
+
+    ensure(&mut state.last_bands_m, n_m);
     ensure(&mut state.last_bands_l, n_l);
     ensure(&mut state.last_bands_r, n_r);
+
+    ensure(&mut state.cap_m, n_m);
     ensure(&mut state.cap_l, n_l);
     ensure(&mut state.cap_r, n_r);
+
+    ensure_t(&mut state.cap_hold_until_m, n_m);
     ensure_t(&mut state.cap_hold_until_l, n_l);
     ensure_t(&mut state.cap_hold_until_r, n_r);
+
+    ensure_t(&mut state.cap_last_update_m, n_m);
     ensure_t(&mut state.cap_last_update_l, n_l);
     ensure_t(&mut state.cap_last_update_r, n_r);
 }
@@ -336,6 +344,24 @@ where
     Ok(())
 }
 
+fn draw_arc<D>(
+    display: &mut D,
+    origin: Point,
+    diameter: u32,
+    angle_start: f32,
+    angle_sweep: f32,
+    color: BinaryColor,
+    stroke_width: u32,
+) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+    CircleArc::new(origin, diameter, angle_start.deg(), angle_sweep.deg())
+    .into_styled(PrimitiveStyle::with_stroke(color, stroke_width))
+    .draw(display)?;
+    Ok(())
+}
+
 // Reuseable helper: draw a single histogram panel
 fn draw_hist_panel<D>(
     display: &mut D,
@@ -377,7 +403,6 @@ where
 
     let max_level = PEAK_METER_LEVELS_MAX as u32;
     let h_u = panel_size.height as u32;
-    let mut debug_str = ":".to_string();
 
     for (i, &lvl) in bands.iter().enumerate() {
         let level_u = (lvl as u32).min(max_level);
@@ -799,15 +824,18 @@ impl OledDisplay {
         }
     }
 
-    fn draw_text_region_align_internal(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_text_region_align_internal<D>(
+        display: &mut D, 
         text: &str, 
         top_left: Point, 
         size: Size, 
         halign: HorizontalAlignment, 
         valign: VerticalAlignment, 
         font: &MonoFont
-    ) -> Result<(), DisplayDrawingError> {
+    ) -> Result<(), D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         let character_style = MonoTextStyle::new(font, BinaryColor::On);
         let textbox_style = TextBoxStyleBuilder::new()
         .alignment(halign)
@@ -823,7 +851,8 @@ impl OledDisplay {
         Ok(())
     }
 
-    fn draw_text_region_align(&mut self, 
+    fn draw_text_region_align(
+        &mut self, 
         text: &str, 
         top_left: Point, 
         size: Size, 
@@ -952,7 +981,15 @@ impl OledDisplay {
     }
 
     // This is now an internal helper, but also matches the DisplaySurface trait method.
-    fn draw_text_internal(display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, text: &str, x: i32, y: i32, font: &MonoFont) -> Result<(), DisplayDrawingError> {
+    fn draw_text_internal<D>(
+        display: &mut D, 
+        text: &str, 
+        x: i32, y: i32, 
+        font: &MonoFont
+    ) -> Result<(), D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         Text::with_baseline(
             text,
             Point::new(x, y),
@@ -960,7 +997,7 @@ impl OledDisplay {
             Baseline::Top,
         )
         .draw(display) // Draw on the passed mutable display reference
-        .map_err(DisplayDrawingError::DrawingFailed)?;
+        .map_err(|e|D::Error::from(e))?;
         Ok(())
     }
     
@@ -972,11 +1009,18 @@ impl OledDisplay {
     }
     
     /// Clears a rectangular region of the display buffer to background color (BinaryColor::Off).
-    fn clear_region(display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, region: Rectangle) -> Result<(), DisplayDrawingError> {
+    fn clear_region<D>(
+        display: &mut D,
+        region: Rectangle
+    ) -> Result<(), D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         region
             .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
             .draw(display) // Draw on the passed mutable display reference
-            .map_err(DisplayDrawingError::DrawingFailed) // Convert error
+            .map_err(|e|D::Error::from(e))?;
+        Ok(())
     }
 
     fn draw_line(&mut self, width: u32, start: Point, end: Point, color: BinaryColor) -> Result<(), Box<dyn std::error::Error>> {
@@ -1101,10 +1145,13 @@ impl OledDisplay {
         Ok(())
     }
 
-    fn draw_rectangle_internal(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_rectangle_internal<D>(
+        display: &mut D, 
         top_left: Point, w:u32, h:u32, fill:BinaryColor, border_width:Option<u32>, border_color:Option<BinaryColor>
-    ) -> Result<(), DisplayDrawingError> {
+    ) -> Result<(), D::Error> 
+    where 
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         Rectangle::new(top_left,
             Size::new(w, h))
             .into_styled(
@@ -1114,12 +1161,18 @@ impl OledDisplay {
                 .fill_color(fill)
                 .build(),
             )
-            .draw(display)
-            .map_err(DisplayDrawingError::DrawingFailed)?;
+            .draw(display)?;
         Ok(())
     }
 
-    pub fn draw_rectangle(&mut self,top_left: Point,w:u32, h:u32,fill:BinaryColor, border_width:Option<u32>, border_color:Option<BinaryColor>) -> Result<(), DisplayDrawingError> {    
+    pub fn draw_rectangle(
+        &mut self,
+        top_left: Point,
+        w:u32, h:u32,
+        fill: BinaryColor, 
+        border_width: Option<u32>, 
+        border_color: Option<BinaryColor>
+    ) -> Result<(), DisplayDrawingError> {    
         Rectangle::new(top_left,
             Size::new(w, h))
             .into_styled(
@@ -1437,66 +1490,81 @@ impl OledDisplay {
         return weather_data.active;
     }
 
-    fn draw_vu_pair(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_vu_pair<D>(
+        display: &mut D, 
         l_db: f32, 
         r_db: f32, 
         h: bool,
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         let raw_image = ImageRaw::<BinaryColor>::new(imgdata::VU2UP_RAW_DATA, 128);
         Image::new(&raw_image, Point::new(0, 0))
             .draw(display)
-            .map_err(|e| DisplayDrawingError::from(e))?;
+            .map_err(|e| D::Error::from(e))?;
         let xpos = 128 / 3;
-        Self::draw_text_internal(display, format!("{:<5.1}", l_db).as_str(), xpos, 32,&FONT_5X8).unwrap(); 
-        Self::draw_text_internal(display, format!("{:<5.1}", r_db).as_str(), 2*xpos, 32,&FONT_5X8).unwrap();
+        Self::draw_text_internal(display, format!("{:<5.1}", l_db).as_str(), xpos, 32,&FONT_5X8)?; 
+        Self::draw_text_internal(display, format!("{:<5.1}", r_db).as_str(), 2*xpos, 32,&FONT_5X8)?;
         Ok(true)
     }
 
-    fn draw_viz_combi(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_viz_combi<D>(
+        display: &mut D,
         l_db: f32, 
         r_db: f32, 
         peak_level: u8, 
         peak_hold: u8,
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
-        let ret = Self::draw_vu_pair(display,l_db, r_db, false, state)?;
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
+        let ret = Self::draw_vu_pair(display, l_db, r_db, false, state)?;
         Ok(ret)
     }
 
-    fn draw_vu_mono(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_vu_mono<D>(
+        display: &mut D, 
         db: f32,
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         Ok(false)
     }
 
-    fn draw_aio_vu(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_aio_vu<D>(
+        display: &mut D, 
         db: f32,
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         Ok(false)
     }
 
-    fn draw_peak_pair(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_peak_pair<D>(
+        display: &mut D, 
         l_level: u8, 
         r_level: u8, 
         l_hold: u8, 
         r_hold: u8, 
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
 
         // we implement darw and erase, only initialize on first call
         if state.init {
             let raw_image = ImageRaw::<BinaryColor>::new(imgdata::PEAK_RMS_RAW_DATA, 128);
             Image::new(&raw_image, Point::new(0, 0))
                 .draw(display)
-                .map_err(|e| DisplayDrawingError::from(e))?;
+                .map_err(|e| D::Error::from(e))?;
             state.init = false;
 
         }
@@ -1540,24 +1608,27 @@ impl OledDisplay {
                     nodew, hbar,
                     color,
                     Some(0), Some(BinaryColor::Off))
-                    .map_err(|e| DisplayDrawingError::from(e))?;
+                    .map_err(|e| D::Error::from(e))?;
             }
             xpos += nodeo;
         }
         Ok(true)
     }
 
-    fn draw_peak_mono(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_peak_mono<D>(
+        display: &mut D, 
         level: u8, hold: u8, 
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         // we implement draw and erase, only initialize on first call
         if state.init {
             let raw_image = ImageRaw::<BinaryColor>::new(imgdata::PEAK_MONO_RMS_RAW_DATA, 128);
             Image::new(&raw_image, Point::new(0, 0))
                 .draw(display)
-                .map_err(|e| DisplayDrawingError::from(e))?;
+                .map_err(|e| D::Error::from(e))?;
             state.init = false;
 
         }
@@ -1594,21 +1665,24 @@ impl OledDisplay {
                 nodew, hbar,
                 color,
                 Some(0), Some(BinaryColor::Off))
-                .map_err(|e| DisplayDrawingError::from(e))?;
+                .map_err(|e| D::Error::from(e))?;
             xpos += nodeo;
         }
         Ok(true)
     }
 
     // need these interfaces to support Drawable
-    pub fn draw_hist_pair(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    pub fn draw_hist_pair<D>(
+        display: &mut D, 
         bands_l: Vec<u8>, bands_r: Vec<u8>,
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, bands_l.len(), bands_r.len());
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0);
 
         // store latest inputs
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1667,7 +1741,7 @@ impl OledDisplay {
             Size::new(pane_w as u32, inner_h as u32),
             &state.draw_bands_l,
             &state.cap_l,
-        ).map_err(|e| DisplayDrawingError::from(e))?;
+        ).map_err(|e| D::Error::from(e))?;
 
         // right panel
         draw_hist_panel_with_caps(
@@ -1677,17 +1751,20 @@ impl OledDisplay {
             Size::new(pane_w as u32, inner_h as u32),
             &state.draw_bands_r,
             &state.cap_r,
-        ).map_err(|e| DisplayDrawingError::from(e))?;
+        ).map_err(|e| D::Error::from(e))?;
 
         Ok(true)
 
     }
 
-    pub fn draw_hist_pair_no_caps(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    pub fn draw_hist_pair_no_caps<D>(
+        display: &mut D, 
         bands_l: Vec<u8>, bands_r: Vec<u8>,
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
 
         // 1) Ensure state capacity/length matches current inputs
         let n_l = bands_l.len();
@@ -1761,7 +1838,7 @@ impl OledDisplay {
             Point::new(mx, my),
             Size::new(pane_w as u32, inner_h as u32),
             &state.draw_bands_l,
-        ).map_err(|e| DisplayDrawingError::from(e))?;
+        ).map_err(|e| D::Error::from(e))?;
 
         // Right
         draw_hist_panel(
@@ -1769,19 +1846,22 @@ impl OledDisplay {
             Point::new(mx + pane_w + gap, my),
             Size::new(pane_w as u32, inner_h as u32),
             &state.draw_bands_r,
-        ).map_err(|e| DisplayDrawingError::from(e))?;
+        ).map_err(|e| D::Error::from(e))?;
 
         Ok(true) // we dun did drew; caller should flush
     }
 
-    fn draw_hist_mono(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_hist_mono<D>(
+        display: &mut D, 
         bands: Vec<u8>,
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, bands.len(), bands.len());
+        ensure_band_state(state, 0, 0, bands.len());
 
         // store latest inputs
         state.last_bands_m.copy_from_slice(&bands);
@@ -1830,17 +1910,20 @@ impl OledDisplay {
             Size::new(pane_w as u32, inner_h as u32),
             &state.draw_bands_m,
             &state.cap_m,
-        ).map_err(|e| DisplayDrawingError::from(e))?;
+        ).map_err(|e| D::Error::from(e))?;
 
         Ok(true)
 
     }
 
-    fn draw_aio_hist(
-        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+    fn draw_aio_hist<D>(
+        display: &mut D, 
         bands: Vec<u8>,
         state: &mut LastVizState
-    ) -> Result<bool, DisplayDrawingError> {
+    ) -> Result<bool, D::Error> 
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
         Ok(false)
     }
 
@@ -2267,16 +2350,15 @@ impl OledDisplay {
                     let main_font = &FONT_5X8; // Use FONT_6X10 as the default for scrolling lines
         
                     // Clear the entire region for this scroller before redrawing
-                    Self::clear_region(&mut self.display, region)?;
-                        
+                    Self::clear_region(&mut self.display, region).unwrap();
                     // Draw main text
                     let draw_x_main = x_start + current_x_rounded_from_scroller;
-                    Self::draw_text_internal(&mut self.display, &current_text, draw_x_main, y_start, main_font)?;
+                    Self::draw_text_internal(&mut self.display, &current_text, draw_x_main, y_start, main_font).unwrap();
 
                     // For continuous loop, draw a second copy if needed
                     if current_mode == ScrollMode::ScrollLeft {
                         let second_copy_x = draw_x_main + text_width as i32 + GAP_BETWEEN_LOOP_TEXT_FIXED;
-                        Self::draw_text_internal(&mut self.display, &current_text, second_copy_x, y_start, main_font)?;
+                        Self::draw_text_internal(&mut self.display, &current_text, second_copy_x, y_start, main_font).unwrap();
                     }
 
                     // Update OledDisplay's record of what was last drawn

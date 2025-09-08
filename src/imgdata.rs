@@ -1,3 +1,25 @@
+/*
+ *  imgdata.rs
+ * 
+ *  LyMonS - worth the squeeze
+ *	(c) 2020-25 Stuart Hunter
+ *
+ *	TODO:
+ *
+ *	This program is free software: you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation, either version 3 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	See <http://www.gnu.org/licenses/> to get a copy of the GNU General
+ *	Public License.
+ *
+ */
 /// Helper function to get a slice for a specific glyph from a binary set
 pub fn get_glyph_slice(raw_glyph: &'static [u8], index: usize, w: u32, h: u32) -> &'static [u8] {
     let byte_size = ((w as usize + 7) / 8) * h as usize;
