@@ -1,3 +1,26 @@
+/*
+ *  display.rs
+ * 
+ *  LyMonS - worth the squeeze
+ *	(c) 2020-25 Stuart Hunter
+ *
+ *	TODO:
+ *
+ *	This program is free software: you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation, either version 3 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	See <http://www.gnu.org/licenses/> to get a copy of the GNU General
+ *	Public License.
+ *
+ */
+
 #[allow(unused_imports)]
 #[allow(dead_code)]
 use chrono::{Timelike, DateTime, Local};
@@ -18,7 +41,7 @@ use embedded_graphics::{
     }, 
     pixelcolor::BinaryColor, 
     prelude::*, 
-    primitives::{PrimitiveStyleBuilder, Rectangle, Circle, Line}, 
+    primitives::{PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, Circle, Line}, 
     text::{self, 
         renderer::TextRenderer, 
         Baseline, 
@@ -32,12 +55,13 @@ use embedded_text::{
     TextBox,
 };
 
+use libc::_CS_POSIX_V6_ILP32_OFF32_CFLAGS;
 use linux_embedded_hal::{I2cdev, I2CError as LinuxI2CError};
 
 use ssd1306::{
     mode::{self, BufferedGraphicsMode},
     prelude::*,
-    size::DisplaySize128x64,
+    size::{self, DisplaySize128x64},
     I2CDisplayInterface,
     Ssd1306, 
 };
@@ -49,9 +73,9 @@ use std::fmt; // Import fmt for Display trait
 use std::thread::sleep;
 use tokio::sync::Mutex as TokMutex;
 use std::sync::Arc;
-use tokio::sync::mpsc::{self, Receiver};
+use tokio::sync::watch;
+use tokio::sync::mpsc::error::TryRecvError;
 use std::fs; // move this to svgimage
-
 use display_interface::DisplayError;
 
 use crate::imgdata;   // imgdata, glyphs and such
@@ -65,70 +89,9 @@ use crate::svgimage::{SvgImageRenderer, SvgImageError};
 use crate::metrics::{MachineMetrics};
 use crate::eggs::{Eggs, set_easter_egg};
 use crate::visualizer::{VizPayload, Visualizer, VizFrameOut};
-use crate::beacon::PlayingEvent;
-use crate::vision::PEAK_METER_LEVELS_MAX;
-use tokio::sync::mpsc::error::TryRecvError;
+use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX, LastVizState};
+use crate::vuphysics::Needle;
 
-/// simple state carried across calls (last metrics + peak-hold)
-#[derive(Debug, Clone)]
-pub struct LastVizState {
-    pub last_metric: [i32; 2],
-    pub hold: [u8; 2],
-    pub last_bands_l: Vec<u8>,
-    pub last_bands_r: Vec<u8>,
-    pub init: bool,
-}
-
-impl Default for LastVizState {
-    fn default() -> Self {
-        // need to map bands and capacity
-        Self { 
-            last_metric: [i32::MIN; 2], 
-            hold: [0, 0], 
-            last_bands_l: Vec::new(),
-            last_bands_r: Vec::new(),
-            init: true 
-        }
-    }
-}
-
-/// Represents the audio bitrate mode for displaying the correct glyph.
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum AudioBitrate {
-    SD = 1,
-    HD = 2,
-    DSD = 3,
-    None, // No specific audio bitrate glyph displayed
-}
-
-/// Represents the repeat mode for displaying the correct glyph.
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum RepeatMode {
-    Off,
-    RepeatAll,
-    RepeatOne,
-}
-
-/// Represents the shuffle mode for displaying the correct glyph.
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ShuffleMode {
-    Off,
-    ByTracks,
-    ByAlbums,
-}
-
-/// NEW: Enum to define the current display mode (Scrolling text or Clock).
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[allow(dead_code)]
-pub enum DisplayMode {
-    #[allow(dead_code)]
-    Visualizer,     // visualizations - meters, meteres, meters
-    EasterEggs,     // TBD - our world famous easter eggs
-    Scrolling,      // Done - our world famous Now Playing mode
-    Clock,          // Done - our world famous Clock mode
-    WeatherCurrent, // Done - our world famous Current Weather mode
-    WeatherForecast,// Done - our world famous Weather Forecast mode
-}
 
 /// Custom error type for drawing operations that implements `std::error::Error`.
 #[derive(Debug)]
@@ -196,6 +159,306 @@ impl From<std::io::Error> for DisplayDrawingError {
         DisplayDrawingError::IoError(err)
     }
 }
+
+const HIST_DECAY_PER_TICK: u8 = 1;
+const HIST_DECAY_TICK: Duration = POLL_ENABLED;
+const CAP_HOLD: Duration = Duration::from_millis(1000);
+const CAP_DECAY_LPS: f32 = 64.0;
+const CAP_THICKNESS_PX: u32 = 1;
+
+fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize) {
+    let now = Instant::now();
+    let mut ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
+    let mut ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
+
+    ensure(&mut state.draw_bands_l, n_l);
+    ensure(&mut state.draw_bands_r, n_r);
+    ensure(&mut state.last_bands_l, n_l);
+    ensure(&mut state.last_bands_r, n_r);
+    ensure(&mut state.cap_l, n_l);
+    ensure(&mut state.cap_r, n_r);
+    ensure_t(&mut state.cap_hold_until_l, n_l);
+    ensure_t(&mut state.cap_hold_until_r, n_r);
+    ensure_t(&mut state.cap_last_update_l, n_l);
+    ensure_t(&mut state.cap_last_update_r, n_r);
+}
+
+fn update_body_decay(dst: &mut [u8], src: &[u8], elapsed: Duration) -> bool {
+    let ticks = (elapsed.as_millis() / (HIST_DECAY_TICK.as_millis().max(1))) as u32;
+    if ticks == 0 { return false; }
+    let step = (ticks as u8).saturating_mul(HIST_DECAY_PER_TICK);
+    let mut changed = false;
+    for (d, &s) in dst.iter_mut().zip(src.iter()) {
+        let new = if s >= *d { s } else { d.saturating_sub(step).max(s) };
+        if new != *d { *d = new; changed = true; }
+    }
+    changed
+}
+
+fn update_caps(
+    caps: &mut [u8],
+    hold_until: &mut [Instant],
+    last_upd: &mut [Instant],
+    bars: &[u8],
+    now: Instant,
+) -> bool {
+    let mut changed = false;
+    for i in 0..bars.len() {
+        let bar = bars[i];
+        let cap = &mut caps[i];
+        let hu  = &mut hold_until[i];
+        let lu  = &mut last_upd[i];
+
+        if bar >= *cap {
+            // jump cap up and hold
+            if *cap != bar { *cap = bar; changed = true; }
+            *hu = now + CAP_HOLD;
+            *lu = now;
+            continue;
+        }
+
+        // below cap
+        if now < *hu {
+            // still holding; nothing to do
+            continue;
+        }
+
+        // decay after hold
+        let dt = now.saturating_duration_since(*lu).as_secs_f32();
+        if dt <= 0.0 { continue; }
+        let drop = (dt * CAP_DECAY_LPS).floor() as u8;
+        if drop == 0 { continue; }
+
+        let after = cap.saturating_sub(drop).max(bar);
+        if after != *cap { *cap = after; changed = true; }
+        *lu = now; // advance decay clock
+    }
+    changed
+}
+
+fn draw_hist_panel_with_caps<D>(
+    display: &mut D,
+    label: &str,
+    label_height: u32,
+    label_pos: i32,
+    origin: Point,
+    panel_size: Size,
+    bars: &[u8],   // 0..=PEAK_METER_LEVELS_MAX
+    caps: &[u8],   // 0..=PEAK_METER_LEVELS_MAX
+) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+    // Clear panel area (avoid ghosting on shrink)
+    // this should be done once then use erase/replace pattern for the barsc
+    let nu_origin = Point::new(origin.x - 1, origin.y - 1);
+    let nu_panel_size = Size::new(panel_size.width + 2, panel_size.height + 2);
+
+    Rectangle::new(nu_origin, nu_panel_size)
+        .into_styled(
+            PrimitiveStyleBuilder::new()
+            .fill_color(BinaryColor::Off)
+            .build(),
+        )
+        .draw(display)?;
+
+    let start = Point::new(origin.x, label_pos); 
+    let end = Point::new(origin.x + panel_size.width as i32, label_pos); 
+    let _= Line::new(start, end)
+        .into_styled(PrimitiveStyleBuilder::new()
+            .stroke_width(2)
+            .stroke_color(BinaryColor::On).build())
+        .draw(display)?;
+
+    let character_style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
+    let textbox_style = TextBoxStyleBuilder::new()
+        .alignment(HorizontalAlignment::Center)
+        .vertical_alignment(VerticalAlignment::Middle)
+        .build();
+    let label_rect = Rectangle::new(
+        Point::new(origin.x, label_pos+1), 
+        Size::new(panel_size.width, label_height-2));
+    let label_box = TextBox::with_textbox_style(
+            label, 
+            label_rect, 
+            character_style, 
+            textbox_style);
+    label_box.draw(display)?;
+
+    if bars.is_empty() || panel_size.width == 0 || panel_size.height == 0 {
+        return Ok(());
+    }
+
+    let w = panel_size.width as i32;
+    let h = panel_size.height as i32;
+    let n = bars.len() as i32 - 2;  // eat the last 2 bars - always empty
+    let mut stride = (w / n).max(1);
+    let mut bar_w = (stride - 1).max(1);
+    if n <= 4 && w > n {
+        stride = w / n;
+        bar_w = stride;
+    }
+
+    let max_level = PEAK_METER_LEVELS_MAX as u32;
+    let h_u = panel_size.height as u32 - 2;
+
+    // bars
+    for (i, &lvl) in bars.iter().enumerate() {
+        if i > n as usize { break; }  
+        let level_u = (lvl as u32).min(max_level);
+        let bar_h = ((level_u * h_u) / max_level) as i32;
+        if bar_h <= 0 { continue; }
+
+        let x = origin.x + (i as i32) * stride;
+        let y = origin.y + (h - bar_h);
+        Rectangle::new(Point::new(x, y), Size::new(bar_w as u32, bar_h as u32))
+            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+            .draw(display)?;
+    }
+
+    // caps (thin markers)
+    for (i, &lvl) in caps.iter().enumerate() {
+        if i > n as usize { break; }  
+        let level_u = (lvl as u32).min(max_level);
+        let cap_h = ((level_u * h_u) / max_level) as i32;
+        if cap_h <= 0 { continue; }
+
+        let x = origin.x + (i as i32) * stride;
+        // place cap top just above bar height (clamp to panel)
+        let mut y = origin.y + (h - cap_h) - (CAP_THICKNESS_PX as i32 - 1);
+        if y < origin.y { y = origin.y; }
+
+        Rectangle::new(Point::new(x, y), Size::new(bar_w as u32, CAP_THICKNESS_PX))
+            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+            .draw(display)?;
+    }
+
+    Ok(())
+}
+
+// Reuseable helper: draw a single histogram panel
+fn draw_hist_panel<D>(
+    display: &mut D,
+    origin: Point,
+    panel_size: Size,
+    bands: &[u8], // 0..=PEAK_METER_LEVELS_MAX
+) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+    // Clear panel area (avoid ghosting on shrink)
+    // this should be done once then use erase/replace pattern for the barsc
+    Rectangle::new(origin, panel_size)
+        .into_styled(
+            PrimitiveStyleBuilder::new()
+            .stroke_color(BinaryColor::On)
+            .stroke_width(1)
+            .fill_color(BinaryColor::Off)
+            .build(),
+        )
+        .draw(display)?;
+
+    if bands.is_empty() || panel_size.width == 0 || panel_size.height == 0 {
+        return Ok(());
+    }
+
+    let w = panel_size.width as i32;
+    let h = panel_size.height as i32;
+
+    let n = bands.len() as i32;
+    let mut stride = (w / n).max(1);
+    let mut bar_w = (stride - 1).max(1);
+
+    // For very few bands, fill the width (no gap)
+    if n <= 4 && w > n {
+        stride = w / n;
+        bar_w = stride;
+    }
+
+    let max_level = PEAK_METER_LEVELS_MAX as u32;
+    let h_u = panel_size.height as u32;
+    let mut debug_str = ":".to_string();
+
+    for (i, &lvl) in bands.iter().enumerate() {
+        let level_u = (lvl as u32).min(max_level);
+        let bar_h = ((level_u * h_u) / max_level) as i32;
+        if bar_h <= 0 { continue; }
+
+        //debug_str = format!("{}{:>4}->{:>4}", debug_str, lvl, bar_h);
+
+        let x = origin.x + (i as i32) * stride;
+        let y = origin.y + (h - bar_h);
+
+        Rectangle::new(Point::new(x, y), Size::new(bar_w as u32, bar_h as u32))
+            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+            .draw(display)?;
+        
+    }
+
+    Ok(())
+
+}
+
+/// Represents the audio bitrate mode for displaying the correct glyph.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum AudioBitrate {
+    SD = 1,
+    HD = 2,
+    DSD = 3,
+    None, // No specific audio bitrate glyph displayed
+}
+
+/// Represents the repeat mode for displaying the correct glyph.
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(u8)]
+pub enum RepeatMode {
+    Off,
+    RepeatAll,
+    RepeatOne,
+}
+
+fn map_repeat_mode(mode: u8) -> RepeatMode {
+    //println!("repeat is {mode:#?}");
+    match mode {
+        0 => RepeatMode::Off,
+        1 => RepeatMode::RepeatAll,
+        2 => RepeatMode::RepeatOne,
+        _ => RepeatMode::Off,
+    }
+}
+
+/// Represents the shuffle mode for displaying the correct glyph.
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(u8)]
+pub enum ShuffleMode {
+    Off,
+    ByTracks,
+    ByAlbums,
+}
+
+fn map_shuffle_mode(mode: u8) -> ShuffleMode {
+    //println!("shuffle is {mode:#?}");
+    match mode {
+        0 => ShuffleMode::Off,
+        1 => ShuffleMode::ByTracks,
+        2 => ShuffleMode::ByAlbums,
+        _ => ShuffleMode::Off,
+    }
+}
+
+/// NEW: Enum to define the current display mode (Scrolling text or Clock).
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[allow(dead_code)]
+pub enum DisplayMode {
+    #[allow(dead_code)]
+    Visualizer,     // WIP  - visualizations - meters, meters, meters
+    EasterEggs,     // Done - easter eggs
+    Scrolling,      // Done - Now Playing mode
+    Clock,          // Done - Clock mode
+    WeatherCurrent, // Done - Current Weather mode
+    WeatherForecast,// Done - Weather Forecast mode
+}
+
 #[allow(dead_code)]
 pub struct OledDisplay {
 
@@ -249,7 +512,9 @@ pub struct OledDisplay {
     viz: Option<Visualizer>,
     easter_egg: Eggs,
     show_metrics: bool,
-    device_metrics: MachineMetrics
+    device_metrics: MachineMetrics,
+    viz_init_clear: bool,
+    last_viz_state: LastVizState,
 }
 
 #[allow(dead_code)]
@@ -366,7 +631,9 @@ impl OledDisplay {
             viz: None,
             easter_egg: set_easter_egg(egg_name),
             show_metrics,
-            device_metrics: MachineMetrics::default()
+            device_metrics: MachineMetrics::default(),
+            viz_init_clear: true,
+            last_viz_state: LastVizState::default(),
         })
 
     }
@@ -532,6 +799,55 @@ impl OledDisplay {
         }
     }
 
+    fn draw_text_region_align_internal(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        text: &str, 
+        top_left: Point, 
+        size: Size, 
+        halign: HorizontalAlignment, 
+        valign: VerticalAlignment, 
+        font: &MonoFont
+    ) -> Result<(), DisplayDrawingError> {
+        let character_style = MonoTextStyle::new(font, BinaryColor::On);
+        let textbox_style = TextBoxStyleBuilder::new()
+        .alignment(halign)
+        .vertical_alignment(valign)
+        .build();
+        let label_rect = Rectangle::new(top_left, size);
+        let label_box = TextBox::with_textbox_style(
+            text, 
+            label_rect, 
+            character_style, 
+            textbox_style);
+        label_box.draw(display)?;
+        Ok(())
+    }
+
+    fn draw_text_region_align(&mut self, 
+        text: &str, 
+        top_left: Point, 
+        size: Size, 
+        halign: HorizontalAlignment, 
+        valign: VerticalAlignment, 
+        font: &MonoFont
+    ) -> Result<(), DisplayDrawingError> {
+   
+        let character_style = MonoTextStyle::new(font, BinaryColor::On);
+        let textbox_style = TextBoxStyleBuilder::new()
+        .alignment(halign)
+        .vertical_alignment(valign)
+        .build();
+        let label_rect = Rectangle::new(top_left, size);
+        let label_box = TextBox::with_textbox_style(
+            text, 
+            label_rect, 
+            character_style, 
+            textbox_style);
+        label_box.draw(&mut self.display)?;
+        Ok(())
+
+    }
+
     /// Displays IP and MAC address.
     pub fn connections(&mut self, inet:&str, eth0_mac_addr:&str, wlan0_mac_addr:&str) {
 
@@ -541,40 +857,18 @@ impl OledDisplay {
 
         self.set_brightness(255).unwrap();
         self.display.clear_buffer();
-        let character_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
-        let textbox_style = 
-            TextBoxStyleBuilder::new()
-            .alignment(HorizontalAlignment::Center)
-            .vertical_alignment(VerticalAlignment::Middle)
-            .build();
-
-        self.draw_line(1, Point::new(2,6), Point::new(124,6), BinaryColor::On).unwrap();
-        let mut rect = Rectangle::new(Point::new(2,9), Size::new(124,10));
-        let mut text_box = TextBox::with_textbox_style(
-            inet, 
-            rect, 
-            character_style, 
-            textbox_style);
-        text_box.draw(&mut self.display)
-            .map_err(DisplayDrawingError::DrawingFailed).unwrap();
-        rect.top_left.y +=12;
-        text_box = TextBox::with_textbox_style(
-            eth0_mac_addr, 
-            rect, 
-            character_style, 
-            textbox_style);
-        text_box.draw(&mut self.display)
-            .map_err(DisplayDrawingError::DrawingFailed).unwrap();
-        rect.top_left.y +=12;
-        text_box = TextBox::with_textbox_style(
-            wlan0_mac_addr, 
-            rect, 
-            character_style, 
-            textbox_style);
-        text_box.draw(&mut self.display)
-            .map_err(DisplayDrawingError::DrawingFailed).unwrap();
-        rect.top_left.y +=12;
-        self.draw_line(1, Point::new(2,rect.top_left.y), Point::new(124,rect.top_left.y), BinaryColor::On).unwrap();
+        let mut y = 6;
+        self.draw_line(1, Point::new(2, y), Point::new(124, y), BinaryColor::On).unwrap();
+        y += 3;
+        for text in [inet, eth0_mac_addr, wlan0_mac_addr] {            
+            self.draw_text_region_align(
+                text, 
+                Point::new(2, y), Size::new(124,10), 
+                HorizontalAlignment::Center, VerticalAlignment::Middle, 
+                &FONT_6X10).unwrap();
+            y += 13;
+        }
+        self.draw_line(1, Point::new(2, y), Point::new(124, y), BinaryColor::On).unwrap();
         self.display.flush().unwrap();
 
         sleep(Duration::from_millis(2500));
@@ -583,24 +877,24 @@ impl OledDisplay {
 
     /// Displays a splash screen image and fades the brightness in.
     /// The splash image is the LyMonS logo, version and build date
-    pub fn splash(&mut self, 
+    pub async fn splash(&mut self, 
         show_splash: bool,         
         version: &str,
         build_date: &str
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), DisplayDrawingError> {
         self.display.clear_buffer();
         if show_splash {
    
             // 1. Set brightness to zero
             let mut contrast:u8 = 0;
-            self.set_brightness(contrast)?;
+            let _ = self.set_brightness(contrast);
 
-            let splash_x:i32 = (constants::DISPLAY_WIDTH as i32-constants::LYMONS_LOGO_WIDTH as i32)/2;
-            
-            let raw_image = ImageRaw::<BinaryColor>::new(imgdata::LYMONS_IMAGE_RAW_DATA, constants::LYMONS_LOGO_WIDTH);
-            Image::new(&raw_image, Point::new(splash_x, 1))
-                .draw(&mut self.display)
-                .map_err(|e| Box::new(DisplayDrawingError::from(e)) as Box<dyn std::error::Error>)?;
+            self.put_svg(
+                "./assets/lymonslogo.svg", 
+                0, 0, 
+                constants::DISPLAY_WIDTH as u32, constants::DISPLAY_HEIGHT as u32)
+                .await.unwrap();
+            self.display.flush().unwrap();
 
             let mut x = (constants::DISPLAY_WIDTH - (6*version.chars().count() as u32)) / 2;
             self.draw_text(version, x as i32, constants::PLAYER_TRACK_INFO_LINE_Y_POS-17,Some(&FONT_6X13_BOLD)).unwrap();
@@ -615,13 +909,13 @@ impl OledDisplay {
 
             for i in 1..FADE_STEPS {
                 contrast = (255.0 / FADE_STEPS as f32 * i as f32).round() as u8;
-                self.set_brightness(contrast)?;
+                let _ = self.set_brightness(contrast);
                 sleep(step_delay);
             }
 
             // Ensure full brightness at the end
             // make this dusk-dawn compatible
-            self.set_brightness(255)?;
+            let _ = self.set_brightness(255);
 
         } else {
 
@@ -693,7 +987,7 @@ impl OledDisplay {
         Ok(())
     }
 
-    pub async fn setup_visualizer(&mut self, viz_type: &str, rx: Receiver<PlayingEvent>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn setup_visualizer(&mut self, viz_type: &str, rx: watch::Receiver<bool>) -> Result<(), Box<dyn std::error::Error>> {
         self.viz = 
             if viz_type != "no_viz" {
                 Some(Visualizer::spawn(viz_type, rx)?)
@@ -760,6 +1054,10 @@ impl OledDisplay {
 
             if mode == DisplayMode::Visualizer {
                 self.enable_vizualization(true);
+                self.viz_init_clear = true;
+                let _ = self.drain_frame_queue().await.unwrap();
+                self.last_viz_state = LastVizState::default();
+
             } else { 
                 self.enable_vizualization(false);   
             }
@@ -811,7 +1109,7 @@ impl OledDisplay {
             Size::new(w, h))
             .into_styled(
                 PrimitiveStyleBuilder::new()
-                .stroke_color(if border_width.is_some() { border_color.unwrap() } else {BinaryColor::Off})
+                .stroke_color(if border_color.is_some() { border_color.unwrap() } else {BinaryColor::Off})
                 .stroke_width(if border_width.is_some() { border_width.unwrap() } else {0})
                 .fill_color(fill)
                 .build(),
@@ -836,12 +1134,15 @@ impl OledDisplay {
         Ok(())
     }
 
-    pub fn set_status_line_data(&mut self, volume_percent: u8, is_muted: bool, samplesize: String, samplerate: String, repeat_mode: RepeatMode, shuffle_mode: ShuffleMode)
+    pub fn set_status_line_data(&mut self, volume_percent: u8, is_muted: bool, samplesize: String, samplerate: String, repeat_mode: u8, shuffle_mode: u8)
     {
+        let this_repeat = map_repeat_mode(repeat_mode);
+        let this_shuffle = map_shuffle_mode(shuffle_mode);
+
         let changed = self.volume_percent != volume_percent ||
                       self.is_muted != is_muted ||
-                      self.repeat_mode != repeat_mode ||
-                      self.shuffle_mode != shuffle_mode ||
+                      self.repeat_mode != this_repeat ||
+                      self.shuffle_mode != this_shuffle ||
                       self.samplerate != samplerate ||
                       self.samplesize != samplesize;
                                 
@@ -849,18 +1150,20 @@ impl OledDisplay {
 
             self.volume_percent = volume_percent;
             self.is_muted = is_muted;
-            self.repeat_mode = repeat_mode;
-            self.shuffle_mode = shuffle_mode;
+            self.repeat_mode = this_repeat;
+            self.shuffle_mode = this_shuffle;
+            self.samplerate = samplerate.clone();
+            self.samplesize = samplesize.clone();
             
-            let samp_size = samplesize.parse::<u32>().unwrap_or(0);
-            let samp_rate = samplerate.parse::<u32>().unwrap_or(0);
+            let samp_size = samplesize.clone().parse::<u32>().unwrap_or(0);
+            let samp_rate = samplerate.clone().parse::<u32>().unwrap_or(0);
 
             self.bitrate_text = if samp_size == 1 { // DSD/DSF 1-bit
                 format!("DSD{} ", 
                     (samp_rate / 44100 as u32))
             } else { // vanilla, e.g. 24/96 etc
                 format!("{}/{} ", 
-                    samplesize, 
+                    samp_size, 
                     (samp_rate / 1000 as u32))
             }
             .to_string();
@@ -1136,7 +1439,10 @@ impl OledDisplay {
 
     fn draw_vu_pair(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        l_db: f32, r_db: f32, h: bool
+        l_db: f32, 
+        r_db: f32, 
+        h: bool,
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
         let raw_image = ImageRaw::<BinaryColor>::new(imgdata::VU2UP_RAW_DATA, 128);
         Image::new(&raw_image, Point::new(0, 0))
@@ -1150,39 +1456,48 @@ impl OledDisplay {
 
     fn draw_viz_combi(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        l_db: f32, r_db: f32, 
-        peak_level: u8, peak_hold: u8
+        l_db: f32, 
+        r_db: f32, 
+        peak_level: u8, 
+        peak_hold: u8,
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
-        let ret = Self::draw_vu_pair(display,l_db, r_db, false)?;
+        let ret = Self::draw_vu_pair(display,l_db, r_db, false, state)?;
         Ok(ret)
     }
 
     fn draw_vu_mono(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        db: f32
+        db: f32,
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
         Ok(false)
     }
 
     fn draw_aio_vu(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        db: f32
+        db: f32,
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
         Ok(false)
     }
 
     fn draw_peak_pair(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        l_level: u8, r_level: u8, l_hold: u8, r_hold: u8, last_viz_state: &mut LastVizState
+        l_level: u8, 
+        r_level: u8, 
+        l_hold: u8, 
+        r_hold: u8, 
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
 
         // we implement darw and erase, only initialize on first call
-        if last_viz_state.init {
+        if state.init {
             let raw_image = ImageRaw::<BinaryColor>::new(imgdata::PEAK_RMS_RAW_DATA, 128);
             Image::new(&raw_image, Point::new(0, 0))
                 .draw(display)
                 .map_err(|e| DisplayDrawingError::from(e))?;
-            last_viz_state.init = false;
+            state.init = false;
 
         }
 
@@ -1195,17 +1510,17 @@ impl OledDisplay {
         let mut xpos = 15;
         let ypos:[u8;2] = [7, 40];
 
-        if last_viz_state.last_metric[0] == l_level as i32 &&
-            last_viz_state.last_metric[1] == r_level as i32 &&
-            last_viz_state.hold[0] == l_hold &&
-            last_viz_state.hold[1] == r_hold {
+        if state.last_metric[0] == l_level as i32 &&
+            state.last_metric[1] == r_level as i32 &&
+            state.hold[0] == l_hold &&
+            state.hold[1] == r_hold {
             return Ok(false);
         }
 
-        last_viz_state.last_metric[0] = l_level as i32; 
-        last_viz_state.last_metric[1] = r_level as i32; 
-        last_viz_state.hold[0] = l_hold;
-        last_viz_state.hold[1] = r_hold;
+        state.last_metric[0] = l_level as i32; 
+        state.last_metric[1] = r_level as i32; 
+        state.hold[0] = l_hold;
+        state.hold[1] = r_hold;
 
         for l in level_brackets {
             let nodeo = if l < 0 {5} else {7};
@@ -1213,8 +1528,8 @@ impl OledDisplay {
             for c in 0..2 {
                 // levels are 0..48 - adjust to fit the display scaling
                 // PEAK_METER_LEVELS_MAX
-                //println!("{}", -PEAK_METER_LEVELS_MAX + last_viz_state.last_metric[c] / PEAK_METER_LEVELS_MAX as i32 )
-                let mv = level_brackets[0] as i32 + last_viz_state.last_metric[c];
+                //println!("{}", -PEAK_METER_LEVELS_MAX + state.last_metric[c] / PEAK_METER_LEVELS_MAX as i32 )
+                let mv = level_brackets[0] as i32 + state.last_metric[c];
                 let color = if mv >= l as i32 {
                     BinaryColor::On
                 } else {
@@ -1235,15 +1550,15 @@ impl OledDisplay {
     fn draw_peak_mono(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
         level: u8, hold: u8, 
-        last_viz_state: &mut LastVizState
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
         // we implement draw and erase, only initialize on first call
-        if last_viz_state.init {
+        if state.init {
             let raw_image = ImageRaw::<BinaryColor>::new(imgdata::PEAK_MONO_RMS_RAW_DATA, 128);
             Image::new(&raw_image, Point::new(0, 0))
                 .draw(display)
                 .map_err(|e| DisplayDrawingError::from(e))?;
-            last_viz_state.init = false;
+            state.init = false;
 
         }
 
@@ -1255,19 +1570,19 @@ impl OledDisplay {
         let mut xpos = 15;
         let ypos = 23;
 
-        if last_viz_state.last_metric[0] == level as i32 && 
-            last_viz_state.hold[0] == hold {
+        if state.last_metric[0] == level as i32 && 
+            state.hold[0] == hold {
             return Ok(false);
         }
 
-        last_viz_state.last_metric[0] = level as i32; 
-        last_viz_state.hold[0] = hold;
+        state.last_metric[0] = level as i32; 
+        state.hold[0] = hold;
 
         for l in level_brackets {
             let nodeo = if l < 0 {5} else {7};
             let nodew = if l < 0 {2} else {4};
             // levels are 0..48 - adjust to fit the display scaling
-            let mv = level_brackets[0] as i32 + last_viz_state.last_metric[0];
+            let mv = level_brackets[0] as i32 + state.last_metric[0];
             let color = if mv >= l as i32 {
                 BinaryColor::On
             } else {
@@ -1286,23 +1601,245 @@ impl OledDisplay {
     }
 
     // need these interfaces to support Drawable
-    fn draw_hist_pair(
+    pub fn draw_hist_pair(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        bands_l: Vec<u8>, bands_r: Vec<u8>
+        bands_l: Vec<u8>, bands_r: Vec<u8>,
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
-        Ok(false) // needs flush
+
+        // resize state buffers if band count changed
+        ensure_band_state(state, bands_l.len(), bands_r.len());
+
+        // store latest inputs
+        state.last_bands_l.copy_from_slice(&bands_l);
+        state.last_bands_r.copy_from_slice(&bands_r);
+
+        // compute body decay (rise fast, fall slow)
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(state.last_tick);
+        state.last_tick = now;
+
+        let mut changed = false;
+        changed |= update_body_decay(&mut state.draw_bands_l, &state.last_bands_l, elapsed);
+        changed |= update_body_decay(&mut state.draw_bands_r, &state.last_bands_r, elapsed);
+
+        // update peak caps (time-based hold then decay)
+        changed |= update_caps(
+            &mut state.cap_l,
+            &mut state.cap_hold_until_l,
+            &mut state.cap_last_update_l,
+            &state.draw_bands_l,
+            now,
+        );
+        changed |= update_caps(
+            &mut state.cap_r,
+            &mut state.cap_hold_until_r,
+            &mut state.cap_last_update_r,
+            &state.draw_bands_r,
+            now,
+        );
+
+        // If nothing would change visually and we already drew once, skip
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // layout
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        if w <= 6 || h <= 4 { return Ok(false); }
+
+        let mx = 3;
+        let my = 6;
+        let title_base = 10;
+        let gap = 2;
+        let inner_w = w - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+        let title_pos = h - title_base;
+        let pane_w = (inner_w - gap) / 2;
+
+        // left panel
+        draw_hist_panel_with_caps(
+            display,
+            "Left", title_base as u32, title_pos,
+            Point::new(mx, my),
+            Size::new(pane_w as u32, inner_h as u32),
+            &state.draw_bands_l,
+            &state.cap_l,
+        ).map_err(|e| DisplayDrawingError::from(e))?;
+
+        // right panel
+        draw_hist_panel_with_caps(
+            display,
+            "Right", title_base as u32, title_pos,
+            Point::new(mx + pane_w + gap, my),
+            Size::new(pane_w as u32, inner_h as u32),
+            &state.draw_bands_r,
+            &state.cap_r,
+        ).map_err(|e| DisplayDrawingError::from(e))?;
+
+        Ok(true)
+
+    }
+
+    pub fn draw_hist_pair_no_caps(
+        display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
+        bands_l: Vec<u8>, bands_r: Vec<u8>,
+        state: &mut LastVizState
+    ) -> Result<bool, DisplayDrawingError> {
+
+        // 1) Ensure state capacity/length matches current inputs
+        let n_l = bands_l.len();
+        let n_r = bands_r.len();
+
+        if state.draw_bands_l.len() != n_l {
+            state.draw_bands_l = vec![0; n_l];
+        }
+        if state.draw_bands_r.len() != n_r {
+            state.draw_bands_r = vec![0; n_r];
+        }
+        if state.last_bands_l.len() != n_l {
+            state.last_bands_l = vec![0; n_l];
+        }
+        if state.last_bands_r.len() != n_r {
+            state.last_bands_r = vec![0; n_r];
+        }
+
+        // 2) Save the latest inputs (debug/inspection)
+        state.last_bands_l.copy_from_slice(&bands_l);
+        state.last_bands_r.copy_from_slice(&bands_r);
+
+        // 3) Compute decay steps based on elapsed time since last draw
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(state.last_tick);
+        state.last_tick = now;
+
+        let ticks = (elapsed.as_millis() / (HIST_DECAY_TICK.as_millis().max(1))) as u32;
+        let decay_steps: u8 = (ticks as u8).saturating_mul(HIST_DECAY_PER_TICK).max(1);
+        // If you prefer *strictly time-based* decay (no redraws = no decay), remove `.max(1)`.
+
+        // 4) Update draw bands with "rise fast, fall slow" rule; track if anything changed
+        let mut changed = false;
+
+        for (i, &target) in bands_l.iter().enumerate() {
+            let curl = state.draw_bands_l[i];
+            let newl = if target >= curl { target } else { curl.saturating_sub(decay_steps).max(target) };
+            if newl != curl { changed = true; }
+            state.draw_bands_l[i] = newl;
+            let curr = state.draw_bands_r[i];
+            let newr = if target >= curr { target } else { curr.saturating_sub(decay_steps).max(target) };
+            if newr != curr { changed = true; }
+            state.draw_bands_r[i] = newr;
+        }
+
+        // 5) If nothing would change on screen, skip work (non-blocking)
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // 6) Layout and draw the panels
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+
+        if w <= 6 || h <= 4 {
+            // too small to draw meaningfully
+            return Ok(false);
+        }
+
+        let mx = 3;               // outer margins
+        let my = 3;
+        let gap = 3;              // gap between L/R histos
+        let inner_w = w - 2 * mx;
+        let inner_h = h - 2 * my;
+        let pane_w = (inner_w - gap) / 2;
+
+        // Left
+        draw_hist_panel(
+            display,
+            Point::new(mx, my),
+            Size::new(pane_w as u32, inner_h as u32),
+            &state.draw_bands_l,
+        ).map_err(|e| DisplayDrawingError::from(e))?;
+
+        // Right
+        draw_hist_panel(
+            display,
+            Point::new(mx + pane_w + gap, my),
+            Size::new(pane_w as u32, inner_h as u32),
+            &state.draw_bands_r,
+        ).map_err(|e| DisplayDrawingError::from(e))?;
+
+        Ok(true) // we dun did drew; caller should flush
     }
 
     fn draw_hist_mono(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        bands: Vec<u8>
+        bands: Vec<u8>,
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
-        Ok(false)
+
+        // resize state buffers if band count changed
+        ensure_band_state(state, bands.len(), bands.len());
+
+        // store latest inputs
+        state.last_bands_m.copy_from_slice(&bands);
+
+        // compute body decay (rise fast, fall slow)
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(state.last_tick);
+        state.last_tick = now;
+
+        let mut changed = false;
+        changed |= update_body_decay(&mut state.draw_bands_m, &state.last_bands_m, elapsed);
+
+        // update peak caps (time-based hold then decay)
+        changed |= update_caps(
+            &mut state.cap_m,
+            &mut state.cap_hold_until_m,
+            &mut state.cap_last_update_m,
+            &state.draw_bands_m,
+            now,
+        );
+
+        // If nothing would change visually and we already drew once, skip
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // layout
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        if w <= 6 || h <= 4 { return Ok(false); }
+
+        let mx = 3;
+        let my = 6;
+        let title_base = 10;
+        let inner_w = w - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+        let title_pos = h - title_base;
+        let pane_w = inner_w;
+
+        // downmix (mono) panel
+        draw_hist_panel_with_caps(
+            display,
+            "Downmix", title_base as u32, title_pos,
+            Point::new(mx, my),
+            Size::new(pane_w as u32, inner_h as u32),
+            &state.draw_bands_m,
+            &state.cap_m,
+        ).map_err(|e| DisplayDrawingError::from(e))?;
+
+        Ok(true)
+
     }
 
     fn draw_aio_hist(
         display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>, 
-        bands: Vec<u8>
+        bands: Vec<u8>,
+        state: &mut LastVizState
     ) -> Result<bool, DisplayDrawingError> {
         Ok(false)
     }
@@ -1329,58 +1866,55 @@ impl OledDisplay {
     /// Updates and draws the visualization
     pub async fn update_and_draw_visualizer(&mut self) -> Result<(), DisplayDrawingError> {
 
-        let mut init_clear = true;
-        let mut last_viz_state = LastVizState::default();
+        if self.viz_init_clear {
+            self.display.clear_buffer();
+            self.viz_init_clear = false;
+        }
+        let _ = self.drain_frame_queue().await.unwrap();
         // draw the active meter/visualization
         let mut need_flush = false;
-        loop {
-            let frame = self.drain_frame_queue()
-                .await
-                .map_err(|e| DisplayDrawingError::from(e))?;
-            if init_clear {
-                self.display.clear_buffer();
-                println!(">> {:#?}", last_viz_state);
-                //init_clear = false;
-            }
-            if frame.is_none() {
-                continue; //break;
-            } else {
+        //let mut burst = 0;
+        //loop {
+            let frame = self.viz.as_mut().unwrap().rx.recv().await;
+            //let frame = self.drain_frame_queue().await.unwrap();
+            //burst += 1;
+
+            //if burst > 120 || frame.is_none() {
+            if !frame.is_none() {
+        let mut state = self.last_viz_state.clone();
                 let frame = frame.unwrap();
-                if !frame.playing { // should we hold on pause??? would need decay peaks impl.
-                    break;
-                } else {
+                // we can remove if viz is performative
+                //if !frame.playing { // should we hold on pause??? would need decay peaks impl.
+                //    return Ok(());
+                //} else {
                     match frame.payload {
                         VizPayload::VuStereo { l_db, r_db } => 
-                            need_flush = Self::draw_vu_pair(&mut self.display, l_db, r_db, true)?,
+                            need_flush = Self::draw_vu_pair(&mut self.display, l_db, r_db, true, &mut state)?,
                         VizPayload::VuStereoWithCenterPeak { l_db, r_db, peak_level, peak_hold } => 
-                            need_flush = Self::draw_viz_combi(&mut self.display, l_db, r_db, peak_level, peak_hold)?,
+                            need_flush = Self::draw_viz_combi(&mut self.display, l_db, r_db, peak_level, peak_hold, &mut state)?,
                         VizPayload::VuMono { db } => 
-                            need_flush = Self::draw_vu_mono(&mut self.display, db)?,
+                            need_flush = Self::draw_vu_mono(&mut self.display, db, &mut state)?,
                         VizPayload::AioVuMono { db } => 
-                            need_flush = Self::draw_aio_vu(&mut self.display, db)?,
+                            need_flush = Self::draw_aio_vu(&mut self.display, db, &mut state)?,
                         VizPayload::PeakStereo { l_level, r_level, l_hold, r_hold } => 
-                            need_flush = Self::draw_peak_pair(&mut self.display, l_level, r_level, l_hold, r_hold, &mut last_viz_state)?,
+                            need_flush = Self::draw_peak_pair(&mut self.display, l_level, r_level, l_hold, r_hold, &mut state)?,
                         VizPayload::PeakMono { level, hold } => 
-                            need_flush = Self::draw_peak_mono(&mut self.display, level, hold, &mut last_viz_state )?,
+                            need_flush = Self::draw_peak_mono(&mut self.display, level, hold, &mut state)?,
                         VizPayload::HistStereo { bands_l, bands_r } => 
-                            need_flush = Self::draw_hist_pair(&mut self.display, bands_l, bands_r)?,
+                            need_flush = Self::draw_hist_pair(&mut self.display, bands_l, bands_r, &mut state)?,
                         VizPayload::HistMono { bands } => 
-                            need_flush = Self::draw_hist_mono(&mut self.display, bands)?,
+                            need_flush = Self::draw_hist_mono(&mut self.display, bands, &mut state)?,
                         VizPayload::AioHistMono { bands } => 
-                            need_flush = Self::draw_aio_hist(&mut self.display, bands)?,
+                            need_flush = Self::draw_aio_hist(&mut self.display, bands, &mut state)?,
                         _ => {}
                     }
-                }
+                    self.last_viz_state = state;
+                //}
                 if need_flush {
                     Self::flush_internal(&mut self.display).unwrap();
                 }
             }
-            if init_clear {
-                println!("<< {:#?}", last_viz_state);
-                init_clear = false;
-            }
-
-        }
+//        }
         Ok(())
 
     }
@@ -1411,7 +1945,7 @@ impl OledDisplay {
 
             let conditions = current.weather_code.description.clone();
 
-            let min_max_temp = format!(
+            let curr_feels_temp = format!(
                 "{:.0}({:.0}) {}",
                 current.temperature_avg, current.temperature_apparent_avg, temp_units
             );
@@ -1428,51 +1962,38 @@ impl OledDisplay {
             Image::new(&icon, Point::new(12, 10))
                 .draw(&mut self.display).unwrap();
 
+            // Draw weather details
             let glyph_w = 12;
-            // Draw wether details
             let glyph_x = 52;
-            let text_x = glyph_x + 14;
-            let mut text_y = 1;
-            
-            let temp_glyph = ImageRaw::<BinaryColor>::new(
-                imgdata::get_glyph_slice(
-                    climacell::THERMO_RAW_DATA, 
-                    0 as usize, glyph_w, glyph_w),glyph_w);
-            Image::new(&temp_glyph, Point::new(glyph_x, text_y))
-                .draw(&mut self.display).unwrap();
-            Self::draw_text_internal(&mut self.display, &min_max_temp, text_x, text_y, &FONT_6X13_BOLD)?;
+            let text_x = glyph_x as i32 + 2 + glyph_w;
+            let mut text_y = 2;
 
-            text_y += 13;
-            let humidity_glyph = ImageRaw::<BinaryColor>::new(
-                imgdata::get_glyph_slice(
-                    climacell::THERMO_RAW_DATA, 
-                    2 as usize, glyph_w, glyph_w),glyph_w);
-            Image::new(&humidity_glyph, Point::new(glyph_x, text_y))
-                .draw(&mut self.display).unwrap();
-            Self::draw_text_internal(&mut self.display,&humidity, text_x, text_y, &FONT_6X10)?;
+            for (label, glyph_idx) in [(curr_feels_temp, 0), (humidity, 2), (wind_speed, 1), (pop, 3)] {
+                let (height, font, ty) = if glyph_idx == 0 {
+                    (glyph_w+2, &FONT_6X13_BOLD, text_y)} else {(glyph_w, &FONT_6X10, text_y-1)};
+                let _glyph = ImageRaw::<BinaryColor>::new(
+                    imgdata::get_glyph_slice(
+                        climacell::THERMO_RAW_DATA, 
+                        glyph_idx as usize, glyph_w as u32, glyph_w as u32),glyph_w as u32);
+                Image::new(&_glyph, Point::new(glyph_x, ty))
+                    .draw(&mut self.display).unwrap();
+                    Self::draw_text_region_align_internal(
+                        &mut self.display,
+                        label.as_str(), 
+                        Point::new(text_x, text_y), Size::new(124-text_x as u32,height as u32),
+                        HorizontalAlignment::Left, VerticalAlignment::Middle, 
+                        font
+                    ).unwrap();
+                    text_y += if glyph_idx == 0 { 13 } else { 10 };
+            }
 
-            text_y += 11;
-            let wind_glyph = ImageRaw::<BinaryColor>::new(
-                imgdata::get_glyph_slice(
-                    climacell::THERMO_RAW_DATA, 
-                    1 as usize, glyph_w, glyph_w),glyph_w);
-            Image::new(&wind_glyph, Point::new(glyph_x, text_y))
-                .draw(&mut self.display).unwrap();
-            Self::draw_text_internal(&mut self.display,&wind_speed, text_x, text_y, &FONT_6X10)?;
-
-            text_y += 11;
-            let pop_glyph = ImageRaw::<BinaryColor>::new(
-                imgdata::get_glyph_slice(
-                    climacell::THERMO_RAW_DATA, 
-                    3 as usize, glyph_w, glyph_w),glyph_w);
-            Image::new(&pop_glyph, Point::new(glyph_x, text_y))
-                .draw(&mut self.display).unwrap();
-            Self::draw_text_internal(&mut self.display,&pop, text_x, text_y, &FONT_6X10)?;
-
-            text_y += 13;
-            let conditions_text_width = Self::get_text_width_specific_font(&conditions, &FONT_7X14);
-            let conditions_text_x = (constants::DISPLAY_WIDTH as i32 - conditions_text_width as i32) / 2;
-            Self::draw_text_internal(&mut self.display,&conditions, conditions_text_x, text_y, &FONT_7X14)?;
+            text_y += 1;
+            Self::draw_text_region_align_internal(
+                &mut self.display,
+                conditions.as_str(), 
+                Point::new(2, text_y), Size::new(constants::DISPLAY_WIDTH as u32 - 4, 14),
+                HorizontalAlignment::Center, VerticalAlignment::Middle, 
+                &FONT_7X14).unwrap();
 
             needs_flush = true;
 
@@ -1632,7 +2153,7 @@ impl OledDisplay {
                 } else if self.shuffle_mode == ShuffleMode::ByAlbums {
                     Some(&imgdata::GLYPH_SHUFFLE_ALBUMS)
                 } else {
-                    None
+                    Some(&imgdata::GLYPH_NONE)
                 };
 
                 // 3. Repeat Glyph
@@ -1641,7 +2162,7 @@ impl OledDisplay {
                 } else if self.repeat_mode == RepeatMode::RepeatAll {
                     Some(&imgdata::GLYPH_REPEAT_ALL)
                 } else {
-                    None
+                    Some(&imgdata::GLYPH_NONE)
                 };
 
                 // 4. Bitrate Text and Audio Glyph (Right justified)
@@ -1649,7 +2170,7 @@ impl OledDisplay {
                     AudioBitrate::HD => Some(&imgdata::GLYPH_AUDIO_HD),
                     AudioBitrate::SD => Some(&imgdata::GLYPH_AUDIO_SD),
                     AudioBitrate::DSD => Some(&imgdata::GLYPH_AUDIO_DSD),
-                    AudioBitrate::None => None,
+                    AudioBitrate::None => Some(&imgdata::GLYPH_NONE),
                 };
                 
                 let bitrate_text_width = self.get_text_width(&self.bitrate_text.clone()) as i32;
@@ -1807,13 +2328,13 @@ impl OledDisplay {
                     needs_flush = true;
 
                 }
-                // drain chatter from vizualizer
-                let _ =self.drain_frame_queue().await.unwrap();
                 
                 // Only flush if any drawing operation in this frame necessitated it
                 if needs_flush {
                     self.flush()?;
                 }
+                // drain chatter from vizualizer
+                let _ = self.drain_frame_queue().await.unwrap();
             }
         }
         Ok(())

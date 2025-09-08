@@ -1,5 +1,30 @@
+/*
+ *  func_timers.rs
+ * 
+ *  LyMonS - worth the squeeze
+ *	(c) 2020-25 Stuart Hunter
+ *
+ *	TODO:
+ *
+ *	This program is free software: you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation, either version 3 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	See <http://www.gnu.org/licenses/> to get a copy of the GNU General
+ *	Public License.
+ *
+ */
 use std::time::Instant;
+use log::debug;
 
+// need to tie this log level
+// if debug - setup
 pub struct FunctionTimer {
     name: &'static str,
     start: Instant,
@@ -18,16 +43,6 @@ impl FunctionTimer {
 impl Drop for FunctionTimer {
     fn drop(&mut self) {
         let duration = self.start.elapsed();
-        println!("Function '{}' took: {:?}", self.name, duration);
+        debug!("Function '{}' took: {:?}", self.name, duration);
     }
 }
-/*
-fn do_more_work() {
-    // The timer is created here...
-    let _timer = FunctionTimer::new("do_more_work");
-    
-    // ...and is automatically dropped at the end of the function.
-    std::thread::sleep(std::time::Duration::from_millis(100));
-}
-
-*/

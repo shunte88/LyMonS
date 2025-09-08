@@ -1,15 +1,18 @@
-
+use serde::Deserialize;
 use serde_json::{json, Value};
-use serde::{Deserialize};
 use std::net::{UdpSocket, SocketAddrV4, Ipv4Addr, IpAddr};
 use std::time::{Duration, Instant};
 use std::str;
 use log::{debug, info, error};
 use tokio::sync::{mpsc, Mutex as TokMutex};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use std::sync::Arc;
+use crate::httprpc::SlimInfoClient;
 
-// Import necessary items from deutils
+const MAX_PLAYERS: usize = 12; // Moved here as it's primarily used by LMSServer
+const VARIOUS_ARTISTS: &str = "Various Artists";
+
 use crate::deutils::{
     deserialize_bool_from_anything,
     deserialize_numeric_i16,
@@ -21,11 +24,7 @@ use crate::deutils::{
     default_zero_i16, // Used by PlayerStatus
     default_false,    // Used by Player and PlayerStatus
 };
-use crate::httprpc::SlimInfoClient;
 
-const MAX_PLAYERS: usize = 12; // Moved here as it's primarily used by LMSServer
-
-// Helper function that was in main.rs, now moved here as it's used by LMSServer
 pub fn value_to_i16(value: &Value) -> Result<i16, String> {
     match value {
         Value::Number(num) => {
@@ -42,37 +41,6 @@ pub fn value_to_i16(value: &Value) -> Result<i16, String> {
         Value::Null => Err("Value is null".to_string()),
         _ => Err("Value is not a number".to_string()),
     }
-}
-
-// Helper function that was in main.rs, now moved here as it's used by LMSServer
-pub fn flatten_json(json: &Value, prefix: &str) -> serde_json::Map<String, Value> {
-    let mut result: serde_json::Map<String, Value> = serde_json::Map::new();
-    match json {
-        Value::Object(object) => {
-            for (key, value) in object {
-                let new_key = if prefix.is_empty() {
-                    key.to_string()
-                } else {
-                    format!("{}.{}", prefix, key)
-                };
-                result.extend(flatten_json(value, &new_key));
-            }
-        }
-        Value::Array(array) => {
-            for (index, value) in array.iter().enumerate() {
-                let new_key = if prefix.is_empty() {
-                    format!("{}", index)
-                } else {
-                    format!("{}.{}", prefix, index)
-                };
-                result.extend(flatten_json(value, &new_key));
-            }
-        }
-        _ => {
-            result.insert(prefix.to_string(), json.clone());
-        }
-    }
-    result
 }
 
 // Player structure
@@ -103,201 +71,267 @@ pub struct Player {
     pub model_name: String,
 }
 
-/*
-    model       modelname
-    =========== ==============
-    slimp3      SliMP3
-    Squeezebox  Squeezebox 1
-    squeezebox2 Squeezebox 2
-    squeezebox3 Squeezebox 3
-    transporter Transporter
-    receiver    Squeezebox Receiver
-    boom        Squeezebox Boom
-    softsqueeze Softsqueeze
-    controller  Squeezebox Controller
-    squeezeplay SqueezePlay
-    squeezelite SqueezeLite
-    baby        Squeezebox Radio
-    fab4        Squeezebox Touch
-*/
-
-// Tag structure
-#[derive(Debug, Clone)]
-pub struct MetaTag {
-    pub name: String,
-    flat_name: String,
-    lmstag: String,
-    pub raw_value: String, // value
-    pub display_value: String,     // display_value
-    method: String,
-    pub valid: bool,
-    pub changed: bool,
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlayerStatus {
+    mode: Option<String>,
+    power: Option<u8>,
+    time: Option<f64>,
+    #[serde(rename = "mixer volume")]
+    mixer_volume: Option<u8>,
+    #[serde(rename = "playlist mode")]
+    playlist_mode: Option<String>,
+    #[serde(rename = "playlist repeat")]
+    #[serde(deserialize_with="deserialize_numeric_i16")]
+    playlist_repeat: i16,
+    #[serde(rename = "playlist shuffle")]
+    #[serde(deserialize_with="deserialize_numeric_i16")]
+    playlist_shuffle: i16,
+    #[serde(deserialize_with="deserialize_numeric_i16")]
+    playlist_cur_index: i16,
+    playlist_loop: Option<Vec<Track>>,
 }
 
-impl Default for MetaTag {
-    fn default() -> Self {
-        MetaTag {
-            name: "".to_string(),
-            flat_name: "".to_string(),
-            lmstag: "".to_string(),
-            raw_value: "".to_string(),
-            display_value: "".to_string(),
-            method: "*".to_string(),
-            valid: false,
-            changed: false,
+#[derive(Debug, Deserialize, Clone)]
+struct Track {
+    album: Option<String>,
+    albumartist: Option<String>,
+    artist: Option<String>,
+    bitrate: Option<String>,
+    compilation: Option<String>, // "0"/"1"/"N"/"Y"
+    composer: Option<String>,
+    conductor: Option<String>,
+    performer: Option<String>,
+    duration: Option<f64>,
+    #[serde(rename = "playlist index")]
+    #[serde(deserialize_with="deserialize_numeric_i16")]
+    playlist_index: i16,
+    remote: Option<String>,
+    remotetitle: Option<String>,
+    samplerate: Option<String>, // "44100" etc
+    samplesize: Option<String>, // "16" etc
+    title: Option<String>,
+    trackartist: Option<String>,
+    year: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimeField {
+    pub raw: f64,
+    pub display: String,
+}
+
+fn fmt_time(raw: Option<f64>) -> TimeField {
+    let secs = raw.unwrap_or(0.0);
+    if !secs.is_finite() || secs < 0.0 {
+        return TimeField {
+            raw: secs,
+            display: "00:00".to_string(),
+        };
+    }
+
+    let total = secs.floor() as u64;
+    let h = total / 3600;
+    let m = (total % 3600) / 60;
+    let s = total % 60;
+
+    let display = if h > 0 {
+        format!("{h:02}:{m:02}:{s:02}")
+    } else {
+        format!("{m:02}:{s:02}")
+    };
+
+    TimeField { raw: secs, display }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlimInfo {
+    pub is_playing: bool,
+    pub mode: String,
+    pub album: String,
+    pub albumartist: String,
+    pub artist: String,
+    pub bitrate: String,
+    pub compilation: bool,
+    pub composer: String,
+    pub conductor: String,
+    pub duration: TimeField,
+    pub tracktime: TimeField,
+    pub volume: u8,
+    pub remaining: TimeField,
+    pub remote: bool,
+    pub remotetitle: String,
+    pub samplerate: i32,
+    pub samplesize: i32,
+    pub title: String,
+    pub trackartist: String,
+    pub performer: String,
+    pub playlist_mode: String,
+    pub repeat: u8,
+    pub shuffle: u8,
+    pub year: String,
+}
+
+impl SlimInfo {
+    pub fn default() -> Self {
+        SlimInfo {
+            is_playing: false,
+            mode: "stop".to_string(),
+            album: "".to_string(),
+            albumartist: "".to_string(),
+            artist: "".to_string(),
+            bitrate: "".to_string(),
+            compilation: false,
+            composer: "".to_string(),
+            conductor: "".to_string(),
+            duration: TimeField { raw: 0.0, display: "00:00".to_string() },
+            tracktime: TimeField { raw: 0.0, display: "00:00".to_string() },
+            volume: 0,
+            remaining: TimeField { raw: 0.0, display: "00:00".to_string() },    
+            remote: false,
+            remotetitle: "".to_string(),
+            samplerate: 0,
+            samplesize: 0,
+            title: "".to_string(),
+            trackartist: "".to_string(),
+            performer: "".to_string(),
+            playlist_mode: "".to_string(),
+            repeat: 0,
+            shuffle: 0,
+            year: "".to_string(),      
         }
     }
-}
 
-impl MetaTag {
-    // New special method to apply transformations based on `self.method`
-    fn special_method(&self, value: &str) -> String {
-        if self.method.as_str() == "string_to_hms" && !value.is_empty() {
-            if let Ok(parsed_value) = value.parse::<f32>() {
-                seconds_to_hms(parsed_value) // Call the imported seconds_to_hms
-            } else {
-                value.to_string() // Return original value if parsing fails
+    pub fn from_status(ps: PlayerStatus) -> Self {
+        // resolve active track index
+        let cur_idx = ps.playlist_cur_index as usize;
+        // pick track by playlist_cur_index; fallback to first
+        let pick = |tracks: &Vec<Track>| -> Track {
+            tracks
+                .iter()
+                .find(|t| t.playlist_index as usize == cur_idx)
+                .cloned()
+                .or_else(|| tracks.get(cur_idx).cloned())
+                .unwrap_or_else(|| Track {
+                    album: None,
+                    albumartist: None,
+                    artist: None,
+                    bitrate: None,
+                    compilation: None,
+                    composer: None,
+                    conductor: None,
+                    duration: None,
+                    performer: None,
+                    playlist_index: 0,
+                    remote: None,
+                    remotetitle: None,
+                    samplerate: None,
+                    samplesize: None,
+                    title: None,
+                    trackartist: None,
+                    year: None,
+                })
+        };
+
+        let track = ps.playlist_loop.as_ref().map(pick);
+
+        let to_bool = |s: &Option<String>| s.as_deref().map(|v| v != "0" && v != "N").unwrap_or(false);
+        let parse_i32 = |s: &Option<String>| {
+            s.as_deref()
+                .and_then(|v| v.parse::<i32>().ok())
+                .unwrap_or(0)
+        };
+        let s_or = |s: &Option<String>, d: &str| s.clone().unwrap_or_else(|| d.to_string());
+        let _f_or = |f: Option<f64>, d: f64| f.unwrap_or(d);
+        let u8_or = |v: Option<u8>, d: u8| v.unwrap_or(d);
+
+        let mode = ps.mode.unwrap_or_else(|| "stop".into());
+        let is_playing = ps.power.unwrap_or(0) == 1 && mode == "play";
+
+        let duration = fmt_time(track.as_ref().and_then(|t| t.duration));
+        let tracktime = fmt_time(ps.time);
+        let dur: f64 = duration.raw - tracktime.raw;
+        let remaining = fmt_time(Some(dur));
+        
+        let compilation = to_bool(&track.as_ref().and_then(|t| t.compilation.clone()));
+        let performer = s_or(&track.as_ref().and_then(|t| t.performer.clone()), "");
+        let conductor = s_or(&track.as_ref().and_then(|t| t.conductor.clone()), "");
+        let mut artist = s_or(&track.as_ref().and_then(|t| t.artist.clone()), "");
+        let mut albumartist = if compilation {
+            VARIOUS_ARTISTS.to_string()
+            
+        } else {
+            let mut new_value = s_or(&track.as_ref().and_then(|t| t.albumartist.clone()), "");
+            if new_value.is_empty() {
+                if !conductor.is_empty() {
+                    new_value = conductor.clone();
+                } else if !artist.is_empty() {
+                    new_value = artist.clone()
+                } else {
+                    if !performer.is_empty() {
+                        new_value = performer.clone()
+                    }
+                }
+            }
+            new_value
+        };
+
+        // and further realize the performer, conductor, artist, album artist
+        let mut new_value = artist.clone();
+        if albumartist.is_empty() {
+            if !conductor.is_empty() {
+                new_value = conductor.clone();
+            }
+            albumartist = new_value.clone();
+        } else if albumartist != VARIOUS_ARTISTS.to_string() {
+            if !artist.is_empty() {
+                new_value = artist.clone();
+            } else if !performer.is_empty() {
+                new_value = performer.clone();
+            }
+            albumartist = new_value.clone();
+        }
+        if albumartist.is_empty() {
+            if !artist.is_empty() {
+                new_value = artist.clone();
+            } else if !performer.is_empty() {
+                new_value = performer.clone();
+            }
+            albumartist = new_value.clone();
+        }
+        if artist.is_empty() {
+            if !performer.is_empty() {
+                artist = performer.clone();
             }
         }
-        else {
-            value.to_string() // Return original value if no special method or method doesn't match
+
+        SlimInfo {
+            is_playing,
+            mode,
+            album: s_or(&track.as_ref().and_then(|t| t.album.clone()), ""),
+            albumartist,
+            artist,
+            bitrate: s_or(&track.as_ref().and_then(|t| t.bitrate.clone()), ""),
+            compilation,
+            composer: s_or(&track.as_ref().and_then(|t| t.composer.clone()), ""),
+            conductor: s_or(&track.as_ref().and_then(|t| t.conductor.clone()), ""),
+            duration,
+            tracktime,
+            volume: u8_or(ps.mixer_volume, 0),
+            remaining,
+            remote: to_bool(&track.as_ref().and_then(|t| t.remote.clone())),
+            remotetitle: s_or(&track.as_ref().and_then(|t| t.remotetitle.clone()), ""),
+            samplerate: parse_i32(&track.as_ref().and_then(|t| t.samplerate.clone())),
+            samplesize: parse_i32(&track.as_ref().and_then(|t| t.samplesize.clone())),
+            title: s_or(&track.as_ref().and_then(|t| t.title.clone()), ""),
+            trackartist: s_or(&track.as_ref().and_then(|t| t.trackartist.clone()), ""),
+            performer,
+            playlist_mode: s_or(&ps.playlist_mode, "off"),
+            repeat: ps.playlist_repeat as u8,
+            shuffle: ps.playlist_shuffle as u8,
+            year: s_or(&track.as_ref().and_then(|t| t.year.clone()), ""),
         }
     }
-
-    pub fn set_value(&mut self, new_value: &str) {
-        // capture state value 
-        self.raw_value = new_value.to_string();
-        // Apply special parse methods prior to conditional test and modify
-        let my_value = self.special_method(new_value);
-        if self.display_value.to_ascii_lowercase() != my_value.to_ascii_lowercase() {
-            self.display_value = my_value; // my_value is already a String
-            self.changed = true;
-            self.valid = true;
-            debug!("{} :: {}", self.name.replace('_', " ").to_ascii_lowercase(), self.display_value);
-        } else {
-            self.changed = false;
-        
-        }
-    }
-
 }
-
-/// Track information
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-pub struct Track {
-    #[serde(default, deserialize_with="deserialize_numeric_i32")]
-    pub album_id: i32,
-    #[serde(default, deserialize_with="deserialize_numeric_i32", rename="id")]
-    pub track_id: i32,
-    #[serde(default, rename="coverid")]
-    pub cover_id: String,
-    #[serde(default)]
-    pub title: String,
-    #[serde(default)]
-    pub album: String,
-    #[serde(default)]
-    pub artist: String,
-    #[serde(default, deserialize_with="deserialize_seconds_to_hms")] // Apply deserializer
-    pub duration: String, // Changed type to String to hold formatted duration
-    #[serde(default, deserialize_with="deserialize_seconds_to_hms")] // Apply deserializer
-    pub remaining: String, // Changed type to String to hold formatted duration
-    #[serde(default)]
-    pub albumartist: String,
-    #[serde(default)]
-    pub artistrole: String,
-    #[serde(default)]
-    pub bitrate: String,
-    #[serde(default, deserialize_with="deserialize_bool_from_anything")]
-    pub compilation: bool,
-    #[serde(default)]
-    pub composer: String,
-    #[serde(default)]
-    pub conductor: String,
-    #[serde(default, deserialize_with="deserialize_numeric_u8")]
-    pub disc: u8,
-    #[serde(default, deserialize_with="deserialize_numeric_u8")]
-    pub disccount: u8,
-    #[serde(default)]
-    pub performer: String,
-    #[serde(default)]
-    pub remotetitle: String,
-    #[serde(default)]
-    pub trackartist: String,
-    #[serde(default, deserialize_with="deserialize_numeric_u8")]
-    pub tracknum: u8,
-    #[serde(default)]
-    pub year: String,
-    #[serde(default, rename="playlist index")]
-    pub playlist_index: i32,
-}
-
-/// Player status and current playing track
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-pub struct PlayerStatus {
-    #[serde(default)]
-    pub mode: String,
-    #[serde(default="default_zero_i16", rename="playlist repeat")]
-    pub playlist_repeat: i16,
-    #[serde(default="default_zero_i16", rename="playlist shuffle")]
-    pub playlist_shuffle: i16,
-    #[serde(deserialize_with="deserialize_bool_from_anything")]
-    pub power: bool,
-    #[serde(default="default_zero_i16", rename="mixer volume")] // a percent
-    pub volume: i16,
-    #[serde(default, deserialize_with="deserialize_seconds_to_hms")]
-    pub duration: String,
-    #[serde(default, deserialize_with="deserialize_epoch_to_date_string")]
-    pub date: String,
-    #[serde(default, deserialize_with="deserialize_seconds_to_hms")]
-    pub time: String,
-    #[serde(default="default_zero_i16")]
-    pub can_seek: i16,
-    #[serde(default)]
-    pub playlist_loop: Vec<Track>,
-}
-
-// Tag types enum
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[repr(usize)]
-pub enum TagID {
-    ALBUM = 0,
-    ALBUMARTIST,
-    ALBUMID,
-    ARTIST,
-    ARTISTROLE,
-    BITRATE,
-    COMPILATION,
-    COMPOSER,
-    CONDUCTOR,
-    CONNECTED,
-    DISC,
-    DISCCOUNT,
-    DURATION,
-    MODE,
-    PERFORMER,
-    POWER,
-    REMAINING,
-    REMOTE,
-    REMOTETITLE,
-    REPEAT,
-    SAMPLERATE,
-    SAMPLESIZE,
-    SERVER, // not a real tag - just using infrastructure
-    SHUFFLE,
-    TIME,
-    TITLE,
-    TRACKARTIST,
-    TRACKCOUNT,
-    TRACKID, // unique ID!!!
-    TRACKNUM,
-    VOLUME,
-    YEAR,
-    MAXTAG,
-}
-
-const MAXTAG_TYPES: usize = TagID::MAXTAG as usize;
 
 // LMS structure
 #[derive(Debug)]
@@ -314,16 +348,22 @@ pub struct LMSServer {
     pub vers: String,
     pub port: u16,
     pub slim_tags: String,
-    pub tags: Vec<MetaTag>,
     pub client: SlimInfoClient,
     working: bool,
     // Fields for background polling thread management
     stop_sender: Option<mpsc::Sender<()>>,
     poll_handle: Option<JoinHandle<()>>,
+    // beacon watch channel 
+    playing_tx: watch::Sender<bool>,
+    playing_rx: watch::Receiver<bool>,
+    last_playing: bool, 
+    changed: bool,
+    pub sliminfo: SlimInfo,
 }
 
 impl LMSServer {
     pub fn new() -> Self {
+        let (playing_tx, playing_rx) = watch::channel(false);
         LMSServer {
             player_count: -1, // no players
             active_player: usize::MAX, // no active player
@@ -336,98 +376,48 @@ impl LMSServer {
             uuid: "".to_string(),
             vers: "".to_string(),
             port: 9000,
-            slim_tags: "tags:".to_string(),
-            tags: Vec::with_capacity(MAXTAG_TYPES),
+            slim_tags: "tags:lKeaArCckiqdxNTIzy".to_string(),
             client: SlimInfoClient::new(),
             working: false,
             stop_sender: None,
             poll_handle: None,
+            playing_tx,
+            playing_rx,
+            last_playing: false, 
+            changed: false,
+            sliminfo: SlimInfo::default(),
+
+        }
+    }
+
+    pub fn subscribe_playing(&self) -> watch::Receiver<bool> {
+        self.playing_rx.clone()
+    }
+    
+    fn maybe_emit_playing(&mut self, mode: &str) {
+        let is_playing = mode == "play";
+        if is_playing != self.last_playing {
+            self.last_playing = is_playing;
+            let _ = self.playing_tx.send(is_playing); // ignore if nobody’s listening
+            //debug!("Playing is now {}", if is_playing { "on" } else { "off" });
         }
     }
 
     pub fn reset_changed(&mut self) {
-        for ti in 0..MAXTAG_TYPES {
-            self.tags[ti].changed = false;
-        }
     }
 
     pub fn has_changed(&self) -> bool{
-        for ti in 0..MAXTAG_TYPES {
-            if self.tags[ti].changed {
-                return true;
-            }
-        }
-        false
+        self.changed
     }
 
     pub fn is_playing(&self) -> bool {
         //self.players[self.active_player].playing
         // the boolean on the play is likely better but mode has the detail too
-        if self.active_player != usize::MAX && self.tags[TagID::MODE as usize].valid && self.tags[TagID::MODE as usize].display_value == "play" {
+        if self.active_player != usize::MAX && self.sliminfo.mode == "play" {
             true
         }else {
             false
         }
-    }
-
-    pub fn populate_tag(&mut self, tagidx: usize, name: &str, lmstag: &str, also_flat: bool, method: &str) {
-        if tagidx < MAXTAG_TYPES {
-            self.tags[tagidx].name = name.to_string();
-            if also_flat {
-                self.tags[tagidx].flat_name = format!("playlist_loop.0.{}",name);
-            }else {
-                self.tags[tagidx].flat_name = "".to_string();
-            
-            }
-            self.tags[tagidx].name = name.to_string();
-            self.tags[tagidx].lmstag = lmstag.to_string();
-            self.tags[tagidx].method = method.to_string();
-            self.tags[tagidx].valid = false;
-            self.tags[tagidx].changed = false;
-        }
-    }
-
-    pub fn init_tags(&mut self) {
-        self.tags.resize(MAXTAG_TYPES, MetaTag::default());
-        self.populate_tag(TagID::ALBUM as usize, "album", "l", true, "*");
-        self.populate_tag(TagID::ALBUMARTIST as usize, "albumartist", "K", true, "*");
-        self.populate_tag(TagID::ALBUMID as usize, "album_id", "e",true, "*");
-        self.populate_tag(TagID::ARTIST as usize, "artist", "a",true, "*");
-        self.populate_tag(TagID::ARTISTROLE as usize, "artistrole", "A", true, "*");
-        self.populate_tag(TagID::BITRATE as usize, "bitrate", "r",true, "*");
-        self.populate_tag(TagID::COMPILATION as usize, "compilation", "C",true, "*");
-        self.populate_tag(TagID::COMPOSER as usize, "composer", "c",true, "*");
-        self.populate_tag(TagID::CONNECTED as usize, "player_connected", "k",false, "*");
-        self.populate_tag(TagID::CONDUCTOR as usize, "conductor", "",true, "*");
-        self.populate_tag(TagID::DISC as usize, "disc", "i",true, "*");
-        self.populate_tag(TagID::DISCCOUNT as usize, "disccount", "q",true, "*");
-        self.populate_tag(TagID::DURATION as usize, "duration", "d",false, "string_to_hms");
-        self.populate_tag(TagID::MODE as usize, "mode", "",false, "*");
-        self.populate_tag(TagID::PERFORMER as usize, "performer", "",true, "*");
-        self.populate_tag(TagID::POWER as usize, "power", "",false, "*");
-        self.populate_tag(TagID::REMAINING as usize, "remaining", "",false, "string_to_hms");
-        self.populate_tag(TagID::REMOTE as usize, "remote", "x",true, "*");
-        self.populate_tag(TagID::REMOTETITLE as usize, "remote_title", "N",true, "*");
-        self.populate_tag(TagID::REPEAT as usize, "playlist repeat", "",false, "*");
-        self.populate_tag(TagID::SAMPLERATE as usize, "samplerate", "T",true, "*");
-        self.populate_tag(TagID::SAMPLESIZE as usize, "samplesize", "I",true, "*");
-        // pseudo tag - used to model server bounce
-        self.populate_tag(TagID::SERVER as usize, "not_real_server_not_real", "",false, "*");
-        self.populate_tag(TagID::SHUFFLE as usize, "playlist shuffle", "",false, "*");
-        self.populate_tag(TagID::TIME as usize, "time", "",true, "string_to_hms");
-        self.populate_tag(TagID::TITLE as usize, "title", "",true, "*");
-        self.populate_tag(TagID::TRACKARTIST as usize, "trackartist", "",true, "*");
-        self.populate_tag(TagID::TRACKID as usize, "id", "",true, "*");
-        self.populate_tag(TagID::TRACKCOUNT as usize, "tracks", "z",true, "*");
-        self.populate_tag(TagID::TRACKNUM as usize, "tracknum", "",true, "*");
-        self.populate_tag(TagID::VOLUME as usize, "mixer volume", "",false, "*");
-        self.populate_tag(TagID::YEAR as usize, "year", "y",true, "*");
-
-        // construct a tag request string and set for sliminfo calls
-        for ti in 0..MAXTAG_TYPES {
-            self.slim_tags.push_str(&self.tags[ti].lmstag);
-        }
-
     }
 
     /// Discovers LMS servers on the local network using UDP broadcast.
@@ -531,8 +521,6 @@ impl LMSServer {
     /// fetch the current status inclusive of populating tag details
     pub async fn get_sliminfo_status(&mut self) -> Result<(), Box<dyn std::error::Error>> {
 
-        const VARIOUS_ARTISTS: &str = "Various Artists";
-
         if !self.ready {
             return Err("LMS Server not discovered. Call discover() first.".into());
         }
@@ -543,9 +531,6 @@ impl LMSServer {
             let command="status";
             let params = vec![json!("-"), json!("1"), json!(&self.slim_tags)]; // status inclusive supported tags
 
-            let mut dtime:f32 = 0.0;
-            let mut ptime = dtime;
-
             self.working = true;
             match self.client.send_slim_request(
                 self.host.to_string().as_str(),
@@ -555,78 +540,12 @@ impl LMSServer {
                 params,
             ).await {
                 Ok(result) => {
-                    let flattened = flatten_json(&result, "");
-                    for ti in 0..MAXTAG_TYPES {
-                        // Check if the "name" tag exists in the direct result
-                        if let Some(this) = result.get(&self.tags[ti].name.clone()) {
-                            let tag_value = if let Some(s) = this.as_str() {
-                                s.to_string()
-                            } else {
-                                this.to_string()
-                            };
-                            self.tags[ti].set_value(&tag_value);
-                            if ti == TagID::DURATION as usize {
-                                if let Ok(parsed_value) = tag_value.parse::<f32>() {
-                                    dtime = parsed_value;
-                                }
-                            } else if ti == TagID::TIME as usize {
-                                if let Ok(parsed_value) = tag_value.parse::<f32>() {
-                                    ptime = parsed_value;
-                                }
-                            }
-                        }
-                        // If not set and a flat_name is defined, check the flattened map
-                        if !self.tags[ti].changed && !self.tags[ti].flat_name.is_empty() {
-                            if let Some(this) = flattened.get(&self.tags[ti].flat_name.clone()) {
-                                let tag_value = if let Some(s) = this.as_str() {
-                                    s.to_string()
-                                } else {
-                                    this.to_string()
-                                };
-                                self.tags[ti].set_value(&tag_value);
-                            }
-                        }
-                    }
-                    if self.has_changed() {
-
-                        // fix remaining
-                        self.tags[TagID::REMAINING as usize].set_value(format!("{:.4}", (dtime - ptime)).as_str());
-
-                        // fix Various Artists when Compilation
-                        if !self.tags[TagID::COMPILATION as usize].display_value.is_empty() && self.tags[TagID::COMPILATION as usize].display_value  == "1" {
-                            self.tags[TagID::ALBUMARTIST as usize].set_value(VARIOUS_ARTISTS);
-                        }
-
-                        // and rationalize the performer, conductor, artist, album artist
-                        let mut new_value = self.tags[TagID::ARTIST as usize].display_value.clone();
-                        if self.tags[TagID::ALBUMARTIST as usize].display_value.is_empty() {
-                            if !self.tags[TagID::CONDUCTOR as usize].display_value.is_empty() {
-                                new_value = self.tags[TagID::CONDUCTOR as usize].display_value.clone();
-                            }
-                            self.tags[TagID::ALBUMARTIST as usize].set_value(&new_value.as_str());
-                        } else if self.tags[TagID::ALBUMARTIST as usize].display_value != VARIOUS_ARTISTS {
-                            if !self.tags[TagID::ARTIST as usize].display_value.is_empty() {
-                                new_value = self.tags[TagID::ARTIST as usize].display_value.clone();
-                            } else if !self.tags[TagID::PERFORMER as usize].display_value.is_empty() {
-                                new_value = self.tags[TagID::PERFORMER as usize].display_value.clone();
-                            }
-                            self.tags[TagID::ALBUMARTIST as usize].set_value(&new_value.as_str());
-                        }
-                        if self.tags[TagID::ALBUMARTIST as usize].display_value.is_empty() {
-                            if !self.tags[TagID::ARTIST as usize].display_value.is_empty() {
-                                new_value = self.tags[TagID::ARTIST as usize].display_value.clone();
-                            } else if !self.tags[TagID::PERFORMER as usize].display_value.is_empty() {
-                                new_value = self.tags[TagID::PERFORMER as usize].display_value.clone();
-                            }
-                            self.tags[TagID::ALBUMARTIST as usize].set_value(&new_value.as_str());
-                        }
-                        if self.tags[TagID::ARTIST as usize].display_value.is_empty() {
-                            if !self.tags[TagID::PERFORMER as usize].display_value.is_empty() {
-                                new_value = self.tags[TagID::PERFORMER as usize].display_value.clone();
-                                self.tags[TagID::ARTIST as usize].set_value(&new_value.as_str());
-                            }
-                        }
-                    }
+                    //println!("{:?}", result);
+                    let status: PlayerStatus = serde_json::from_value(result)?;
+                    let slim = SlimInfo::from_status(status);
+                    self.changed = slim != self.sliminfo;
+                    self.sliminfo = slim.clone();
+                    self.maybe_emit_playing(&slim.mode.clone());
                 },
                 Err(e) => error!("Error calling 'status' on LMS Server: {}", e),
             }
@@ -700,7 +619,6 @@ impl LMSServer {
         if lms.ready {
             lms.get_players(player_name_filter, mac_address).await?;
             if lms.player_count > 0 && lms.active_player != usize::MAX { // Ensure an active player is found
-                lms.init_tags();
                 lms.ask_refresh();
 
                 // Create a channel for stopping the polling thread
@@ -773,3 +691,6 @@ impl Drop for LMSServer {
         // Here, we just send the signal and let the runtime clean up the detached task.
     }
 }
+
+
+

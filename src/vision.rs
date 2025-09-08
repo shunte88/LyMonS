@@ -1,9 +1,4 @@
 // vision.rs
-// Linux-only reader for Squeezelite visualization shared memory.
-//
-// Cargo dependencies:
-//   memmap2 = "0.9"
-//   libc    = "0.2"
 //
 // Behavior:
 // - scans /dev/shm for "squeezelite-*" and maps to it
@@ -18,36 +13,84 @@ use log::{info, error};
 use std::ptr;
 use std::sync::atomic::{fence, Ordering};
 use std::time::{Duration, Instant};
-use chrono::{DateTime, Utc};
 use crate::func_timer::FunctionTimer;
 use std::thread::sleep;
-use rustfft::{FftPlanner, num_complex::Complex, Fft};
-use std::sync::Arc;
 
 use crate::shm_path::find_squeezelite_shm_path;
 
-const VIS_BUF_SIZE:usize = 16_384;         // Predefined in Squeezelite.
-pub const PEAK_METER_LEVELS_MAX:u8 = 48;   // Number of peak meter intervals
-pub const SPECTRUM_POWER_MAP_MAX:u8 = 32;  // Number of spectrum bands
-pub const METER_CHANNELS:usize = 2;        // Number of metered channels.
-pub const OVERLOAD_PEAKS:u8 = 3;           // Number of consecutive 0dBFS peaks for overload.
-pub const X_SCALE_LOG:usize = 20;
-pub const MAX_SAMPLE_WINDOW:usize = 1024 * X_SCALE_LOG;
-pub const MAX_SUBBANDS:usize = MAX_SAMPLE_WINDOW as usize/ METER_CHANNELS / X_SCALE_LOG;
-pub const MIN_SUBBANDS:usize = 16;
+const VIS_BUF_SIZE:usize = 16_384;              // Predefined in Squeezelite.
+pub const PEAK_METER_LEVELS_MAX:u8 = 48;        // Number of peak meter intervals
+pub const PEAK_METER_SCALE_HEADROOM:f32 = 0.8;  // 20% headroom clipping
+pub const METER_CHANNELS:usize = 2;             // Number of metered channels.
+pub const OVERLOAD_PEAKS:u8 = 3;                // Number of consecutive 0dBFS peaks for overload.
 
-const MIN_FFT_INPUT_SAMPLES:usize = 128;
-const MAX_FFT_INPUT_SAMPLES: usize = 4096; // cap for perf
-const SPECTRUM_MIN_HZ: f32 = 20.0;         // start of spectrum
-const EPS: f32 = 1e-12;
-const FLOOR_DB: f32 = -72.0;               // meter floor
-const CEIL_DB: f32 =   0.0;                // ~0 dBFS
-const DECAY_STEPS_PER_FRAME: u8 = 1;       // visual fall rate (levels / frame)
-const LOCK_TRY_WINDOW_MS: u32 = 5;         // total budget for try-loop
+pub const FLOOR_DB: f32 = -72.0;                // meter floor
+pub const CEIL_DB: f32 =   0.0;                 // ~0 dBFS
+pub const DECAY_STEPS_PER_FRAME: u8 = 1;        // visual fall rate (levels / frame)
+const LOCK_TRY_WINDOW_MS: u32 = 5;              // total budget for try-loop
+
 
 // Timings
 pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~60 FPS
 pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
+
+/// simple state carried across calls (last metrics + peak-hold)
+
+#[derive(Debug, Clone)]
+pub struct LastVizState {
+    pub last_metric: [i32; 2],
+    pub hold: [u8; 2],
+
+    // latest inputs (debug/inspection)
+    pub last_bands_m: Vec<u8>,
+    pub last_bands_l: Vec<u8>,
+    pub last_bands_r: Vec<u8>,
+
+    // bars we actually draw (with our own decay)
+    pub draw_bands_m: Vec<u8>,
+    pub draw_bands_l: Vec<u8>,
+    pub draw_bands_r: Vec<u8>,
+
+    // --- peak caps ---
+    pub cap_m: Vec<u8>,
+    pub cap_l: Vec<u8>,
+    pub cap_r: Vec<u8>,
+    pub cap_hold_until_m: Vec<Instant>,  // until this time, hold current cap
+    pub cap_hold_until_l: Vec<Instant>,
+    pub cap_hold_until_r: Vec<Instant>,
+    pub cap_last_update_m: Vec<Instant>, // last time we updated decay
+    pub cap_last_update_l: Vec<Instant>,
+    pub cap_last_update_r: Vec<Instant>,
+
+    pub init: bool,
+    pub last_tick: Instant,
+}
+
+impl Default for LastVizState {
+    fn default() -> Self {
+        Self {
+            last_metric: [i32::MIN; 2],
+            hold: [0, 0],
+            last_bands_m: Vec::new(),
+            last_bands_l: Vec::new(),
+            last_bands_r: Vec::new(),
+            draw_bands_m: Vec::new(),
+            draw_bands_l: Vec::new(),
+            draw_bands_r: Vec::new(),
+            cap_m: Vec::new(),
+            cap_l: Vec::new(),
+            cap_r: Vec::new(),
+            cap_hold_until_m: Vec::new(),
+            cap_hold_until_l: Vec::new(),
+            cap_hold_until_r: Vec::new(),
+            cap_last_update_m: Vec::new(),
+            cap_last_update_l: Vec::new(),
+            cap_last_update_r: Vec::new(),
+            init: true,
+            last_tick: Instant::now(),
+        }
+    }
+}
 
 // --- internal RAII read-guard used by timed/try lock paths ---
 struct ReadGuard {
@@ -96,192 +139,6 @@ pub struct VisReader {
 // These are safe because we only do read access and the OS rwlock is process-shared.
 unsafe impl Send for VisReader {}
 unsafe impl Sync for VisReader {}
-
-pub struct SpectrumEngine {
-    sr: u32,
-    nfft: usize,
-    fft: Arc<dyn Fft<f32> + Send + Sync>,
-    window: Vec<f32>,
-    buf: Vec<Complex<f32>>,
-    scratch: Vec<Complex<f32>>,
-    mags: Vec<f32>,                // length nfft/2
-    bands: usize,
-    band_edges: Vec<(usize, usize)>,
-    levels_l: Vec<u8>,
-    levels_r: Vec<u8>,
-    last_levels_l: Vec<u8>,
-    last_levels_r: Vec<u8>,
-}
-
-impl SpectrumEngine {
-    pub fn new(sr: u32, samples_len: usize, bands: usize) -> Self {
-        let nmax = samples_len.clamp(MIN_FFT_INPUT_SAMPLES, MAX_FFT_INPUT_SAMPLES);
-        let nfft = 1usize.next_power_of_two()
-            .min(nmax).min(MAX_FFT_INPUT_SAMPLES)
-            .min(
-                if samples_len == 0 { 
-                    MIN_FFT_INPUT_SAMPLES 
-                } else { 
-                    samples_len
-                }.next_power_of_two())
-            .max( MIN_FFT_INPUT_SAMPLES);
-
-        let mut planner = FftPlanner::<f32>::new();
-        let fft: Arc<dyn Fft<f32> + Send + Sync> = planner.plan_fft_forward(nfft);
-
-        // Hann window
-        let window = (0..nfft)
-            .map(|i| {
-                let x = std::f32::consts::TAU * (i as f32) / (nfft as f32);
-                0.5 * (1.0 - x.cos())
-            })
-            .collect::<Vec<_>>();
-
-        let buf = vec![Complex::<f32>::new(0.0, 0.0); nfft];
-        let scratch = vec![Complex::<f32>::new(0.0, 0.0); fft.get_inplace_scratch_len()];
-        let mags = vec![0.0; nfft / 2];
-
-        let band_edges = Self::build_log_bands(sr, nfft, bands);
-        Self { sr, nfft, fft, window, buf, scratch, mags, bands, band_edges ,
-            levels_l: vec![0; bands], levels_r: vec![0; bands],
-            last_levels_l: vec![0; bands], last_levels_r: vec![0; bands],
-}
-    }
-
-    pub fn ensure(&mut self, sr: u32, samples_len: usize) {
-        if self.sr == sr && self.nfft <= samples_len && self.nfft <= MAX_FFT_INPUT_SAMPLES { return; }
-        *self = Self::new(sr, samples_len, self.bands);
-    }
-
-    pub fn build_log_bands(sr: u32, nfft: usize, bands: usize) -> Vec<(usize, usize)> {
-        let nyq = sr as f32 / 2.0;
-        let fmin = SPECTRUM_MIN_HZ.min(nyq - 1.0).max(1.0);
-        let fmax = (nyq * 0.98).max(fmin + 1.0);
-        let mut edges = Vec::with_capacity(bands + 1);
-        for i in 0..=bands {
-            let t = i as f32 / (bands as f32);
-            // log spacing
-            let f = fmin * (fmax / fmin).powf(t);
-            let k = ((f * (nfft as f32) / (sr as f32)).floor() as isize)
-                .clamp(1, (nfft as isize / 2) - 1) as usize;
-            edges.push(k);
-        }
-        // turn to (start,end) per band, ensure non-empty ranges
-        let mut out = Vec::with_capacity(bands);
-        for i in 0..bands {
-            let mut a = edges[i];
-            let mut b = edges[i + 1];
-            if b <= a { b = (a + 1).min(nfft / 2); }
-            out.push((a, b));
-        }
-        out
-    }
-
-    /// Compute band dB (per-channel) from newest `nfft` samples of `pcm`.
-    pub fn compute_db(&mut self, pcm: &[i16]) -> Vec<f32> {
-        let n = self.nfft.min(pcm.len());
-        let start = pcm.len() - n;
-
-        // time-domain buffer with window
-        for i in 0..n {
-            let s = pcm[start + i] as f32 / (i16::MAX as f32);
-            self.buf[i].re = s * self.window[i];
-            self.buf[i].im = 0.0;
-        }
-        for i in n..self.nfft {
-            self.buf[i].re = 0.0;
-            self.buf[i].im = 0.0;
-        }
-
-        // FFT
-        self.fft.process_with_scratch(&mut self.buf, &mut self.scratch);
-
-        // magnitudes (one-sided)
-        let half = self.nfft / 2;
-        for k in 0..half {
-            self.mags[k] = self.buf[k].re.hypot(self.buf[k].im);
-        }
-
-        // simple energy sum per band, then 20*log10 (amplitude) or 10*log10 (power)
-        // We'll use amplitude dBFS here; switch to power by squaring + 10*log10.
-        let mut bands_db = vec![0.0; self.bands];
-        for (bi, (a, b)) in self.band_edges.iter().enumerate() {
-            let mut acc = 0.0f32;
-            for k in *a..*b {
-                acc += self.mags[k].max(0.0);
-            }
-            // Normalize roughly by number of bins to keep levels sane
-            let avg = acc / ((*b - *a) as f32).max(1.0);
-            let db = 20.0 * (avg.max(EPS)).log10(); // 0 dBFS ≈ full-scale tone (approx; Hann attenuates a bit)
-            bands_db[bi] = db;
-        }
-        bands_db
-    }     
-
-    /// Compute dBFS bands for one channel from the newest `nfft` samples.
-    pub fn compute_db_bands(&mut self, pcm: &[i16]) -> Vec<f32> {
-        let need = self.nfft.min(pcm.len());
-        let start = pcm.len().saturating_sub(need);
-
-        // windowed real signal into buf
-        for i in 0..need {
-            let s = (pcm[start + i] as f32) / (i16::MAX as f32);
-            self.buf[i].re = s * self.window[i];
-            self.buf[i].im = 0.0;
-        }
-        for i in need..self.nfft {
-            self.buf[i].re = 0.0;
-            self.buf[i].im = 0.0;
-        }
-
-        // FFT
-        self.fft.process_with_scratch(&mut self.buf, &mut self.scratch);
-
-        // magnitude^2 (power), one-sided
-        let half = self.nfft / 2;
-        for k in 0..half {
-            let re = self.buf[k].re;
-            let im = self.buf[k].im;
-            self.mags[k] = re.mul_add(re, im * im);
-        }
-
-        // sum power per band, normalize roughly by bin count, convert to dBFS
-        let mut out = vec![FLOOR_DB; self.bands];
-        for (bi, (a, b)) in self.band_edges.iter().enumerate() {
-            let mut acc = 0.0f32;
-            for k in *a..*b { acc += self.mags[k]; }
-            let avg = acc / ((*b - *a) as f32).max(1.0);
-            // Hann window & FFT scaling shift absolute level; for visuals we just want monotonic
-            out[bi] = 10.0 * (avg.max(EPS)).log10(); // power dB
-        }
-        out
-    }
-
-    /// Compute **meter levels** [0..=PEAK_METER_LEVELS_MAX] per band with simple falloff.
-    pub fn compute_levels(&mut self, left: &[i16], right: &[i16]) -> (Vec<u8>, Vec<u8>) {
-        let db_l = self.compute_db_bands(left);
-        let db_r = self.compute_db_bands(right);
-
-        self.levels_l = self.last_levels_l.clone();
-        self.levels_r = self.last_levels_r.clone();
-        
-        // Map to levels
-        let mut lv_l = vec![0u8; self.bands];
-        let mut lv_r = vec![0u8; self.bands];
-        for i in 0..self.bands {
-            lv_l[i] = db_to_level(db_l[i]);
-            lv_r[i] = db_to_level(db_r[i]);
-
-            // peak-hold with decay (visual smoothing)
-            lv_l[i] = lv_l[i].max(self.last_levels_l[i].saturating_sub(DECAY_STEPS_PER_FRAME));
-            lv_r[i] = lv_r[i].max(self.last_levels_r[i].saturating_sub(DECAY_STEPS_PER_FRAME));
-        }
-        self.last_levels_l.copy_from_slice(&lv_l);
-        self.last_levels_r.copy_from_slice(&lv_r);
-        (lv_l, lv_r)
-    }
-
-}
 
 impl VisReader {
     /// Discover the active Squeezelite shm in /dev/shm and map it.
@@ -628,7 +485,13 @@ pub fn peak_and_rms(ch: &[i16]) -> (i16, f32) {
 #[inline]
 fn db_to_level(db: f32) -> u8 {
     let x = ((db - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0);
-    (x * (PEAK_METER_LEVELS_MAX as f32)).round() as u8
+    (x * PEAK_METER_LEVELS_MAX as f32).round() as u8
+}
+/// Map dBFS to integer meter steps [0..=PEAK_METER_LEVELS_MAX] and scaled headroom (20%)
+#[inline]
+fn db_to_level_scale(db: f32) -> u8 {
+    let x = ((db - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0);
+    (PEAK_METER_SCALE_HEADROOM * x * PEAK_METER_LEVELS_MAX as f32).round() as u8
 }
 
 pub fn dbfs(x: f32) -> f32 {
@@ -697,100 +560,3 @@ fn stereo_peak_rms(samples: &[i16]) -> ((i16, f32), (i16, f32)) {
     
 }
 
-pub fn test_data_stream() -> std::io::Result<()> {
-
-    let breaker = Instant::now() + Duration::from_secs(30);
-    let mut reader = VisReader::new().unwrap();
-    info!("== Peak ===|== dBFS ===|== RMS ==|== dBFS ===|");
-    loop {
-        match reader.with_data_extended(|frame, l, r| {
-            if frame.running {
-                let ((peak_l, rms_l), (peak_r, rms_r)) = stereo_channel_peak_rms(&l, &r);
-                info!(
-                    "{:>5}|{:>5}|{:>5.1}|{:>5.1}|{:>4.0}|{:>4.0}|{:>5.1}|{:>5.1}|",
-                    peak_l, peak_r,
-                    dbfs(peak_l as f32), dbfs(peak_r as f32),
-                    rms_l, rms_r,
-                    dbfs(rms_l), dbfs(rms_r),
-                );
-            }else{sleep(POLL_ENABLED);}
-        }){
-            Ok(true) => {
-                // processed a fresh frame
-            }
-            Ok(false) => {
-                // no new data; small nap and try to recover if stale
-                sleep(POLL_ENABLED);
-                if let Err(e) = reader.reopen_if_stale() {
-                    error!("reopen_if_stale error: {e}");
-                }
-            }
-            Err(_) => {}
-        }
-        if breaker < Instant::now() {
-            info!("testing completed.");
-            return Ok(());
-        }
-    }
-
-}
-
-pub fn test_data_stream_with_histogram() -> std::io::Result<()> {
-
-    let mut eng: Option<SpectrumEngine> = None;
-    let breaker = Instant::now() + Duration::from_secs(30);
-    let mut reader = VisReader::new().unwrap();
-
-    info!("== Peak ===|== dBFS ===|== RMS ==|== dBFS ===| Histogram (FIRST 8)  |");
-    loop {
-        match reader.with_data_extended(|frame, l, r| {
-            if frame.running {
-                let bands = SPECTRUM_POWER_MAP_MAX as usize;
-                if eng.is_none() {
-                    eng = Some(SpectrumEngine::new(frame.sample_rate, l.len(), bands));
-                } else {
-                    eng.as_mut().unwrap().ensure(frame.sample_rate, l.len());
-                }
-                let e = eng.as_mut().unwrap();
-                //Peaks / RMS
-                let ((pk_l, rms_l), (pk_r, rms_r)) = stereo_channel_peak_rms(l,r);
-
-            // Histograms (32 bands, log spaced)
-            let hist_l = e.compute_db(l);
-            let hist_r = e.compute_db(r);
-
-            // quick publish: show a few bands; swap to your bus/IPC as needed
-            let show = 8.min(hist_l.len());
-            let mut line = String::new();
-            for i in 0..show {
-                line.push_str(&format!("{:5.1}/{:5.1} ", hist_l[i], hist_r[i]));
-            }
-
-            info!(
-                "{:>5}|{:>5}|{:>5.1}|{:>5.1}|{:>4.0}|{:>4.0}|{:>5.1}|{:>5.1}| H[0..{}]: {}",
-                pk_l, pk_r, dbfs(pk_l as f32), dbfs(pk_r as f32),
-                rms_l, rms_r, dbfs(rms_l), dbfs(rms_r),
-                show-1, line
-            );
-
-        }
-        }) {
-            Ok(true) => {
-                // processed a fresh frame
-            }
-            Ok(false) => {
-                // no new data; small nap and try to recover if stale
-                std::thread::sleep(POLL_ENABLED);
-                if let Err(e) = reader.reopen_if_stale() {
-                    error!("reopen_if_stale error: {e}");
-                }
-            }
-            Err(_) => {}
-        }
-        if breaker < Instant::now() {
-            info!("testing completed.");
-            return Ok(());
-        }
-           
-    }
-}

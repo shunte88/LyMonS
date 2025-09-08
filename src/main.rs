@@ -1,3 +1,26 @@
+/*
+ *  main.rs
+ * 
+ *  LyMonS - worth the squeeze
+ *	(c) 2020-25 Stuart Hunter
+ *
+ *	TODO:
+ *
+ *	This program is free software: you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation, either version 3 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	See <http://www.gnu.org/licenses/> to get a copy of the GNU General
+ *	Public License.
+ *
+ */
+
 #[allow(dead_code)]
 #[allow(unused_imports)]
 use std::{time::Duration};
@@ -12,6 +35,7 @@ use local_ip_address::{local_ip};
 use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
 
 // move these to mod.rs
+//mod singles;
 mod display;
 mod mac_addr;
 mod metrics;
@@ -27,17 +51,17 @@ mod climacell;
 mod geoloc;
 mod translate;
 mod eggs;
+mod spectrum;
 mod vision;
-mod beacon;
 mod visualizer;
+mod vuphysics;
 mod svgimage;
 mod shm_path;
 mod func_timer;
 
-use sliminfo::{LMSServer, TagID};
+use sliminfo::LMSServer;
 use mac_addr::{get_mac_addr,get_mac_addr_for};
-use beacon::{LmsConfig, spawn_status_beacon};
-
+//use singles::SingleInstance;
 include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
 
 /// Asynchronously waits for a SIGINT, SIGTERM, or SIGHUP signal.
@@ -88,6 +112,12 @@ fn check_half_hour(test:&String, active: bool) -> u8 {
 #[tokio::main] // Requires the `tokio` runtime with `macros` and `rt-multi-thread` features
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
+//    let singleton = match SingleInstance::new(env!("CARGO_PKG_NAME"))?
+//    {
+//        Ok(s) => s, 
+//        Err(e) => ,
+//    }
+
     // Parse command line arguments
     let matches = Command::new(env!("CARGO_PKG_NAME")) // Use Cargo.toml name
         .version(env!("CARGO_PKG_VERSION"))
@@ -264,7 +294,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         show_splash,
         &format!("v{}",env!("CARGO_PKG_VERSION")).as_str(),
         BUILD_DATE
-    ).unwrap();
+    ).await?;
 
     if weather_config != "" {
         oled_display.setup_weather(weather_config).await?;
@@ -286,22 +316,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scrolling_poll_duration = Duration::from_millis(50);
     // clock display sleep duration
     let clock_poll_duration = Duration::from_millis(100);
+    let viz_poll_duration = Duration::from_millis(32); // > 30Hz (16=60Hz)
 
     // The polling thread is now running in the background if init_server was successful.
     info!("LMS Server communication initialized.");
 
     let lms = lms_arc.lock().await;
-    let lc = LmsConfig::new(
-        lms.host.to_string().as_str(),
-        lms.port,
-        lms.player_mac(),
-        Duration::from_millis(100)
-    );
+    oled_display.setup_visualizer(viz_type, lms.subscribe_playing()).await?;
     drop(lms);
-    
-    let (status_cmd, playing_rx) = beacon::spawn_status_beacon(lc)?;
-    oled_display.setup_visualizer(viz_type, playing_rx).await?;
-
 
     // Main application loop
     tokio::select! {
@@ -343,58 +365,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         oled_display.set_display_mode(display::DisplayMode::EasterEggs).await; // Set mode
                         this_mode = "eggy"
                     }
-                    
-                    // Only update display data if LMS tags have changed
-                    if lms_guard.has_changed() {
+                    if oled_display.current_mode == display::DisplayMode::Visualizer {
+                        oled_display.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in {} mode (no change): {}", this_mode, e));
+                    } else if lms_guard.has_changed() { // Only update display data if LMS tags have changed
 
                         // --- Line 0: Volume, Repeat/Shuffle, Bitrate/Audio Glyphs ---
-                        let current_volume_raw = lms_guard.tags[TagID::VOLUME as usize].raw_value.clone();
-                        let current_volume_percent = if current_volume_raw == "-999" {
-                            0 // Muted, internally use 0
-                        } else {
-                            current_volume_raw.parse::<u8>().unwrap_or(0) // Parse volume percent
-                        };
-                        let current_is_muted = current_volume_raw == "-999" || current_volume_raw == "0";
-
-                        let current_repeat = {
-                            let repeat_val = lms_guard.tags[TagID::REPEAT as usize].raw_value.parse::<i16>().unwrap_or(0);
-                            if repeat_val == 2 { display::RepeatMode::RepeatOne }
-                            else if repeat_val == 1 { display::RepeatMode::RepeatAll }
-                            else { display::RepeatMode::Off }
-                        };
-
-                        let current_shuffle = {
-                            let shuffle_val = lms_guard.tags[TagID::SHUFFLE as usize].raw_value.parse::<i16>().unwrap_or(0);                            
-                            if shuffle_val == 2 { display::ShuffleMode::ByAlbums }
-                            else if shuffle_val == 1 { display::ShuffleMode::ByTracks }
-                            else { display::ShuffleMode::Off }
-                        };
+                        let current_volume_percent = lms_guard.sliminfo.volume.clone();
+                        let current_is_muted = current_volume_percent == 0;
 
                         oled_display.set_status_line_data(
                             current_volume_percent,
                             current_is_muted,
-                            lms_guard.tags[TagID::SAMPLESIZE as usize].display_value.clone(),
-                            lms_guard.tags[TagID::SAMPLERATE as usize].display_value.clone(),
-                            current_repeat,
-                            current_shuffle,
+                            lms_guard.sliminfo.samplesize.clone().to_string(),
+                            lms_guard.sliminfo.samplerate.clone().to_string(),
+                            lms_guard.sliminfo.repeat.clone(),
+                            lms_guard.sliminfo.shuffle.clone(),
                         );
 
                         // Lines 1-4: Track Details with Scrolling
                         oled_display.set_track_details(
-                            lms_guard.tags[TagID::ALBUMARTIST as usize].display_value.clone(), 
-                            lms_guard.tags[TagID::ALBUM as usize].display_value.clone(), 
-                            lms_guard.tags[TagID::TITLE as usize].display_value.clone(), 
-                            lms_guard.tags[TagID::ARTIST as usize].display_value.clone(),
+                            lms_guard.sliminfo.albumartist.clone(), 
+                            lms_guard.sliminfo.album.clone(), 
+                            lms_guard.sliminfo.title.clone(), 
+                            lms_guard.sliminfo.artist.clone(),
                             scroll_mode
                         ).await;
 
                         // use raw_data - higher fidelity
                         oled_display.set_track_progress_data(
                             show_remaining,
-                            lms_guard.tags[TagID::DURATION as usize].raw_value.parse::<f32>().unwrap_or(0.00),
-                            lms_guard.tags[TagID::TIME as usize].raw_value.parse::<f32>().unwrap_or(0.00),
-                            lms_guard.tags[TagID::REMAINING as usize].raw_value.parse::<f32>().unwrap_or(0.00),
-                            lms_guard.tags[TagID::MODE as usize].display_value.clone(),
+                            lms_guard.sliminfo.duration.raw.clone() as f32,
+                            lms_guard.sliminfo.tracktime.raw.clone() as f32,
+                            lms_guard.sliminfo.remaining.raw.clone() as f32,
+                            lms_guard.sliminfo.mode.clone(),
                         );
 
                         // Render the frame, which includes updating scroll positions and drawing
@@ -429,6 +432,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Determine sleep duration based on the current display mode
                 let current_poll_duration = if oled_display.current_mode == display::DisplayMode::Clock {
                     clock_poll_duration
+                } else if oled_display.current_mode == display::DisplayMode::Visualizer {
+                    viz_poll_duration
                 } else {
                     scrolling_poll_duration
                 };
@@ -446,7 +451,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     info!("Main application exiting. Clearing display and stopping polling thread.");
-    let _ = status_cmd.try_send(beacon::StatusCmd::Shutdown);
 
     // Clear the display on shutdown
     oled_display.clear();

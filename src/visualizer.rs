@@ -3,16 +3,21 @@
 //! visualizer.rs  (Tokio async mpsc version)
 
 use tokio::sync::mpsc::{self, Sender, Receiver};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration, Instant};
 
-use crate::beacon::PlayingEvent;
-
 use log::{info, error};
 
+use crate::spectrum::{
+    SpectrumEngine,
+    SPECTRUM_BANDS_COUNT,
+};
 use crate::vision::{
-    VisReader, SpectrumEngine, peak_and_rms, dbfs,
-    PEAK_METER_LEVELS_MAX, SPECTRUM_POWER_MAP_MAX,
+    VisReader, peak_and_rms, dbfs,
+    PEAK_METER_LEVELS_MAX, 
+    DECAY_STEPS_PER_FRAME,
+    FLOOR_DB, CEIL_DB,
     // Timings
     POLL_ENABLED,
     POLL_IDLE
@@ -97,7 +102,7 @@ fn transpose_kind(kind: &str) -> Visualization {
 impl Visualizer {
     /// Spawn the background worker. It initializes at startup but does no
     /// heavy work until you `Enable(true)` *and* a track is playing.
-    pub fn spawn(kind: &str, playing_rx: Receiver<PlayingEvent>) -> std::io::Result<Self> {
+    pub fn spawn(kind: &str, playing_rx: watch::Receiver<bool>) -> std::io::Result<Self> {
         // small bounded queues (drop newest when full via try_send)
         let (cmd_tx, cmd_rx) = mpsc::channel::<VizCommand>(16);
         let (out_tx, out_rx) = mpsc::channel::<VizFrameOut>(128);
@@ -109,7 +114,7 @@ impl Visualizer {
 
         // spawn async worker task
         let join = tokio::spawn(async move {
-            visualizer_worker(cmd_rx, out_tx, Some(playing_rx)).await
+            visualizer_worker(cmd_rx, out_tx, playing_rx).await
         });
 
         Ok(Self { cmd_tx, join: Some(join), rx: out_rx })
@@ -142,12 +147,10 @@ impl Drop for Visualizer {
     }
 }
 
-// ======================= worker =======================
-
 async fn visualizer_worker(
     mut cmd_rx: Receiver<VizCommand>,
     mut out_tx: Sender<VizFrameOut>,
-    mut playing_rx: Option<Receiver<PlayingEvent>>,
+    playing_rx: watch::Receiver<bool>,
 ) {
     // Reader + FFT engine
     let mut reader = match VisReader::new() {
@@ -158,8 +161,6 @@ async fn visualizer_worker(
         }
     };
     let mut eng: Option<SpectrumEngine> = None;
-    let mut is_playing = false;
-    let mut last_is_playing = false;
 
     // State
     let mut enabled = false;
@@ -170,9 +171,8 @@ async fn visualizer_worker(
     let mut peak_hold_r: u8 = 0;
     let mut peak_hold_m: u8 = 0;
 
-    const DECAY: u8 = 1; // decay per frame
-
     info!("visualizer worker started (idle)");
+    let mut last_is_playing = false;
 
     'outer: loop {
         // drain any pending commands
@@ -184,17 +184,12 @@ async fn visualizer_worker(
             }
         }
 
-        // drain latest playing beacon
-        if let Some(ref mut rx) = playing_rx {
-            while let Ok(evt) = rx.try_recv() {
-                is_playing = evt.playing;
-            }
-        }
-
+        let is_playing = *playing_rx.borrow();
+        /*
         // send status change payload - early doors!!!
-        //if last_is_playing != is_playing {
-        if !is_playing {
+        if last_is_playing != is_playing {
             last_is_playing = is_playing;
+            //debug!("Visualizer: playing is now {}", if is_playing { "on" } else { "off" });
             publish(&mut out_tx,
                 0_i64,
                 is_playing,
@@ -202,8 +197,10 @@ async fn visualizer_worker(
                 Visualization::NoVisualization,
                 VizPayload::NoVisualization {});
         }
-
-        if !(enabled && is_playing) {
+        */
+        
+        // if not ebabled or playing - nap then continue
+        if !enabled || !is_playing {
             sleep(POLL_IDLE).await;
             continue;
         }
@@ -215,10 +212,10 @@ async fn visualizer_worker(
             }
 
             // Build / refresh spectrum engine lazily (for histogram modes)
-            let need_bands = SPECTRUM_POWER_MAP_MAX as usize;
+            let need_bands = SPECTRUM_BANDS_COUNT as usize;
             match &mut eng {
                 Some(e) => e.ensure(frame.sample_rate, left.len()),
-                None    => eng = Some(SpectrumEngine::new(frame.sample_rate, left.len(), need_bands)),
+                None => eng = Some(SpectrumEngine::new(frame.sample_rate, left.len(), need_bands)),
             }
 
             // Compute per chosen viz
@@ -251,12 +248,13 @@ async fn visualizer_worker(
                     let mut l_level = db_to_level(l_db);
                     let mut r_level = db_to_level(r_db);
                     // peak-hold with decay
-                    peak_hold_l = peak_hold_l.saturating_sub(DECAY).max(l_level);
-                    peak_hold_r = peak_hold_r.saturating_sub(DECAY).max(r_level);
-                    // clamp to range
+                    peak_hold_l = peak_hold_l.saturating_sub(DECAY_STEPS_PER_FRAME).max(l_level);
+                    peak_hold_r = peak_hold_r.saturating_sub(DECAY_STEPS_PER_FRAME).max(r_level);
+                    
+                    // clamp to range - REVIEW! tweak a tad as we're getting a whole bunch of clipping
                     l_level = l_level.min(PEAK_METER_LEVELS_MAX);
                     r_level = r_level.min(PEAK_METER_LEVELS_MAX);
-
+                 
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::PeakStereo {
                             l_level, r_level,
@@ -269,7 +267,7 @@ async fn visualizer_worker(
                     let (pk_r_i16, _) = peak_and_rms(right);
                     let mono_pk_db = dbfs(pk_l_i16.max(pk_r_i16) as f32);
                     let mut level = db_to_level(mono_pk_db);
-                    peak_hold_m = peak_hold_m.saturating_sub(DECAY).max(level);
+                    peak_hold_m = peak_hold_m.saturating_sub(DECAY_STEPS_PER_FRAME).max(level);
                     level = level.min(PEAK_METER_LEVELS_MAX);
 
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
@@ -304,7 +302,7 @@ async fn visualizer_worker(
 
                     let peak_db = dbfs(pk_l_i16.max(pk_r_i16) as f32);
                     let mut level = db_to_level(peak_db);
-                    peak_hold_m = peak_hold_m.saturating_sub(DECAY).max(level);
+                    peak_hold_m = peak_hold_m.saturating_sub(DECAY_STEPS_PER_FRAME).max(level);
                     level = level.min(PEAK_METER_LEVELS_MAX);
 
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
@@ -348,9 +346,6 @@ fn publish(
 /// Same mapping we use for hist levels: dBFS → 0..=PEAK_METER_LEVELS_MAX
 #[inline]
 fn db_to_level(db: f32) -> u8 {
-    // Keep in sync with your vision.rs mapping if you already defined it there.
-    const FLOOR_DB: f32 = -72.0;
-    const CEIL_DB: f32 = 0.0;
     let x = ((db - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0);
-    (x * (PEAK_METER_LEVELS_MAX as f32)).round() as u8
+    (x * PEAK_METER_LEVELS_MAX as f32).round() as u8
 }
