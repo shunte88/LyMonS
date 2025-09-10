@@ -28,19 +28,12 @@ use chrono::{Timelike, DateTime, Local};
 use embedded_graphics::{
     image::{Image, ImageRaw},
     mono_font::{
-        iso_8859_13::{
-            FONT_4X6,
-            FONT_5X8, 
-            FONT_6X10,
-            FONT_7X14,
-            FONT_6X13_BOLD}, 
-        MonoFont, 
-        MonoTextStyle, 
-        MonoTextStyleBuilder
+        ascii::FONT_7X13, iso_8859_13::{
+            FONT_4X6, FONT_5X7, FONT_5X8, FONT_6X10, FONT_6X13_BOLD, FONT_6X9, FONT_7X14}, MonoFont, MonoTextStyle, MonoTextStyleBuilder
     }, 
     pixelcolor::BinaryColor, 
     prelude::*, 
-    primitives::{PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, Circle, Arc as CircleArc, Line}, 
+    primitives::{Arc as CircleArc, Circle, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle}, 
     text::{self, 
         renderer::TextRenderer, 
         Baseline, 
@@ -78,6 +71,7 @@ use std::fs; // move this to svgimage
 use display_interface::DisplayError;
 
 use crate::imgdata;   // imgdata, glyphs and such
+use crate::vuphysics::VuNeedle;   // VU physics
 use crate::constants; // constants
 use crate::climacell; // weather glyphs - need to move to SVG impl.
 use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
@@ -88,9 +82,17 @@ use crate::svgimage::{SvgImageRenderer, SvgImageError};
 use crate::metrics::{MachineMetrics};
 use crate::eggs::{Eggs, set_easter_egg};
 use crate::visualizer::{VizPayload, Visualizer, VizFrameOut};
-use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX, LastVizState};
-use crate::vuphysics::Needle;
-
+use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX, LastVizState, VuArcDigits};
+use crate::draw::{
+    clear_region,
+    draw_line,
+    draw_text,
+    draw_text_region_align,
+    draw_rectangle,
+    draw_circle_from_center,
+    draw_circle,
+    draw_arc,
+};
 
 /// Custom error type for drawing operations that implements `std::error::Error`.
 #[derive(Debug)]
@@ -166,9 +168,30 @@ const CAP_DECAY_LPS: f32 = 64.0;
 const CAP_THICKNESS_PX: u32 = 1;
 
 fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usize) {
+
     let now = Instant::now();
     let mut ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
     let mut ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
+    let mut ensure_vad = |buf: &mut Vec<VuArcDigits>, n: usize| { if buf.len() != n { *buf = vec![VuArcDigits::default(); n]; }};
+
+    ensure_vad(&mut state.vu_arc_digits, 15);
+    ensure_vad(&mut state.vu_arc_pct, 5);
+
+    if state.vu_init {
+        // <--- 45 degrees      -+-      45 degress -->
+        // sweep is 90 in total  |
+        // infinity              |      | -- over --->
+        //        |-20          -3      0            3
+        for (i, &v) in  [-20, -10, -7, -6, -5, -4, -3, -2, -1,  0, 1, 2, 3, 4, 5].iter().enumerate() {
+            state.vu_arc_digits[i].db = v as f32;
+        }
+        // -6 -4 -2 dBminor, remainder dBmajor
+        // %  0      50      80    100  limit stop
+        for (i, &v) in [-21.0, -5.1, -1.0, 0.0, 5.0].iter().enumerate() {
+            state.vu_arc_pct[i].db = v as f32;
+        }
+        state.vu_init = false;
+    }
 
     ensure(&mut state.draw_bands_m, n_m);
     ensure(&mut state.draw_bands_l, n_l);
@@ -262,36 +285,32 @@ where
     let nu_origin = Point::new(origin.x - 1, origin.y - 1);
     let nu_panel_size = Size::new(panel_size.width + 2, panel_size.height + 2);
 
-    Rectangle::new(nu_origin, nu_panel_size)
-        .into_styled(
-            PrimitiveStyleBuilder::new()
-            .fill_color(BinaryColor::Off)
-            .build(),
-        )
-        .draw(display)?;
+    draw_rectangle(
+        display,
+        nu_origin,
+        nu_panel_size.width as u32,
+        nu_panel_size.height as u32,
+        BinaryColor::Off,
+        None, None)
+        .map_err(|e| D::Error::from(e))?;
 
-    let start = Point::new(origin.x, label_pos); 
-    let end = Point::new(origin.x + panel_size.width as i32, label_pos); 
-    let _= Line::new(start, end)
-        .into_styled(PrimitiveStyleBuilder::new()
-            .stroke_width(2)
-            .stroke_color(BinaryColor::On).build())
-        .draw(display)?;
+    let _ = draw_line (
+        display,
+        Point::new(origin.x, origin.y),
+        Point::new(origin.x + panel_size.width as i32, origin.y),
+        BinaryColor::On,
+        2
+    );
 
-    let character_style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
-    let textbox_style = TextBoxStyleBuilder::new()
-        .alignment(HorizontalAlignment::Center)
-        .vertical_alignment(VerticalAlignment::Middle)
-        .build();
-    let label_rect = Rectangle::new(
+    draw_text_region_align(
+        display,
+        label, 
         Point::new(origin.x, label_pos+1), 
-        Size::new(panel_size.width, label_height-2));
-    let label_box = TextBox::with_textbox_style(
-            label, 
-            label_rect, 
-            character_style, 
-            textbox_style);
-    label_box.draw(display)?;
+        Size::new(panel_size.width, label_height-2), 
+        HorizontalAlignment::Center, 
+        VerticalAlignment::Middle, 
+        &FONT_5X8)
+        .map_err(|e| D::Error::from(e))?;
 
     if bars.is_empty() || panel_size.width == 0 || panel_size.height == 0 {
         return Ok(());
@@ -344,23 +363,6 @@ where
     Ok(())
 }
 
-fn draw_arc<D>(
-    display: &mut D,
-    origin: Point,
-    diameter: u32,
-    angle_start: f32,
-    angle_sweep: f32,
-    color: BinaryColor,
-    stroke_width: u32,
-) -> Result<(), D::Error>
-where
-    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
-{
-    CircleArc::new(origin, diameter, angle_start.deg(), angle_sweep.deg())
-    .into_styled(PrimitiveStyle::with_stroke(color, stroke_width))
-    .draw(display)?;
-    Ok(())
-}
 
 // Reuseable helper: draw a single histogram panel
 fn draw_hist_panel<D>(
@@ -373,16 +375,15 @@ where
     D: DrawTarget<Color = BinaryColor> + OriginDimensions,
 {
     // Clear panel area (avoid ghosting on shrink)
-    // this should be done once then use erase/replace pattern for the barsc
-    Rectangle::new(origin, panel_size)
-        .into_styled(
-            PrimitiveStyleBuilder::new()
-            .stroke_color(BinaryColor::On)
-            .stroke_width(1)
-            .fill_color(BinaryColor::Off)
-            .build(),
-        )
-        .draw(display)?;
+    // this should be done once then use erase/replace pattern for the bars
+    draw_rectangle(
+        display,
+        origin,
+        panel_size.width as u32,
+        panel_size.height as u32,
+        BinaryColor::Off,
+        Some(1), Some(BinaryColor::On))
+        .map_err(|e| D::Error::from(e))?;
 
     if bands.is_empty() || panel_size.width == 0 || panel_size.height == 0 {
         return Ok(());
@@ -424,6 +425,234 @@ where
 
 }
 
+fn vu_arc(
+    center: Point,
+    radius: u32,
+    state: &mut LastVizState, // pass-thru
+)
+{
+
+    // if we already populated return
+    if !state.vu_arc_digits[0].label.is_empty() {
+        return;
+    }
+
+    let theta = 90.00 / (2 as f64).sqrt();
+    let mut adj = 0.0;
+    let mut dba = 0.0;
+    const PCT:usize = 5;
+
+    // % scale labeling
+    let mut pctsign = "-";
+    let pctfix: [i32; PCT] = [-47, -23, -5, 0, 50];
+    let pctlbl: [i32; PCT] = [0, 50, 80, 100, 200];
+    for i in 0..state.vu_arc_digits.len() {
+        dba = state.vu_arc_digits[i].db as f64/ 20.00;
+        state.vu_arc_digits[i].label = format!("{:.0}", state.vu_arc_digits[i].db.abs()).clone();
+        state.vu_arc_digits[i].angle = (theta * dba.powf(10.00)) as f32;
+        state.vu_arc_digits[i].color = if state.vu_arc_digits[i].db < 0.0 {1} else {2};
+        state.vu_arc_digits[i].above = (state.vu_arc_digits[i].db >= 0.0);
+        if state.vu_arc_digits[i].db >= 0.0 {
+            state.vu_arc_digits[i].lnudge = if state.wide {-4} else {-9};
+        } else {
+            state.vu_arc_digits[i].lnudge = if state.wide {0} else {6};
+        }
+
+        if state.vu_arc_digits[i].db == -3.0 {
+            adj = state.vu_arc_digits[i].angle; // the vertical position!
+        }
+        if i < PCT {
+            // linear percentile, percent sign first only
+            state.vu_arc_pct[i].label = format!("{}{:.0}", pctsign, pctlbl[i]);
+            pctsign = "";
+            state.vu_arc_pct[i].angle = pctfix[i] as f32;
+            state.vu_arc_pct[i].meterangle = state.vu_arc_pct[i].angle;
+            state.vu_arc_pct[i].color = 1;
+            state.vu_arc_pct[i].above = false;
+            state.vu_arc_pct[i].lnudge = if state.wide {2} else { if i >= PCT - 3 {-4} else {8} };
+        }
+    }
+
+    for i in 0..state.vu_arc_digits.len() {
+        state.vu_arc_digits[i].db = state.vu_arc_digits[i].angle as f32 - adj as f32;
+    }
+
+}
+
+fn draw_vu_scale() {
+    /*
+        // populate meter divisions
+    rMeter -= ((wide) ? 3 : 4);
+    vuArc(xpivot, hMeter, rMeter);
+    const int skipper = 1000;
+    int dBmajor = 2;
+    int dBminor = 1;
+    int rule = 0, pctrule = 0;
+    point_t s0[dBminor];
+    for (int r = 0; r < 3; r++)
+        s0[r].x = skipper;
+    point_t s1[3];
+
+    for (int a = -49; a < 50; a++) {
+        if (a == 18) {
+            dBmajor++;
+            for (int r = 0; r < 3; r++)
+                s0[r].x = skipper;
+        }
+        if (a > 17) {
+            // thick line
+            for (int r = 0; r < 3; r++) {
+                scale(&s0[r], &s1[r], a, xpivot, hMeter,
+                      r + rMeter - ((wide) ? 2 : 3), PAL16_RED);
+            }
+        } else {
+            scale(&s0[0], &s1[0], a, xpivot, hMeter, rMeter - ((wide) ? 2 : 3),
+                  PAL16_WHITE);
+        }
+        // if angle is at a dB scale marker - paint
+        if ((a == trunc(dBVU[rule].meterAngle)) ||
+            (a == round(dBVU[rule].meterAngle))) {
+            int tick = dBmajor;
+            switch ((int)dBVU[rule].db) {
+                case -6:
+                case -4: tick = dBminor; break;
+                default: tick = dBmajor;
+            }
+            scaleTickEx(&dBVU[rule], a, s0[0], xpivot, hMeter, rMeter + tick,
+                        wide, (a > 17) ? PAL16_RED : PAL16_WHITE);
+            rule++;
+        }
+        // if angle is at a % scale marker - paint
+        if ((a == trunc(pctVU[pctrule].meterAngle)) ||
+            (a == round(pctVU[pctrule].meterAngle))) {
+            int tick = 1;
+            scaleTickEx(&pctVU[pctrule], a, s0[0], xpivot, hMeter,
+                        rMeter - tick, wide, pctVU[pctrule].color);
+            pctrule++;
+        }
+    }
+}
+
+     */
+}
+// Reuseable helper: draw a single vu meter panel
+fn draw_vu_panel<D>(
+    display: &mut D,
+    label: &str,
+    label_height: u32,
+    label_pos: i32,
+    origin: Point,
+    panel_size: Size,
+    db: f32,
+    vu_needle: f32,
+    state: &mut LastVizState, // pass-thru
+    horizontal: bool
+) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+
+    // Clear panel area (avoid ghosting on shrink)
+    // this should be done once then use erase/replace pattern for the bars
+    draw_rectangle(
+        display,
+        origin,
+        panel_size.width as u32,
+        panel_size.height as u32,
+        BinaryColor::Off,
+        Some(1), Some(BinaryColor::On))
+        .map_err(|e| D::Error::from(e))?;
+
+    draw_rectangle(
+        display,
+        Point::new(origin.x, label_pos-1), 
+        panel_size.width as u32,
+        label_height as u32,
+        BinaryColor::Off,
+        Some(2), Some(BinaryColor::On))
+        .map_err(|e| D::Error::from(e))?;
+
+    let w = panel_size.width as i32;
+    let h = panel_size.height as i32;
+
+    draw_text_region_align(
+        display,
+        label, 
+        Point::new(origin.x+2, label_pos+1), 
+        Size::new(panel_size.width, label_height-2), 
+        HorizontalAlignment::Left, 
+        VerticalAlignment::Middle, 
+        &FONT_4X6)
+        .map_err(|e| D::Error::from(e))?;
+    draw_circle_from_center(
+        display, 
+        Point::new(origin.x + w / 2, label_pos - 1 + label_height as i32 / 2), 
+        (w / 4) as i32, 
+        PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+        .map_err(|e| D::Error::from(e))?;
+    let mut limit = -4 + panel_size.height as i32 / 2;
+    draw_text_region_align(
+        display,
+        "-", 
+        Point::new(origin.x + 4, limit), 
+        Size::new(w as u32 - 8, 6), 
+        HorizontalAlignment::Left, 
+        VerticalAlignment::Middle, 
+        &FONT_4X6)
+        .map_err(|e| D::Error::from(e))?;
+    draw_text_region_align(
+        display,
+        "+", 
+        Point::new(origin.x + 4, limit), 
+        Size::new(w as u32 - 8, 6), 
+        HorizontalAlignment::Right, 
+        VerticalAlignment::Middle, 
+        &FONT_4X6)
+        .map_err(|e| D::Error::from(e))?;
+    // led over
+    let led_fill = if db>4.0 { BinaryColor::On} else {BinaryColor::Off}; 
+    draw_circle(
+        display, 
+        Point::new(origin.x + panel_size.width as i32 - 9, origin.y + 6), 
+        8, 
+        BinaryColor::On, 
+        1, 
+        led_fill)
+        .map_err(|e| D::Error::from(e))?;
+    limit += 10;
+    //draw_rectangle(
+    //    display,
+    //    Point::new(origin.x + 4, limit),
+    //    panel_size.width - 8, 15,
+    //    BinaryColor::Off,None, None
+    //)
+    //.map_err(|e| D::Error::from(e))?;
+
+    draw_text(
+        display, format!("{:>7.2}", db).as_str(),
+        origin.x + 4, limit,
+        &FONT_6X10)
+        .map_err(|e| D::Error::from(e))?;
+    limit += 12;
+    //draw_rectangle(
+    //    display,
+    //    Point::new(origin.x + 4, limit),
+    //    panel_size.width - 8, 15,
+    //    BinaryColor::Off,None, None
+    //)
+    //.map_err(|e| D::Error::from(e))?;
+
+    draw_text(
+        display, format!("{:>7.2}", vu_needle).as_str(),
+        origin.x + 4, limit,
+        &FONT_6X10)
+        .map_err(|e| D::Error::from(e))?;
+
+
+    Ok(())
+
+}
+
 /// Represents the audio bitrate mode for displaying the correct glyph.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AudioBitrate {
@@ -443,7 +672,6 @@ pub enum RepeatMode {
 }
 
 fn map_repeat_mode(mode: u8) -> RepeatMode {
-    //println!("repeat is {mode:#?}");
     match mode {
         0 => RepeatMode::Off,
         1 => RepeatMode::RepeatAll,
@@ -462,7 +690,6 @@ pub enum ShuffleMode {
 }
 
 fn map_shuffle_mode(mode: u8) -> ShuffleMode {
-    //println!("shuffle is {mode:#?}");
     match mode {
         0 => ShuffleMode::Off,
         1 => ShuffleMode::ByTracks,
@@ -600,6 +827,12 @@ impl OledDisplay {
         let main_font = &FONT_5X8; // Use FONT_5X8 as the default for scrolling lines
         let real_scroll_mode = transform_scroll_mode(scroll_mode);
 
+        let wide = display.size().width > 128;
+        let mut state = LastVizState::default();
+        state.wide = wide;
+        // initialize vu scale - minimize heavy lifting at vizualization stage - should be nsec but hey...
+        ensure_band_state(&mut state, 0, 0, 0);
+
         // Create TextScrollers for lines 1 to 4 (index 1 to 4 in a 0-indexed array)
         // Line 0 is status, Line 5 is player info.
         for i in 1..(constants::MAX_LINES - 1) { // Lines 1, 2, 3, 4
@@ -658,7 +891,7 @@ impl OledDisplay {
             show_metrics,
             device_metrics: MachineMetrics::default(),
             viz_init_clear: true,
-            last_viz_state: LastVizState::default(),
+            last_viz_state: state,
         })
 
     }
@@ -668,6 +901,11 @@ impl OledDisplay {
         self.weather_data_arc = Some(weather_client);
     }
 
+    pub fn clear_flushable_buffer(&mut self) {
+        self.display.clear_buffer();
+        self.display.flush().unwrap();
+    
+    }
     /// Clears the display buffer.
     pub fn clear(&mut self) {
         self.display.clear_buffer();
@@ -812,69 +1050,16 @@ impl OledDisplay {
                     self.put_eggy_svg("Bonnie Barrow", "My Dingo, My Love",2, pct, i as f32, 0, 0)
                     .await
                     .unwrap();
-                    self.flush().unwrap();
+                    self.display.flush().unwrap();
                     sleep(Duration::from_millis(50));
                 }
             }
             self.easter_egg = save_egg;
 
             self.clear();
-            self.flush().unwrap();
+            self.display.flush().unwrap();
 
         }
-    }
-
-    fn draw_text_region_align_internal<D>(
-        display: &mut D, 
-        text: &str, 
-        top_left: Point, 
-        size: Size, 
-        halign: HorizontalAlignment, 
-        valign: VerticalAlignment, 
-        font: &MonoFont
-    ) -> Result<(), D::Error> 
-    where
-        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
-    {
-        let character_style = MonoTextStyle::new(font, BinaryColor::On);
-        let textbox_style = TextBoxStyleBuilder::new()
-        .alignment(halign)
-        .vertical_alignment(valign)
-        .build();
-        let label_rect = Rectangle::new(top_left, size);
-        let label_box = TextBox::with_textbox_style(
-            text, 
-            label_rect, 
-            character_style, 
-            textbox_style);
-        label_box.draw(display)?;
-        Ok(())
-    }
-
-    fn draw_text_region_align(
-        &mut self, 
-        text: &str, 
-        top_left: Point, 
-        size: Size, 
-        halign: HorizontalAlignment, 
-        valign: VerticalAlignment, 
-        font: &MonoFont
-    ) -> Result<(), DisplayDrawingError> {
-   
-        let character_style = MonoTextStyle::new(font, BinaryColor::On);
-        let textbox_style = TextBoxStyleBuilder::new()
-        .alignment(halign)
-        .vertical_alignment(valign)
-        .build();
-        let label_rect = Rectangle::new(top_left, size);
-        let label_box = TextBox::with_textbox_style(
-            text, 
-            label_rect, 
-            character_style, 
-            textbox_style);
-        label_box.draw(&mut self.display)?;
-        Ok(())
-
     }
 
     /// Displays IP and MAC address.
@@ -887,17 +1072,18 @@ impl OledDisplay {
         self.set_brightness(255).unwrap();
         self.display.clear_buffer();
         let mut y = 6;
-        self.draw_line(1, Point::new(2, y), Point::new(124, y), BinaryColor::On).unwrap();
+        draw_line(&mut self.display,Point::new(2, y), Point::new(124, y), BinaryColor::On, 1).unwrap();
         y += 3;
         for text in [inet, eth0_mac_addr, wlan0_mac_addr] {            
-            self.draw_text_region_align(
+            draw_text_region_align(
+                &mut self.display,
                 text, 
                 Point::new(2, y), Size::new(124,10), 
                 HorizontalAlignment::Center, VerticalAlignment::Middle, 
                 &FONT_6X10).unwrap();
             y += 13;
         }
-        self.draw_line(1, Point::new(2, y), Point::new(124, y), BinaryColor::On).unwrap();
+        draw_line(&mut self.display,Point::new(2, y), Point::new(124, y), BinaryColor::On, 2).unwrap();
         self.display.flush().unwrap();
 
         sleep(Duration::from_millis(2500));
@@ -926,11 +1112,11 @@ impl OledDisplay {
             self.display.flush().unwrap();
 
             let mut x = (constants::DISPLAY_WIDTH - (6*version.chars().count() as u32)) / 2;
-            self.draw_text(version, x as i32, constants::PLAYER_TRACK_INFO_LINE_Y_POS-17,Some(&FONT_6X13_BOLD)).unwrap();
+            draw_text(&mut self.display, version, x as i32, constants::PLAYER_TRACK_INFO_LINE_Y_POS-17,&FONT_6X13_BOLD).unwrap();
             x = (constants::DISPLAY_WIDTH - (5*build_date.chars().count() as u32)) / 2;
-            self.draw_text(build_date, x as i32, constants::PLAYER_TRACK_INFO_LINE_Y_POS,Some(&FONT_5X8)).unwrap();
+            draw_text(&mut self.display, build_date, x as i32, constants::PLAYER_TRACK_INFO_LINE_Y_POS,&FONT_5X8).unwrap();
     
-            self.flush()?; // Flush to display - yes at zero brightness
+            self.display.flush().unwrap(); // Flush to display - yes at zero brightness
 
             const FADE_DURATION_MS: u64 = 3500;
             const FADE_STEPS: u8 = 60; // More steps for smoother fade
@@ -955,12 +1141,6 @@ impl OledDisplay {
 
     }
 
-    /// Flushes the buffer to the display, making changes visible.
-    pub fn flush(&mut self) -> Result<(), DisplayDrawingError> {
-        self.display.flush().map_err(|e| DisplayDrawingError::DrawingFailed(e))?;
-        Ok(())
-    }
-
     /// Calculates the width of the given text in pixels using the provided font.
     // This is a static/associated function, not a method, so it doesn't borrow self.
     fn get_text_width_specific_font(text: &str, font: &MonoFont) -> u32 {
@@ -971,64 +1151,6 @@ impl OledDisplay {
     /// Calculates the width of the given text in pixels using either the custom font or the default.
     fn get_text_width(&self, text: &str) -> u32 {
         self.default_mono_style.measure_string(text, Point::zero(), Baseline::Top).bounding_box.size.width
-    }
-
-    // This is now an internal helper, but also matches the DisplaySurface trait method.
-    fn flush_internal(display: &mut Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>) -> Result<(), DisplayDrawingError> {
-        display.flush()
-            .map_err(DisplayDrawingError::DrawingFailed)?;
-        Ok(())
-    }
-
-    // This is now an internal helper, but also matches the DisplaySurface trait method.
-    fn draw_text_internal<D>(
-        display: &mut D, 
-        text: &str, 
-        x: i32, y: i32, 
-        font: &MonoFont
-    ) -> Result<(), D::Error> 
-    where
-        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
-    {
-        Text::with_baseline(
-            text,
-            Point::new(x, y),
-            MonoTextStyleBuilder::new().font(font).text_color(BinaryColor::On).build(),
-            Baseline::Top,
-        )
-        .draw(display) // Draw on the passed mutable display reference
-        .map_err(|e|D::Error::from(e))?;
-        Ok(())
-    }
-    
-    // Public draw_text that can take optional font for backward compatibility with splash/other places
-    pub fn draw_text(&mut self, text: &str, x: i32, y: i32, font_opt: Option<&'static MonoFont>) -> Result<(), DisplayDrawingError> {
-        let font = font_opt.unwrap_or(&FONT_5X8); // Default font if none provided
-        Self::draw_text_internal(&mut self.display, text, x, y, font) // Call the refactored internal method
-            .map_err(|e| DisplayDrawingError::from(e))
-    }
-    
-    /// Clears a rectangular region of the display buffer to background color (BinaryColor::Off).
-    fn clear_region<D>(
-        display: &mut D,
-        region: Rectangle
-    ) -> Result<(), D::Error> 
-    where
-        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
-    {
-        region
-            .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
-            .draw(display) // Draw on the passed mutable display reference
-            .map_err(|e|D::Error::from(e))?;
-        Ok(())
-    }
-
-    fn draw_line(&mut self, width: u32, start: Point, end: Point, color: BinaryColor) -> Result<(), Box<dyn std::error::Error>> {
-        let _= Line::new(start, end)
-            .into_styled(PrimitiveStyleBuilder::new().stroke_width(width).stroke_color(color).build())
-            .draw(&mut self.display)
-            .map_err(DisplayDrawingError::DrawingFailed);
-        Ok(())
     }
 
     pub async fn setup_visualizer(&mut self, viz_type: &str, rx: watch::Receiver<bool>) -> Result<(), Box<dyn std::error::Error>> {
@@ -1140,48 +1262,6 @@ impl OledDisplay {
             .ok_or_else(|| DisplayDrawingError::Other(format!("Character '{}' not found in current clock font.", char_to_draw)))?;
 
         Image::new(char_image_raw, Point::new(x, y))
-            .draw(&mut self.display)
-            .map_err(DisplayDrawingError::DrawingFailed)?;
-        Ok(())
-    }
-
-    fn draw_rectangle_internal<D>(
-        display: &mut D, 
-        top_left: Point, w:u32, h:u32, fill:BinaryColor, border_width:Option<u32>, border_color:Option<BinaryColor>
-    ) -> Result<(), D::Error> 
-    where 
-        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
-    {
-        Rectangle::new(top_left,
-            Size::new(w, h))
-            .into_styled(
-                PrimitiveStyleBuilder::new()
-                .stroke_color(if border_color.is_some() { border_color.unwrap() } else {BinaryColor::Off})
-                .stroke_width(if border_width.is_some() { border_width.unwrap() } else {0})
-                .fill_color(fill)
-                .build(),
-            )
-            .draw(display)?;
-        Ok(())
-    }
-
-    pub fn draw_rectangle(
-        &mut self,
-        top_left: Point,
-        w:u32, h:u32,
-        fill: BinaryColor, 
-        border_width: Option<u32>, 
-        border_color: Option<BinaryColor>
-    ) -> Result<(), DisplayDrawingError> {    
-        Rectangle::new(top_left,
-            Size::new(w, h))
-            .into_styled(
-                PrimitiveStyleBuilder::new()
-                .stroke_color(if border_width.is_some() { border_color.unwrap() } else {BinaryColor::Off})
-                .stroke_width(if border_width.is_some() { border_width.unwrap() } else {0})
-                .fill_color(fill)
-                .build(),
-            )
             .draw(&mut self.display)
             .map_err(DisplayDrawingError::DrawingFailed)?;
         Ok(())
@@ -1305,7 +1385,7 @@ impl OledDisplay {
 
     /// Updates and draws the clock on the display. Only flushes if changes occurred.
     /// This method is intended to be called frequently (e.g., every frame or second).
-    pub fn update_and_draw_clock(&mut self, current_time: DateTime<Local>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn update_and_draw_clock(&mut self, current_time: DateTime<Local>) -> Result<(), DisplayDrawingError> {
 
         let mut needs_flush = false; // No longer clear the entire buffer for each clock update to maintain persistence.
 
@@ -1378,15 +1458,16 @@ impl OledDisplay {
 
             if char_changed || colon_state_changed {
                 // blanking rectangle
-                self.draw_rectangle(
+                draw_rectangle(
+                    &mut self.display,
                     Point::new(x_offset, y_offset),
                     self.clock_font.digit_width, self.clock_font.digit_height,
                     BinaryColor::Off,
-                None, None)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                    None, None)
+                    .map_err(|e| DisplayDrawingError::from(e))?;
                 // and draw the clock character
                 self.draw_custom_clock_char(current_char_for_position, x_offset, y_offset)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                    .map_err(|e| DisplayDrawingError::from(e))?;
                 
                 self.last_clock_digits[i] = current_char_for_position;
                 needs_flush = true;
@@ -1402,14 +1483,15 @@ impl OledDisplay {
 
         if current_second_fidelity != self.last_second_drawn {
 
-            self.draw_rectangle(
+            draw_rectangle(
+                &mut self.display,
                 Point::new(progress_bar_x, progress_bar_y),
                 progress_bar_width_total as u32, progress_bar_height,
                 BinaryColor::Off,
                 Some(border_thickness as u32),
                 Some(BinaryColor::On)
             )
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            .map_err(|e| DisplayDrawingError::from(e))?;
 
             // Calculate the filled width based on seconds (0.0000 to 59.99999)
             // Maps to a fill ratio from 0.0 to 1.0
@@ -1422,12 +1504,13 @@ impl OledDisplay {
 
             // Draw the filled part of the progress bar if there's actual fill to show
             if inner_fill_width > 0 {
-                self.draw_rectangle(
+                draw_rectangle(
+                    &mut self.display,
                     Point::new(progress_bar_x+ border_thickness, progress_bar_y+ border_thickness),
                     inner_fill_width as u32, inner_height,
                     BinaryColor::On,None, None
                 )
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                .map_err(|e| DisplayDrawingError::from(e))?;
             }
             self.last_second_drawn = current_second_fidelity;
             needs_flush = true; // Mark for flush if progress bar updated
@@ -1439,14 +1522,17 @@ impl OledDisplay {
         let date_x_pos = (constants::DISPLAY_WIDTH as i32 - date_text_width as i32) / 2;
 
         if current_date_string != self.last_date_drawn {
-            self.draw_rectangle(
+
+            // rtool to region
+            draw_rectangle(
+                &mut self.display,
                 Point::new(0, date_y),
                 constants::DISPLAY_WIDTH, constants::DATE_FONT_HEIGHT,
                 BinaryColor::Off,None, None
             )
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            .map_err(|e| DisplayDrawingError::from(e))?;
 
-            self.draw_text(&current_date_string,date_x_pos-4, date_y, Some(&FONT_6X10))?;
+            draw_text(&mut self.display, &current_date_string,date_x_pos-4, date_y, &FONT_6X10).unwrap();
 
             self.last_date_drawn = current_date_string;
             needs_flush = true;
@@ -1460,20 +1546,21 @@ impl OledDisplay {
                 let buff = format!("{:>3}% {:>2.1}C", 
                     metrics.cpu_load as u8, 
                     metrics.cpu_temp);
-                self.draw_rectangle(
+                draw_rectangle(
+                    &mut self.display,
                     Point::new(0, metrics_y),
                     constants::DISPLAY_WIDTH, 6,
                     BinaryColor::Off,None, None
                 )
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-                self.draw_text(&buff,2, metrics_y, Some(&FONT_4X6))?;
+                .map_err(|e| DisplayDrawingError::from(e))?;
+                draw_text(&mut self.display, &buff,2, metrics_y, &FONT_4X6).unwrap();
                 needs_flush = true;
             }
 
         }
 
         if needs_flush {
-            self.flush()?;
+            self.display.flush().unwrap();
         }
         Ok(())
 
@@ -1500,14 +1587,66 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        let raw_image = ImageRaw::<BinaryColor>::new(imgdata::VU2UP_RAW_DATA, 128);
-        Image::new(&raw_image, Point::new(0, 0))
-            .draw(display)
-            .map_err(|e| D::Error::from(e))?;
-        let xpos = 128 / 3;
-        Self::draw_text_internal(display, format!("{:<5.1}", l_db).as_str(), xpos, 32,&FONT_5X8)?; 
-        Self::draw_text_internal(display, format!("{:<5.1}", r_db).as_str(), 2*xpos, 32,&FONT_5X8)?;
+
+        // initialize vu scale attributes
+        ensure_band_state(state, 0, 0, 0);
+
+        let changed = 
+            state.last_metric[0] != l_db as i32 ||
+            state.last_metric[1] != r_db as i32;
+
+
+        // save the latest inputs
+        state.last_db_l = l_db;
+        state.last_db_r = r_db;
+
+        // if nothing would change on screen, skip work (non-blocking)
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        let vu_needle_l = VuNeedle::new_vu().update_db(l_db, state.vu_arc_digits[0].db,state.vu_arc_digits[state.vu_arc_digits.len()-1].db, 1.0);
+        let vu_needle_r = VuNeedle::new_vu().update_db(r_db, state.vu_arc_digits[0].db,state.vu_arc_digits[state.vu_arc_digits.len()-1].db, 1.0);
+
+        // layout horizontal (h=true)
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        if w <= 6 || h <= 4 { return Ok(false); }
+
+        let mx = 3;
+        let my = 6;
+        let title_base = 10;
+        let gap = 2;
+        let inner_w = w - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+        let title_pos = h - title_base;
+        let pane_w = (inner_w - gap) / 2;
+
+        draw_vu_panel(
+            display,
+            "VU:L", title_base as u32, title_pos,
+            Point::new(mx, my),
+            Size::new(pane_w as u32, inner_h as u32),
+            state.last_db_l,
+            vu_needle_l,
+            state,
+            true
+        ).map_err(|e| D::Error::from(e))?;
+
+        draw_vu_panel(
+            display,
+            "VU:R", title_base as u32, title_pos,
+            Point::new(mx + pane_w + gap, my),
+            Size::new(pane_w as u32, inner_h as u32),
+            state.last_db_r,
+            vu_needle_r,
+            state,
+            true
+        ).map_err(|e| D::Error::from(e))?;
+
         Ok(true)
+
     }
 
     fn draw_viz_combi<D>(
@@ -1602,7 +1741,7 @@ impl OledDisplay {
                     BinaryColor::On
                 } else {
                     BinaryColor::Off};
-                Self::draw_rectangle_internal(
+                draw_rectangle(
                     display,
                     Point::new(xpos, ypos[c] as i32),
                     nodew, hbar,
@@ -1659,7 +1798,7 @@ impl OledDisplay {
             } else {
                 BinaryColor::Off
             };
-            Self::draw_rectangle_internal(
+            draw_rectangle(
                 display,
                 Point::new(xpos, ypos),
                 nodew, hbar,
@@ -1765,23 +1904,7 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-
-        // 1) Ensure state capacity/length matches current inputs
-        let n_l = bands_l.len();
-        let n_r = bands_r.len();
-
-        if state.draw_bands_l.len() != n_l {
-            state.draw_bands_l = vec![0; n_l];
-        }
-        if state.draw_bands_r.len() != n_r {
-            state.draw_bands_r = vec![0; n_r];
-        }
-        if state.last_bands_l.len() != n_l {
-            state.last_bands_l = vec![0; n_l];
-        }
-        if state.last_bands_r.len() != n_r {
-            state.last_bands_r = vec![0; n_r];
-        }
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0);
 
         // 2) Save the latest inputs (debug/inspection)
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1794,7 +1917,7 @@ impl OledDisplay {
 
         let ticks = (elapsed.as_millis() / (HIST_DECAY_TICK.as_millis().max(1))) as u32;
         let decay_steps: u8 = (ticks as u8).saturating_mul(HIST_DECAY_PER_TICK).max(1);
-        // If you prefer *strictly time-based* decay (no redraws = no decay), remove `.max(1)`.
+        // for *strictly time-based* decay (no redraws = no decay), remove `.max(1)`.
 
         // 4) Update draw bands with "rise fast, fall slow" rule; track if anything changed
         let mut changed = false;
@@ -1994,7 +2117,7 @@ impl OledDisplay {
                     self.last_viz_state = state;
                 //}
                 if need_flush {
-                    Self::flush_internal(&mut self.display).unwrap();
+                    self.display.flush().unwrap();
                 }
             }
 //        }
@@ -2053,25 +2176,25 @@ impl OledDisplay {
 
             for (label, glyph_idx) in [(curr_feels_temp, 0), (humidity, 2), (wind_speed, 1), (pop, 3)] {
                 let (height, font, ty) = if glyph_idx == 0 {
-                    (glyph_w+2, &FONT_6X13_BOLD, text_y)} else {(glyph_w, &FONT_6X10, text_y-1)};
+                    (glyph_w+2, &FONT_6X13_BOLD, text_y)} else {(glyph_w, &FONT_5X8, text_y-1)};
                 let _glyph = ImageRaw::<BinaryColor>::new(
                     imgdata::get_glyph_slice(
                         climacell::THERMO_RAW_DATA, 
                         glyph_idx as usize, glyph_w as u32, glyph_w as u32),glyph_w as u32);
                 Image::new(&_glyph, Point::new(glyph_x, ty))
                     .draw(&mut self.display).unwrap();
-                    Self::draw_text_region_align_internal(
-                        &mut self.display,
-                        label.as_str(), 
-                        Point::new(text_x, text_y), Size::new(124-text_x as u32,height as u32),
-                        HorizontalAlignment::Left, VerticalAlignment::Middle, 
-                        font
-                    ).unwrap();
-                    text_y += if glyph_idx == 0 { 13 } else { 10 };
+                draw_text_region_align(
+                    &mut self.display,
+                    label.as_str(), 
+                    Point::new(text_x, text_y), Size::new(124-text_x as u32,height as u32),
+                    HorizontalAlignment::Left, VerticalAlignment::Middle, 
+                    font
+                ).unwrap();
+                text_y += if glyph_idx == 0 { 13 } else { 10 };
             }
 
             text_y += 1;
-            Self::draw_text_region_align_internal(
+            draw_text_region_align(
                 &mut self.display,
                 conditions.as_str(), 
                 Point::new(2, text_y), Size::new(constants::DISPLAY_WIDTH as u32 - 4, 14),
@@ -2109,7 +2232,7 @@ impl OledDisplay {
 
                     day_y += icon_w as i32 + 1;
 
-                    Self::draw_rectangle_internal(
+                    draw_rectangle(
                         &mut self.display,
                         Point::new(icon_x-4, day_y-2),
                         icon_w + 6, 9,
@@ -2120,10 +2243,10 @@ impl OledDisplay {
                     // Draw Day of Week (left-aligned)
                     let day_width = Self::get_text_width_specific_font(&day_of_week, &FONT_4X6);
                     let day_x = icon_x + ((icon_w as i32 - day_width as i32) / 2);
-                    Self::draw_text_internal(&mut self.display,&day_of_week, day_x, day_y, &FONT_4X6)?;
+                    draw_text(&mut self.display,&day_of_week, day_x, day_y, &FONT_4X6)?;
 
                     day_y += 9;
-                    Self::draw_rectangle_internal(
+                    draw_rectangle(
                         &mut self.display,
                         Point::new(icon_x-4, day_y-3),
                         icon_w + 6, 18,
@@ -2134,13 +2257,13 @@ impl OledDisplay {
                     // Draw Min/Max Temp (right-aligned)
                     let temp_width = Self::get_text_width_specific_font(&min_max_temp, &FONT_4X6);
                     let temp_x = icon_x + ((icon_w as i32 - temp_width as i32) / 2);
-                    Self::draw_text_internal(&mut self.display,&min_max_temp, temp_x, day_y, &FONT_4X6)?;
+                    draw_text(&mut self.display,&min_max_temp, temp_x, day_y, &FONT_4X6)?;
 
                     // and POP
                     day_y += 7;
                     let pop_width = Self::get_text_width_specific_font(&pop, &FONT_4X6);
                     let pop_x = icon_x + ((icon_w as i32 - pop_width as i32) / 2);
-                    Self::draw_text_internal(&mut self.display,&pop, pop_x, day_y, &FONT_4X6)?;
+                    draw_text(&mut self.display,&pop, pop_x, day_y, &FONT_4X6)?;
 
                     icon_x += icon_w as i32 + 6; // next day forecast position
 
@@ -2150,7 +2273,7 @@ impl OledDisplay {
         }
 
         if needs_flush {
-            Self::flush_internal(&mut self.display).unwrap();
+            self.display.flush().unwrap();
         }
         Ok(())
 
@@ -2170,7 +2293,7 @@ impl OledDisplay {
             tl.y)
         .await?;
         // hand the text output here
-        self.flush()?;
+        self.display.flush().unwrap();
         Ok(())
     }
 
@@ -2228,7 +2351,7 @@ impl OledDisplay {
                     format!("{:>3}%", self.volume_percent) // Right justified 3-digit number + '%'
                 };
                 
-                self.draw_text(&vol_text, current_x, constants::DISPLAY_REGION_Y_OFFSET, None)?;
+                draw_text(&mut self.display, &vol_text, current_x, constants::DISPLAY_REGION_Y_OFFSET, &FONT_5X8).unwrap();
 
                 // 2. Shuffle Glyph
                 let shuffle_glyph_data = if self.shuffle_mode == ShuffleMode::ByTracks {
@@ -2266,7 +2389,7 @@ impl OledDisplay {
                 let mut right_block_x = constants::DISPLAY_REGION_X_OFFSET + constants::DISPLAY_REGION_WIDTH as i32 - total_right_elements_width;
 
                 // Draw bitrate text
-                self.draw_text(&self.bitrate_text.clone(),right_block_x, constants::DISPLAY_REGION_Y_OFFSET, None)?;
+                draw_text(&mut self.display, &self.bitrate_text.clone(),right_block_x, constants::DISPLAY_REGION_Y_OFFSET, &FONT_5X8).unwrap();
 
                 right_block_x += bitrate_text_width;
 
@@ -2294,14 +2417,15 @@ impl OledDisplay {
 
                 if progress_bar_changed {
                     // draw progress bar
-                    self.draw_rectangle(
+                    draw_rectangle(
+                        &mut self.display,
                         Point::new(player_progress_bar_x, player_progress_bar_y),
                         constants::PLAYER_PROGRESS_BAR_WIDTH, constants::PLAYER_PROGRESS_BAR_HEIGHT,
                         BinaryColor::Off,
                         Some(constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS), 
                         Some(BinaryColor::On)
                     )
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                    .map_err(|e| DisplayDrawingError::from(e))?;
         
                     // Calculate the filled width
                     let fill_width_pixels = if self.track_duration_secs > 0.00 {
@@ -2317,7 +2441,8 @@ impl OledDisplay {
 
                     // Draw the filled part if there's actual fill to show
                     if inner_fill_width > 0 {
-                        self.draw_rectangle(
+                        draw_rectangle(
+                            &mut self.display,
                             Point::new(
                                 player_progress_bar_x+ constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS as i32, 
                                 player_progress_bar_y+ constants::PLAYER_PROGRESS_BAR_BORDER_THICKNESS as i32),
@@ -2325,7 +2450,7 @@ impl OledDisplay {
                             BinaryColor::On,
                             None, None
                         )
-                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                        .map_err(|e| DisplayDrawingError::from(e))?;
                     }
                     needs_flush = true;
                 }
@@ -2347,18 +2472,17 @@ impl OledDisplay {
                     let region = Rectangle::new(top_left, Size::new(constants::DISPLAY_WIDTH, text_height as u32)); // (x, y), (width, height)
 
                     let current_x_rounded_from_scroller = (scroller_state.current_offset_float).round() as i32;
-                    let main_font = &FONT_5X8; // Use FONT_6X10 as the default for scrolling lines
         
                     // Clear the entire region for this scroller before redrawing
-                    Self::clear_region(&mut self.display, region).unwrap();
+                    clear_region(&mut self.display, region).unwrap();
                     // Draw main text
                     let draw_x_main = x_start + current_x_rounded_from_scroller;
-                    Self::draw_text_internal(&mut self.display, &current_text, draw_x_main, y_start, main_font).unwrap();
+                    draw_text(&mut self.display, &current_text, draw_x_main, y_start, &FONT_5X8).unwrap();
 
                     // For continuous loop, draw a second copy if needed
                     if current_mode == ScrollMode::ScrollLeft {
                         let second_copy_x = draw_x_main + text_width as i32 + GAP_BETWEEN_LOOP_TEXT_FIXED;
-                        Self::draw_text_internal(&mut self.display, &current_text, second_copy_x, y_start, main_font).unwrap();
+                        draw_text(&mut self.display, &current_text, second_copy_x, y_start, &FONT_5X8).unwrap();
                     }
 
                     // Update OledDisplay's record of what was last drawn
@@ -2381,27 +2505,28 @@ impl OledDisplay {
                 if info_line_changed {
 
                     // Clear the entire info line area
-                    self.draw_rectangle(
+                    draw_rectangle(
+                        &mut self.display,
                         Point::new(constants::DISPLAY_REGION_X_OFFSET, info_line_y),
                         constants::DISPLAY_WIDTH, constants::MAIN_FONT_HEIGHT,
                         BinaryColor::Off,None, None
                     )
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                    .map_err(|e| DisplayDrawingError::from(e))?;
 
-                    self.draw_text(&current_time_str,constants::DISPLAY_REGION_X_OFFSET, info_line_y, None)?;
+                    draw_text(&mut self.display, &current_time_str,constants::DISPLAY_REGION_X_OFFSET, info_line_y, &FONT_5X8).unwrap();
 
                     // Draw mode text (centered)
                     let mode_text_width = self.get_text_width(&mode_text) as i32;
                     let mode_text_x = constants::DISPLAY_REGION_X_OFFSET + ((constants::DISPLAY_REGION_WIDTH as i32 - mode_text_width) / 2);
-                    self.draw_text(&self.mode_text.clone(),mode_text_x, info_line_y, None)?;
+                    draw_text(&mut self.display, &self.mode_text.clone(),mode_text_x, info_line_y, &FONT_5X8).unwrap();
 
                     // Draw total or remaining time (right-justified)
                     let rt_time_width = self.get_text_width(&remaining_time_str) as i32;
                     let rt_time_x = constants::DISPLAY_REGION_X_OFFSET + constants::DISPLAY_REGION_WIDTH as i32 - rt_time_width;
                     if self.show_remaining {
-                        self.draw_text(&remaining_time_str,rt_time_x-3, info_line_y, None)?;
+                        draw_text(&mut self.display, &remaining_time_str,rt_time_x-3, info_line_y, &FONT_5X8).unwrap();
                     } else {
-                        self.draw_text(&total_time_str,rt_time_x-3, info_line_y, None)?;
+                        draw_text(&mut self.display, &total_time_str,rt_time_x-3, info_line_y, &FONT_5X8).unwrap();
                     }
                     self.last_current_track_time_secs = self.current_track_time_secs;
                     self.last_track_duration_secs = self.track_duration_secs;
@@ -2413,7 +2538,7 @@ impl OledDisplay {
                 
                 // Only flush if any drawing operation in this frame necessitated it
                 if needs_flush {
-                    self.flush()?;
+                    self.display.flush().unwrap();
                 }
                 // drain chatter from vizualizer
                 let _ = self.drain_frame_queue().await.unwrap();

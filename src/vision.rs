@@ -28,6 +28,7 @@ use std::fs::OpenOptions;
 use std::io;
 use std::path::PathBuf;
 use std::mem::size_of;
+use std::prelude::v1;
 use log::{info, error};
 use std::ptr;
 use std::sync::atomic::{fence, Ordering};
@@ -53,12 +54,47 @@ const LOCK_TRY_WINDOW_MS: u32 = 5;              // total budget for try-loop
 pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~60 FPS
 pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
 
-/// simple state carried across calls (last metrics + peak-hold)
+/// VU meter arc digits
+#[derive(Debug, PartialEq, Clone)]
+pub struct VuArcDigits {
+    pub label: String,
+    pub db: f32,
+    pub theta: f32,
+    pub angle: f32,
+    pub meterangle: f32,
+    pub color: i16,
+    pub lnudge: i16,
+    pub above: bool,
+}
 
-#[derive(Debug, Clone)]
+impl VuArcDigits {
+    pub fn default() -> Self {
+        Self {
+            label: String::new().clone(),
+            db: 0.0,
+            theta: 0.0,
+            angle: 0.0,
+            meterangle: 0.0,
+            color: 0,
+            lnudge: 0,
+            above: false,
+        }
+    }
+}
+
+/// simple state carried across calls (last metrics + peak-hold)
+#[derive(Debug, PartialEq, Clone)]
 pub struct LastVizState {
+    pub wide: bool,
     pub last_metric: [i32; 2],
     pub hold: [u8; 2],
+
+    pub vu_arc_digits: Vec<VuArcDigits>,
+    pub vu_arc_pct: Vec<VuArcDigits>,
+
+    pub last_db_m: f32,
+    pub last_db_l: f32,
+    pub last_db_r: f32,
 
     // latest inputs (debug/inspection)
     pub last_bands_m: Vec<u8>,
@@ -82,14 +118,23 @@ pub struct LastVizState {
     pub cap_last_update_r: Vec<Instant>,
 
     pub init: bool,
+    pub vu_init: bool,
     pub last_tick: Instant,
 }
 
 impl Default for LastVizState {
+    
     fn default() -> Self {
+
         Self {
+            wide: false,
             last_metric: [i32::MIN; 2],
             hold: [0, 0],
+            vu_arc_digits: Vec::new(),
+            vu_arc_pct: Vec::new(),
+            last_db_m: f32::MIN,
+            last_db_l: f32::MIN,
+            last_db_r: f32::MIN,
             last_bands_m: Vec::new(),
             last_bands_l: Vec::new(),
             last_bands_r: Vec::new(),
@@ -106,6 +151,7 @@ impl Default for LastVizState {
             cap_last_update_l: Vec::new(),
             cap_last_update_r: Vec::new(),
             init: true,
+            vu_init: true,
             last_tick: Instant::now(),
         }
     }

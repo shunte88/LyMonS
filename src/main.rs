@@ -36,6 +36,7 @@ use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
 
 // move these to mod.rs
 //mod singles;
+mod draw;
 mod display;
 mod mac_addr;
 mod metrics;
@@ -336,10 +337,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Main logic loop
         _ = async {
 
-            // clear the display before we dip into
-            // the specifiuc display modes
-            oled_display.clear();
-            oled_display.flush().unwrap();
+            // clear the display before we dip into the specific display modes
+            //oled_display.clear_flushable_buffer();
+
             let egg_type = oled_display.get_egg_type(); // static
 
             loop {
@@ -453,8 +453,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Main application exiting. Clearing display and stopping polling thread.");
 
     // Clear the display on shutdown
-    oled_display.clear();
-    oled_display.flush()?;
+    oled_display.clear_flushable_buffer();
 
     // When `lms_arc` goes out of scope here (at the end of main),
     // its `Drop` implementation will be called, which will attempt to stop the background polling thread.

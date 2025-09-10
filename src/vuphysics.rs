@@ -41,6 +41,13 @@ pub struct Needle {
     pub release_damp_mult: f32,
 }
 
+/// Convenience wrapper that tracks time between calls.
+#[derive(Debug, Clone)]
+pub struct VuNeedle {
+    pub needle: Needle,
+    last_t: Instant,
+}
+
 impl Needle {
     /// Calibrated to feel like a classic VU:
     /// ≈300 ms to ~99% on a step up, ~1–1.5 s return near floor after release.
@@ -90,13 +97,6 @@ impl Needle {
 pub fn db_to_drive(db: f32, floor_db: f32, ceil_db: f32, gamma: f32) -> f32 {
     let norm = ((db - floor_db) / (ceil_db - floor_db)).clamp(0.0, 1.0);
     norm.powf(gamma)
-}
-
-/// Convenience wrapper that tracks time between calls.
-#[derive(Debug, Clone)]
-pub struct VuNeedle {
-    pub needle: Needle,
-    last_t: Instant,
 }
 
 impl VuNeedle {
