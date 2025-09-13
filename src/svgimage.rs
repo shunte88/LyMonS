@@ -40,6 +40,7 @@ use tiny_skia::Pixmap;
 use log::{debug, error};
 use std::{error::Error};
 use std::fmt;
+//use std::fs;
 
 /// Custom error type for SVG rendering operations.
 #[derive(Debug)]

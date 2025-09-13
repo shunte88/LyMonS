@@ -37,8 +37,9 @@ use crate::spectrum::{
 use crate::vision::{
     VisReader, peak_and_rms, dbfs,
     PEAK_METER_LEVELS_MAX, 
-    DECAY_STEPS_PER_FRAME,
-    FLOOR_DB, CEIL_DB,
+    LEVEL_DECAY_STEPS_PER_FRAME,
+    LEVEL_FLOOR_DB, 
+    LEVEL_CEIL_DB,
     // Timings
     POLL_ENABLED,
     POLL_IDLE
@@ -269,8 +270,8 @@ async fn visualizer_worker(
                     let mut l_level = db_to_level(l_db);
                     let mut r_level = db_to_level(r_db);
                     // peak-hold with decay
-                    peak_hold_l = peak_hold_l.saturating_sub(DECAY_STEPS_PER_FRAME).max(l_level);
-                    peak_hold_r = peak_hold_r.saturating_sub(DECAY_STEPS_PER_FRAME).max(r_level);
+                    peak_hold_l = peak_hold_l.saturating_sub(LEVEL_DECAY_STEPS_PER_FRAME).max(l_level);
+                    peak_hold_r = peak_hold_r.saturating_sub(LEVEL_DECAY_STEPS_PER_FRAME).max(r_level);
                     
                     // clamp to range - REVIEW! tweak a tad as we're getting a whole bunch of clipping
                     l_level = l_level.min(PEAK_METER_LEVELS_MAX);
@@ -288,7 +289,7 @@ async fn visualizer_worker(
                     let (pk_r_i16, _) = peak_and_rms(right);
                     let mono_pk_db = dbfs(pk_l_i16.max(pk_r_i16) as f32);
                     let mut level = db_to_level(mono_pk_db);
-                    peak_hold_m = peak_hold_m.saturating_sub(DECAY_STEPS_PER_FRAME).max(level);
+                    peak_hold_m = peak_hold_m.saturating_sub(LEVEL_DECAY_STEPS_PER_FRAME).max(level);
                     level = level.min(PEAK_METER_LEVELS_MAX);
 
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
@@ -323,7 +324,7 @@ async fn visualizer_worker(
 
                     let peak_db = dbfs(pk_l_i16.max(pk_r_i16) as f32);
                     let mut level = db_to_level(peak_db);
-                    peak_hold_m = peak_hold_m.saturating_sub(DECAY_STEPS_PER_FRAME).max(level);
+                    peak_hold_m = peak_hold_m.saturating_sub(LEVEL_DECAY_STEPS_PER_FRAME).max(level);
                     level = level.min(PEAK_METER_LEVELS_MAX);
 
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
@@ -367,6 +368,6 @@ fn publish(
 /// Same mapping we use for hist levels: dBFS → 0..=PEAK_METER_LEVELS_MAX
 #[inline]
 fn db_to_level(db: f32) -> u8 {
-    let x = ((db - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0);
+    let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
     (x * PEAK_METER_LEVELS_MAX as f32).round() as u8
 }

@@ -35,6 +35,10 @@ use std::sync::atomic::{fence, Ordering};
 use std::time::{Duration, Instant};
 use crate::func_timer::FunctionTimer;
 use std::thread::sleep;
+use crate::vuphysics::{
+    VuNeedleNew,   // VU physics
+    VuNeedle       // VU physics
+};
 
 use crate::shm_path::find_squeezelite_shm_path;
 
@@ -44,9 +48,9 @@ pub const PEAK_METER_SCALE_HEADROOM:f32 = 0.8;  // 20% headroom clipping
 pub const METER_CHANNELS:usize = 2;             // Number of metered channels.
 pub const OVERLOAD_PEAKS:u8 = 3;                // Number of consecutive 0dBFS peaks for overload.
 
-pub const FLOOR_DB: f32 = -72.0;                // meter floor
-pub const CEIL_DB: f32 =   0.0;                 // ~0 dBFS
-pub const DECAY_STEPS_PER_FRAME: u8 = 1;        // visual fall rate (levels / frame)
+pub const LEVEL_FLOOR_DB: f32 = -72.0;          // meter floor
+pub const LEVEL_CEIL_DB: f32 =   0.0;           // ~0 dBFS
+pub const LEVEL_DECAY_STEPS_PER_FRAME: u8 = 1;  // visual fall rate (levels / frame)
 const LOCK_TRY_WINDOW_MS: u32 = 5;              // total budget for try-loop
 
 
@@ -85,6 +89,7 @@ impl VuArcDigits {
 /// simple state carried across calls (last metrics + peak-hold)
 #[derive(Debug, PartialEq, Clone)]
 pub struct LastVizState {
+
     pub wide: bool,
     pub last_metric: [i32; 2],
     pub hold: [u8; 2],
@@ -119,6 +124,11 @@ pub struct LastVizState {
 
     pub init: bool,
     pub vu_init: bool,
+
+    pub vu_m: VuNeedle,
+    pub vu_l: VuNeedle,
+    pub vu_r: VuNeedle,
+
     pub last_tick: Instant,
 }
 
@@ -152,6 +162,12 @@ impl Default for LastVizState {
             cap_last_update_r: Vec::new(),
             init: true,
             vu_init: true,
+            //vu_m: VuNeedleNew::new_vu(),
+            //vu_l: VuNeedleNew::new_vu(),
+            //vu_r: VuNeedleNew::new_vu(),
+            vu_m: VuNeedle::new(),
+            vu_l: VuNeedle::new(),
+            vu_r: VuNeedle::new(),
             last_tick: Instant::now(),
         }
     }
@@ -549,13 +565,13 @@ pub fn peak_and_rms(ch: &[i16]) -> (i16, f32) {
 /// Map dBFS to integer meter steps [0..=PEAK_METER_LEVELS_MAX]
 #[inline]
 fn db_to_level(db: f32) -> u8 {
-    let x = ((db - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0);
+    let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
     (x * PEAK_METER_LEVELS_MAX as f32).round() as u8
 }
 /// Map dBFS to integer meter steps [0..=PEAK_METER_LEVELS_MAX] and scaled headroom (20%)
 #[inline]
 fn db_to_level_scale(db: f32) -> u8 {
-    let x = ((db - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0);
+    let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
     (PEAK_METER_SCALE_HEADROOM * x * PEAK_METER_LEVELS_MAX as f32).round() as u8
 }
 

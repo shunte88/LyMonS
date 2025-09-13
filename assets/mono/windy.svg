@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   fill="none"
+   viewBox="0 0 48 48"
+   version="1.1"
+   id="svg2"
+   sodipodi:docname="windy.svg"
+   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2" />
+  <sodipodi:namedview
+     id="namedview2"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="16.625"
+     inkscape:cx="24.030075"
+     inkscape:cy="24"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg2" />
+  <rect
+     x="0.0"
+     y="0.0"
+     width="48.0"
+     height="48.0"
+     fill="#ff0000"
+     stroke="none"
+     data-bg="1"
+     id="rect1" />
+  <path
+     d="M18 28H5v4h13c1.1 0 2 .9 2 2s-.9 2-2 2h-2v4h2c3.31 0 6-2.69 6-6s-2.69-6-6-6Z"
+     fill="#ff0000"
+     stroke="white"
+     stroke-width="1px"
+     id="path1"
+     style="stroke:none;fill:#ffffff;fill-opacity:1" />
+  <path
+     d="M37 22H5v4h32c1.1 0 2 .9 2 2s-.9 2-2 2h-2v4h2c3.31 0 6-2.69 6-6s-2.69-6-6-6Zm-5-8c0-3.31-2.69-6-6-6h-2v4h2c1.1 0 2 .9 2 2s-.9 2-2 2H5v4h21c3.31 0 6-2.69 6-6Z"
+     fill="#ff0000"
+     stroke="white"
+     stroke-width="1px"
+     id="path2"
+     style="fill:#ffffff;fill-opacity:1;stroke:none" />
+</svg>

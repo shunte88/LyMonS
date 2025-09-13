@@ -67,11 +67,21 @@ use tokio::sync::Mutex as TokMutex;
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::sync::mpsc::error::TryRecvError;
-use std::fs; // move this to svgimage
+use tokio::fs;
 use display_interface::DisplayError;
 
 use crate::imgdata;   // imgdata, glyphs and such
-use crate::vuphysics::VuNeedle;   // VU physics
+use crate::vu2up_ssd1309::{
+    draw_vu_face as draw_vu_face_1309,
+    vu_db_to_meter_angle as vu_db_to_meter_angle_1309 
+};
+use crate::vuphysics::{
+    VuNeedleNew,
+    VuNeedle,
+    VU_FLOOR_DB, VU_CEIL_DB, VU_GAMMA, 
+    db_to_drive,
+    needle_tip
+};   // VU physics
 use crate::constants; // constants
 use crate::climacell; // weather glyphs - need to move to SVG impl.
 use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
@@ -89,10 +99,12 @@ use crate::draw::{
     draw_text,
     draw_text_region_align,
     draw_rectangle,
+    draw_rect_with_style,
     draw_circle_from_center,
     draw_circle,
     draw_arc,
 };
+use crate::trig::{cosf, sinf, DEG_TO_RAD};
 
 /// Custom error type for drawing operations that implements `std::error::Error`.
 #[derive(Debug)]
@@ -150,6 +162,7 @@ impl From<crate::svgimage::SvgImageError> for DisplayDrawingError {
         DisplayDrawingError::SvgError(err)
     }
 }
+
 impl From<crate::eggs::EggsError> for DisplayDrawingError {
     fn from(err: crate::eggs::EggsError) -> Self {
         DisplayDrawingError::EggsError(err)
@@ -167,31 +180,11 @@ const CAP_HOLD: Duration = Duration::from_millis(1000);
 const CAP_DECAY_LPS: f32 = 64.0;
 const CAP_THICKNESS_PX: u32 = 1;
 
-fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usize) {
+fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usize, vu_init: bool) {
 
     let now = Instant::now();
     let mut ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
     let mut ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
-    let mut ensure_vad = |buf: &mut Vec<VuArcDigits>, n: usize| { if buf.len() != n { *buf = vec![VuArcDigits::default(); n]; }};
-
-    ensure_vad(&mut state.vu_arc_digits, 15);
-    ensure_vad(&mut state.vu_arc_pct, 5);
-
-    if state.vu_init {
-        // <--- 45 degrees      -+-      45 degress -->
-        // sweep is 90 in total  |
-        // infinity              |      | -- over --->
-        //        |-20          -3      0            3
-        for (i, &v) in  [-20, -10, -7, -6, -5, -4, -3, -2, -1,  0, 1, 2, 3, 4, 5].iter().enumerate() {
-            state.vu_arc_digits[i].db = v as f32;
-        }
-        // -6 -4 -2 dBminor, remainder dBmajor
-        // %  0      50      80    100  limit stop
-        for (i, &v) in [-21.0, -5.1, -1.0, 0.0, 5.0].iter().enumerate() {
-            state.vu_arc_pct[i].db = v as f32;
-        }
-        state.vu_init = false;
-    }
 
     ensure(&mut state.draw_bands_m, n_m);
     ensure(&mut state.draw_bands_l, n_l);
@@ -425,116 +418,59 @@ where
 
 }
 
-fn vu_arc(
-    center: Point,
-    radius: u32,
-    state: &mut LastVizState, // pass-thru
-)
+/// Errors that can happen while placing an SVG on a DrawTarget.
+#[derive(Debug)]
+pub enum PutSvgError<DE> {
+    Io(std::io::Error),
+    Svg(Box<dyn std::error::Error + Send + Sync>),
+    Draw(DE),
+}
+impl<DE: fmt::Debug> fmt::Display for PutSvgError<DE> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PutSvgError::Io(e)   => write!(f, "I/O error: {e}"),
+            PutSvgError::Svg(e)  => write!(f, "SVG error: {e}"),
+            PutSvgError::Draw(e) => write!(f, "draw error: {e:?}"),
+        }
+    }
+}
+
+impl<DE: fmt::Debug> std::error::Error for PutSvgError<DE> {}
+
+/// Direct SVG rendering with scale (no SVG dynamics).
+pub async fn put_svg<D>(
+    target: &mut D,
+    path: &str,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<(), PutSvgError<D::Error>>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
 {
 
-    // if we already populated return
-    if !state.vu_arc_digits[0].label.is_empty() {
-        return;
-    }
+    let data = fs::read_to_string(path).await.map_err(PutSvgError::Io)?;
 
-    let theta = 90.00 / (2 as f64).sqrt();
-    let mut adj = 0.0;
-    let mut dba = 0.0;
-    const PCT:usize = 5;
+    let bytes_per_row = ((width + 7) / 8) as usize;
+    let buffer_size = height as usize * bytes_per_row;
+    let mut buffer = vec![0u8; buffer_size];
 
-    // % scale labeling
-    let mut pctsign = "-";
-    let pctfix: [i32; PCT] = [-47, -23, -5, 0, 50];
-    let pctlbl: [i32; PCT] = [0, 50, 80, 100, 200];
-    for i in 0..state.vu_arc_digits.len() {
-        dba = state.vu_arc_digits[i].db as f64/ 20.00;
-        state.vu_arc_digits[i].label = format!("{:.0}", state.vu_arc_digits[i].db.abs()).clone();
-        state.vu_arc_digits[i].angle = (theta * dba.powf(10.00)) as f32;
-        state.vu_arc_digits[i].color = if state.vu_arc_digits[i].db < 0.0 {1} else {2};
-        state.vu_arc_digits[i].above = (state.vu_arc_digits[i].db >= 0.0);
-        if state.vu_arc_digits[i].db >= 0.0 {
-            state.vu_arc_digits[i].lnudge = if state.wide {-4} else {-9};
-        } else {
-            state.vu_arc_digits[i].lnudge = if state.wide {0} else {6};
-        }
+    let svg_renderer = SvgImageRenderer::new(&data, width, height)
+        .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+    svg_renderer
+        .render_to_buffer(&mut buffer)
+        .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
 
-        if state.vu_arc_digits[i].db == -3.0 {
-            adj = state.vu_arc_digits[i].angle; // the vertical position!
-        }
-        if i < PCT {
-            // linear percentile, percent sign first only
-            state.vu_arc_pct[i].label = format!("{}{:.0}", pctsign, pctlbl[i]);
-            pctsign = "";
-            state.vu_arc_pct[i].angle = pctfix[i] as f32;
-            state.vu_arc_pct[i].meterangle = state.vu_arc_pct[i].angle;
-            state.vu_arc_pct[i].color = 1;
-            state.vu_arc_pct[i].above = false;
-            state.vu_arc_pct[i].lnudge = if state.wide {2} else { if i >= PCT - 3 {-4} else {8} };
-        }
-    }
+    // Blit to target
+    let raw = ImageRaw::<BinaryColor>::new(&buffer, width);
+    Image::new(&raw, Point::new(x, y))
+        .draw(target)
+        .map_err(PutSvgError::Draw)?;
 
-    for i in 0..state.vu_arc_digits.len() {
-        state.vu_arc_digits[i].db = state.vu_arc_digits[i].angle as f32 - adj as f32;
-    }
-
+    Ok(())
 }
 
-fn draw_vu_scale() {
-    /*
-        // populate meter divisions
-    rMeter -= ((wide) ? 3 : 4);
-    vuArc(xpivot, hMeter, rMeter);
-    const int skipper = 1000;
-    int dBmajor = 2;
-    int dBminor = 1;
-    int rule = 0, pctrule = 0;
-    point_t s0[dBminor];
-    for (int r = 0; r < 3; r++)
-        s0[r].x = skipper;
-    point_t s1[3];
-
-    for (int a = -49; a < 50; a++) {
-        if (a == 18) {
-            dBmajor++;
-            for (int r = 0; r < 3; r++)
-                s0[r].x = skipper;
-        }
-        if (a > 17) {
-            // thick line
-            for (int r = 0; r < 3; r++) {
-                scale(&s0[r], &s1[r], a, xpivot, hMeter,
-                      r + rMeter - ((wide) ? 2 : 3), PAL16_RED);
-            }
-        } else {
-            scale(&s0[0], &s1[0], a, xpivot, hMeter, rMeter - ((wide) ? 2 : 3),
-                  PAL16_WHITE);
-        }
-        // if angle is at a dB scale marker - paint
-        if ((a == trunc(dBVU[rule].meterAngle)) ||
-            (a == round(dBVU[rule].meterAngle))) {
-            int tick = dBmajor;
-            switch ((int)dBVU[rule].db) {
-                case -6:
-                case -4: tick = dBminor; break;
-                default: tick = dBmajor;
-            }
-            scaleTickEx(&dBVU[rule], a, s0[0], xpivot, hMeter, rMeter + tick,
-                        wide, (a > 17) ? PAL16_RED : PAL16_WHITE);
-            rule++;
-        }
-        // if angle is at a % scale marker - paint
-        if ((a == trunc(pctVU[pctrule].meterAngle)) ||
-            (a == round(pctVU[pctrule].meterAngle))) {
-            int tick = 1;
-            scaleTickEx(&pctVU[pctrule], a, s0[0], xpivot, hMeter,
-                        rMeter - tick, wide, pctVU[pctrule].color);
-            pctrule++;
-        }
-    }
-}
-
-     */
-}
 // Reuseable helper: draw a single vu meter panel
 fn draw_vu_panel<D>(
     display: &mut D,
@@ -543,24 +479,87 @@ fn draw_vu_panel<D>(
     label_pos: i32,
     origin: Point,
     panel_size: Size,
-    db: f32,
-    vu_needle: f32,
-    state: &mut LastVizState, // pass-thru
-    horizontal: bool
+    sweep_min: i32, // = -48;
+    sweep_max: i32, // = 48;
+    displacement: f32,
+    overload: bool,
 ) -> Result<(), D::Error>
 where
     D: DrawTarget<Color = BinaryColor> + OriginDimensions,
 {
 
     // Clear panel area (avoid ghosting on shrink)
-    // this should be done once then use erase/replace pattern for the bars
-    draw_rectangle(
+    // this should be done once then use erase/replace pattern for the meter (needle)
+    let panel = Rectangle::new(origin, panel_size);
+    let panel_style = 
+        PrimitiveStyleBuilder::new()
+            .stroke_color(BinaryColor::On)
+            .stroke_width(1)
+            .fill_color(BinaryColor::Off)
+            .build();
+    draw_rect_with_style (
         display,
-        origin,
-        panel_size.width as u32,
-        panel_size.height as u32,
-        BinaryColor::Off,
-        Some(1), Some(BinaryColor::On))
+        panel,
+        panel_style)
+        .map_err(|e| D::Error::from(e))?;
+
+    let w = panel_size.width as i32;
+    let h = panel_size.height as i32;
+    // handle downmix and combi - as well as display driver variants here
+    let center = if display.size().width == 128 {
+        let c = draw_vu_face_1309 (
+            display, 
+            panel,
+            sweep_min,
+            sweep_max,
+        )
+        .map_err(|e| D::Error::from(e))?;
+        c
+    } else {
+        Point::new(origin.x as i32 + w/2,label_pos - 1 + label_height as i32 / 2)
+    };
+
+    //let center_y = label_pos - 1 + label_height as i32 / 2;
+    let mut legend_y = center.y + 8;
+    //let needle_len = 8 + panel_size.height as i32 / 2;
+    let (tip, _base) = needle_tip(displacement, center.x, w, center.y);
+
+    draw_text_region_align(
+        display,
+        "-", 
+        Point::new(origin.x + 4, legend_y), 
+        Size::new(w as u32 - 8, 6), 
+        HorizontalAlignment::Left, 
+        VerticalAlignment::Middle, 
+        &FONT_4X6)
+        .map_err(|e| D::Error::from(e))?;
+    draw_text_region_align(
+        display,
+        "+", 
+        Point::new(origin.x + 4, legend_y),
+        Size::new(w as u32 - 8, 6), 
+        HorizontalAlignment::Right, 
+        VerticalAlignment::Middle, 
+        &FONT_4X6)
+        .map_err(|e| D::Error::from(e))?;
+
+    // LED
+    legend_y += 14;
+    let led_fill = if overload { BinaryColor::On} else {BinaryColor::Off}; 
+    draw_circle(
+        display, 
+        Point::new(origin.x + panel_size.width as i32 - 9, legend_y), 
+        8, 
+        BinaryColor::On, 
+        1, 
+        led_fill)
+        .map_err(|e| D::Error::from(e))?;
+
+    // Create a styled line
+    let needle_style = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
+    let _needle = Line::new(center, tip)
+        .into_styled(needle_style)
+        .draw(display)
         .map_err(|e| D::Error::from(e))?;
 
     draw_rectangle(
@@ -572,9 +571,6 @@ where
         Some(2), Some(BinaryColor::On))
         .map_err(|e| D::Error::from(e))?;
 
-    let w = panel_size.width as i32;
-    let h = panel_size.height as i32;
-
     draw_text_region_align(
         display,
         label, 
@@ -584,70 +580,13 @@ where
         VerticalAlignment::Middle, 
         &FONT_4X6)
         .map_err(|e| D::Error::from(e))?;
+
     draw_circle_from_center(
         display, 
-        Point::new(origin.x + w / 2, label_pos - 1 + label_height as i32 / 2), 
+        center, 
         (w / 4) as i32, 
         PrimitiveStyle::with_stroke(BinaryColor::On, 2))
         .map_err(|e| D::Error::from(e))?;
-    let mut limit = -4 + panel_size.height as i32 / 2;
-    draw_text_region_align(
-        display,
-        "-", 
-        Point::new(origin.x + 4, limit), 
-        Size::new(w as u32 - 8, 6), 
-        HorizontalAlignment::Left, 
-        VerticalAlignment::Middle, 
-        &FONT_4X6)
-        .map_err(|e| D::Error::from(e))?;
-    draw_text_region_align(
-        display,
-        "+", 
-        Point::new(origin.x + 4, limit), 
-        Size::new(w as u32 - 8, 6), 
-        HorizontalAlignment::Right, 
-        VerticalAlignment::Middle, 
-        &FONT_4X6)
-        .map_err(|e| D::Error::from(e))?;
-    // led over
-    let led_fill = if db>4.0 { BinaryColor::On} else {BinaryColor::Off}; 
-    draw_circle(
-        display, 
-        Point::new(origin.x + panel_size.width as i32 - 9, origin.y + 6), 
-        8, 
-        BinaryColor::On, 
-        1, 
-        led_fill)
-        .map_err(|e| D::Error::from(e))?;
-    limit += 10;
-    //draw_rectangle(
-    //    display,
-    //    Point::new(origin.x + 4, limit),
-    //    panel_size.width - 8, 15,
-    //    BinaryColor::Off,None, None
-    //)
-    //.map_err(|e| D::Error::from(e))?;
-
-    draw_text(
-        display, format!("{:>7.2}", db).as_str(),
-        origin.x + 4, limit,
-        &FONT_6X10)
-        .map_err(|e| D::Error::from(e))?;
-    limit += 12;
-    //draw_rectangle(
-    //    display,
-    //    Point::new(origin.x + 4, limit),
-    //    panel_size.width - 8, 15,
-    //    BinaryColor::Off,None, None
-    //)
-    //.map_err(|e| D::Error::from(e))?;
-
-    draw_text(
-        display, format!("{:>7.2}", vu_needle).as_str(),
-        origin.x + 4, limit,
-        &FONT_6X10)
-        .map_err(|e| D::Error::from(e))?;
-
 
     Ok(())
 
@@ -756,7 +695,7 @@ pub struct OledDisplay {
     scroll_mode: String,
     weather_data_arc: Option<Arc<TokMutex<Weather>>>, // Reference to the shared weather client
     weather_display_switch_timer: Option<Instant>,
-    last_weather_draw_data: WeatherData, // To track if weather data has changed for redraw
+    last_weather_draw_data: Vec<WeatherData>, // To track if weather data has changed for redraw
     artist: String,
     title: String,
     level: u8,
@@ -831,7 +770,7 @@ impl OledDisplay {
         let mut state = LastVizState::default();
         state.wide = wide;
         // initialize vu scale - minimize heavy lifting at vizualization stage - should be nsec but hey...
-        ensure_band_state(&mut state, 0, 0, 0);
+        ensure_band_state(&mut state, 0, 0, 0, true);
 
         // Create TextScrollers for lines 1 to 4 (index 1 to 4 in a 0-indexed array)
         // Line 0 is status, Line 5 is player info.
@@ -880,7 +819,7 @@ impl OledDisplay {
             scroll_mode: scroll_mode.to_string(),
             // Weather fields
             weather_data_arc: None,
-            last_weather_draw_data: WeatherData::default(),
+            last_weather_draw_data: vec![WeatherData::default();4],
             weather_display_switch_timer: None,
             artist: String::new(),
             title: String::new(),
@@ -1005,25 +944,6 @@ impl OledDisplay {
         Ok(())
     }
 
-    /// direct SVG rendering with scale, no SVG dynamics
-    pub async fn put_svg(&mut self, path: &str, x: i32, y: i32, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
-        debug!("put_svg {} {} {}", path, width, height);
-
-        let data = fs::read_to_string(path).expect("load an svg file");
-        let buffer_size = height as usize * ((width + 7) / 8) as usize;
-        let mut buffer = vec![0; buffer_size];
-        let svg_renderer = SvgImageRenderer::new(&data, width, height)
-            .map_err(|e| SvgImageError::SvgParseError(e.to_string()))?;
-        svg_renderer.render_to_buffer(&mut buffer)
-            .map_err(|e| SvgImageError::RenderingError(e.to_string()))?;
-        let raw_image = ImageRaw::<BinaryColor>::new(&buffer, width);
-
-        Image::new(&raw_image, Point::new(x, y))
-            .draw(&mut self.display)
-            .map_err(DisplayDrawingError::DrawingFailed)?;
-        Ok(())
-    }
-
     pub async fn test(&mut self, test: bool) 
     {
         if test {
@@ -1104,7 +1024,8 @@ impl OledDisplay {
             let mut contrast:u8 = 0;
             let _ = self.set_brightness(contrast);
 
-            self.put_svg(
+            put_svg(
+                &mut self.display,
                 "./assets/lymonslogo.svg", 
                 0, 0, 
                 constants::DISPLAY_WIDTH as u32, constants::DISPLAY_HEIGHT as u32)
@@ -1589,25 +1510,25 @@ impl OledDisplay {
     {
 
         // initialize vu scale attributes
-        ensure_band_state(state, 0, 0, 0);
+        ensure_band_state(state, 0, 0, 0, true);
 
         let changed = 
             state.last_metric[0] != l_db as i32 ||
             state.last_metric[1] != r_db as i32;
-
+        // last metric is not taking into account time based decay
+        // need to review before adding early doors
 
         // save the latest inputs
         state.last_db_l = l_db;
         state.last_db_r = r_db;
+        let (disp_l, over_l) = state.vu_l.update_drive(l_db);
+        let (disp_r, over_r) = state.vu_r.update_drive(r_db);
 
-        // if nothing would change on screen, skip work (non-blocking)
-        if !changed && !state.init {
-            return Ok(false);
-        }
+        // if nothing would change on screen, skip work (non-blocking) early doors
+        //if !changed && !state.init {
+        //    return Ok(false);
+        //}
         state.init = false;
-
-        let vu_needle_l = VuNeedle::new_vu().update_db(l_db, state.vu_arc_digits[0].db,state.vu_arc_digits[state.vu_arc_digits.len()-1].db, 1.0);
-        let vu_needle_r = VuNeedle::new_vu().update_db(r_db, state.vu_arc_digits[0].db,state.vu_arc_digits[state.vu_arc_digits.len()-1].db, 1.0);
 
         // layout horizontal (h=true)
         let Size { width, height } = display.size();
@@ -1623,15 +1544,20 @@ impl OledDisplay {
         let title_pos = h - title_base;
         let pane_w = (inner_w - gap) / 2;
 
+        // ssd1309 - make dynamic!!!
+        let sweep_min: i32 = -48;
+        let sweep_max: i32 = 48;
+        let disp_l = vu_db_to_meter_angle_1309(l_db, sweep_min, sweep_max);
+        let disp_r = vu_db_to_meter_angle_1309(l_db, sweep_min, sweep_max);
+
         draw_vu_panel(
             display,
             "VU:L", title_base as u32, title_pos,
             Point::new(mx, my),
             Size::new(pane_w as u32, inner_h as u32),
-            state.last_db_l,
-            vu_needle_l,
-            state,
-            true
+            sweep_min,
+            sweep_max,
+            disp_l, over_l,
         ).map_err(|e| D::Error::from(e))?;
 
         draw_vu_panel(
@@ -1639,10 +1565,9 @@ impl OledDisplay {
             "VU:R", title_base as u32, title_pos,
             Point::new(mx + pane_w + gap, my),
             Size::new(pane_w as u32, inner_h as u32),
-            state.last_db_r,
-            vu_needle_r,
-            state,
-            true
+            sweep_min,
+            sweep_max,
+            disp_r, over_r,
         ).map_err(|e| D::Error::from(e))?;
 
         Ok(true)
@@ -1821,7 +1746,7 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, false);
 
         // store latest inputs
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1904,7 +1829,7 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, false);
 
         // 2) Save the latest inputs (debug/inspection)
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1984,7 +1909,7 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, 0, 0, bands.len());
+        ensure_band_state(state, 0, 0, bands.len(), false);
 
         // store latest inputs
         state.last_bands_m.copy_from_slice(&bands);
@@ -2128,8 +2053,6 @@ impl OledDisplay {
     /// Updates and draws the weather data to display. Only flushes if changes occurred.
     pub async fn update_and_draw_weather(&mut self, show_current_weather: bool) -> Result<(), DisplayDrawingError> {
 
-        self.clear(); // Clear the screen completely for a new weather display
-
         let mut needs_flush = false;
         // Acquire a lock on the weather data
         let weather_data = if let Some(ref weather_arc) = self.weather_data_arc {
@@ -2149,6 +2072,11 @@ impl OledDisplay {
             // Display current weather
             let current = &weather_data.weather_data.current.clone();
 
+            if *current != self.last_weather_draw_data[0] {
+
+                self.display.clear(BinaryColor::Off).unwrap(); // Clear the screen completely for a new weather display
+                self.last_weather_draw_data[0] = current.clone();
+
             let conditions = current.weather_code.description.clone();
 
             let curr_feels_temp = format!(
@@ -2159,14 +2087,14 @@ impl OledDisplay {
             let wind_dir = current.wind_direction.clone();
             let wind_speed = format!("{:.0} {} {}", current.wind_speed_avg, wind_speed_units, wind_dir);
             let pop =  format!("{}%", current.precipitation_probability_avg);
-            let icon_idx = current.weather_code.icon;
+            let _icon_idx = current.weather_code.icon;
+            let svg = current.weather_code.svg.clone();
 
-            let icon = ImageRaw::<BinaryColor>::new(
-                imgdata::get_glyph_slice(
-                    climacell::WEATHER_RAW_DATA, 
-                    icon_idx as usize, icon_w, icon_w),icon_w);
-            Image::new(&icon, Point::new(12, 10))
-                .draw(&mut self.display).unwrap();
+            put_svg(
+                &mut self.display,
+                svg.as_str(), 12, 10, icon_w, icon_w)
+                .await
+                .unwrap();
 
             // Draw weather details
             let glyph_w = 12;
@@ -2202,12 +2130,28 @@ impl OledDisplay {
                 &FONT_7X14).unwrap();
 
             needs_flush = true;
+            }
 
         } else {
 
             // Display 3-day forecast
             let forecasts = &weather_data.weather_data.forecast;
             if forecasts.len() > 0 {
+
+                let fore0 = forecasts[0].clone();
+                let fore1 = forecasts[1].clone();
+                let fore2 = forecasts[2].clone();
+
+            if fore0 != self.last_weather_draw_data[1] ||
+                fore1 != self.last_weather_draw_data[2] ||
+                fore2 != self.last_weather_draw_data[3]
+            {
+
+                self.last_weather_draw_data[1] = fore0;
+                self.last_weather_draw_data[2] = fore1;
+                self.last_weather_draw_data[3] = fore2;
+
+                self.display.clear(BinaryColor::Off).unwrap(); // Clear the screen completely for a new weather display
 
                 let mut icon_x = 7;
                 for (_i, forecast) in forecasts.iter().enumerate() {
@@ -2223,12 +2167,12 @@ impl OledDisplay {
                     );
                     let pop =  format!("{}%", forecast.precipitation_probability_avg);
 
-                    let glyph = ImageRaw::<BinaryColor>::new(
-                        imgdata::get_glyph_slice(
-                            climacell::WEATHER_RAW_DATA, 
-                            forecast.weather_code.icon as usize, icon_w, icon_w),icon_w);
-                    Image::new(&glyph, Point::new(icon_x, day_y))
-                        .draw(&mut self.display).unwrap();
+                    let svg = forecast.weather_code.svg.clone();
+                    put_svg(
+                        &mut self.display,
+                        svg.as_str(), icon_x, day_y, icon_w-4, icon_w-4)
+                        .await
+                        .unwrap();
 
                     day_y += icon_w as i32 + 1;
 
@@ -2269,6 +2213,7 @@ impl OledDisplay {
 
                 }
                 needs_flush = true;
+            }
             }
         }
 
@@ -2548,5 +2493,24 @@ impl OledDisplay {
 
     }
 
+}
+
+
+
+// Implement Drop trait to stop the background thread when OledDisplay goes out of scope
+impl Drop for OledDisplay {
+    fn drop(&mut self) {
+        self.clear();
+        self.display.flush().unwrap();
+        info!("OledDisplay dropped. Attempting to stop scrolling thread...");
+        for scroller in &mut self.scrollers {
+            scroller.stop();
+        }
+        // Note: Joining the thread here (self.poll_handle.take().unwrap().await)
+        // would require this Drop impl to be async or to block on a runtime,
+        // which is generally discouraged in Drop implementations.
+        // For graceful shutdown, a dedicated async `shutdown` method is usually preferred.
+        // Here, we just send the signal and let the runtime clean up the detached task.
+    }
 }
 

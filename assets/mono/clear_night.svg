@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   fill="none"
+   viewBox="0 0 48 48"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="clear_night.svg"
+   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="16.625"
+     inkscape:cx="24.030075"
+     inkscape:cy="24"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <rect
+     x="0.0"
+     y="0.0"
+     width="48.0"
+     height="48.0"
+     fill="#ff0000"
+     stroke="none"
+     data-bg="1"
+     id="rect1" />
+  <path
+     fill-rule="evenodd"
+     d="M25.849 1c-3.231 3.937-5.163 8.932-5.163 14.368 0 12.705 10.558 23.005 23.582 23.005.245 0 .489-.004.732-.011C40.679 43.628 34.034 47 26.582 47 13.558 47 3 36.7 3 23.995 3 11.528 13.164 1.377 25.849 1z"
+     clip-rule="evenodd"
+     fill="#ff0000"
+     stroke="white"
+     stroke-width="1px"
+     id="path1"
+     style="fill:#ffffff;fill-opacity:1;stroke:none" />
+</svg>

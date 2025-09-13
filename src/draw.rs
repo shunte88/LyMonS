@@ -191,3 +191,19 @@ where
         .draw(target)?;
     Ok(())
 }
+
+pub fn draw_rect_with_style<D, C>(
+    target: &mut D,
+    rect: Rectangle,
+    style: PrimitiveStyle<C>,
+) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = C> + OriginDimensions,
+    C: PixelColor,
+{
+
+    rect
+        .into_styled(style)
+        .draw(target)?;
+    Ok(())
+}
