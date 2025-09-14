@@ -149,6 +149,7 @@ pub struct Weather {
     units: String, // "metric" or "imperial"
     translate: String,
     client: Client,
+    pub base_folder: String,
     pub weather_data: WeatherConditions, // Public so OledDisplay can read it
     stop_sender: Option<mpsc::Sender<()>>,
     poll_handle: Option<JoinHandle<()>>,
@@ -249,6 +250,7 @@ impl Weather {
             units,
             translate: transl.to_string(),
             client,
+            base_folder: "./assets/mono/".to_string(),
             weather_data: WeatherConditions::new(location_name, conditions_units),
             stop_sender: None,
             poll_handle: None,
@@ -537,484 +539,484 @@ impl Weather {
             1000 | 10000 => WeatherCode {
                 description: "Clear, Sunny".to_string(),
                 icon: 0,
-                svg: "./assets/mono/clear_day.svg".to_string()
+                svg: "clear_day.svg".to_string()
             },
             10001 => WeatherCode {
                 description: "Clear".to_string(),
                 icon: 1,
-                svg: "./assets/mono/clear_night.svg".to_string()
+                svg: "clear_night.svg".to_string()
             }, // night
             1001 | 10010 => WeatherCode {
                 description: "Cloudy".to_string(),
                 icon: 2,
-                svg: "./assets/mono/mostly_cloudy_day.svg".to_string()
+                svg: "mostly_cloudy_day.svg".to_string()
             },
             10011 => WeatherCode {
                 description: "Cloudy".to_string(),
                 icon: 2,
-                svg: "./assets/mono/mostly_cloudy_night.svg".to_string()
+                svg: "mostly_cloudy_night.svg".to_string()
             }, // night
             1100 | 11000 => WeatherCode {
                 description: "Mostly Clear".to_string(),
                 icon: 14,
-                svg: "./assets/mono/mostly_clear_day.svg".to_string()
+                svg: "mostly_clear_day.svg".to_string()
             },
             11001 => WeatherCode {
                 description: "Mostly Clear".to_string(),
                 icon: 15,
-                svg: "./assets/mono/mostly_clear_night.svg".to_string()
+                svg: "mostly_clear_night.svg".to_string()
             }, // night
             1101 | 11010 => WeatherCode {
                 description: "Partly Cloudy".to_string(),
                 icon: 17,
-                svg: "./assets/mono/partly_cloudy_day.svg".to_string()
+                svg: "partly_cloudy_day.svg".to_string()
             },
             11011 => WeatherCode {
                 description: "Partly Cloudy".to_string(),
                 icon: 18,
-                svg: "./assets/mono/partly_cloudy_night.svg".to_string()
+                svg: "partly_cloudy_night.svg".to_string()
             }, // night
             1102 | 11020 => WeatherCode {
                 description: "Mostly Cloudy".to_string(),
                 icon: 17,
-                svg: "./assets/mono/mostly_cloudy_day.svg".to_string()
+                svg: "mostly_cloudy_day.svg".to_string()
             },
             11021 => WeatherCode {
                 description: "Mostly Cloudy".to_string(),
                 icon: 18,
-                svg: "./assets/mono/mostly_cloudy_night.svg".to_string()
+                svg: "mostly_cloudy_night.svg".to_string()
             }, // night
             1103 | 11030 => WeatherCode {
                 description: "Partly Cloudy and Mostly Clear".to_string(),
                 icon: 17,
-                svg: "./assets/mono/mostly_clear_day.svg".to_string()
+                svg: "mostly_clear_day.svg".to_string()
             },
             11031 => WeatherCode {
                 description: "Partly Cloudy and Mostly Clear".to_string(),
                 icon: 18,
-                svg: "./assets/mono/mostly_clear_night.svg".to_string()
+                svg: "mostly_clear_night.svg".to_string()
             }, // night
             // Fog
             2000 | 20001 => WeatherCode {
                 description: "Fog".to_string(),
                 icon: 5,
-                svg: "./assets/mono/haze_fog_dust_smoke.svg".to_string()
+                svg: "haze_fog_dust_smoke.svg".to_string()
             },
             2100 | 21000 | 21001 => WeatherCode {
                 description: "Light Fog".to_string(),
                 icon: 6,
-                svg: "./assets/mono/haze_fog_dust_smoke.svg".to_string()
+                svg: "haze_fog_dust_smoke.svg".to_string()
             },
             2101 | 21010 | 21011 => WeatherCode {
                 description: "Mostly Clear and Light Fog".to_string(),
                 icon: 5,
-                svg: "./assets/mono/haze_fog_dust_smoke.svg".to_string()
+                svg: "haze_fog_dust_smoke.svg".to_string()
             },
             2102 | 21020 | 21021 => WeatherCode {
                 description: "Partly Cloudy and Light Fog".to_string(),
                 icon: 6,
-                svg: "./assets/mono/haze_fog_dust_smoke.svg".to_string()
+                svg: "haze_fog_dust_smoke.svg".to_string()
             },
             2103 | 21030 | 21031 => WeatherCode {
                 description: "Mostly Cloudy and Light Fog".to_string(),
                 icon: 5,
-                svg: "./assets/mono/haze_fog_dust_smoke.svg".to_string()
+                svg: "haze_fog_dust_smoke.svg".to_string()
             },
             2106 | 21060 | 21061 => WeatherCode {
                 description: "Mostly Clear and Fog".to_string(),
                 icon: 6,
-                svg: "./assets/mono/haze_fog_dust_smoke.svg".to_string()
+                svg: "haze_fog_dust_smoke.svg".to_string()
             },
             2107 | 21070 | 21071 => WeatherCode {
                 description: "Partly Cloudy and Fog".to_string(),
                 icon: 5,
-                svg: "./assets/mono/haze_fog_dust_smoke.svg".to_string()
+                svg: "haze_fog_dust_smoke.svg".to_string()
             },
             2108 | 21080 | 21081 => WeatherCode {
                 description: "Mostly Cloudy and Fog".to_string(),
                 icon: 6,
-                svg: "./assets/mono/haze_fog_dust_smoke.svg".to_string()
+                svg: "haze_fog_dust_smoke.svg".to_string()
             },
             // Drizzle
             4000 | 40000 | 40001 => WeatherCode {
                 description: "Drizzle".to_string(),
                 icon: 3,
-                svg: "./assets/mono/drizzle.svg".to_string()
+                svg: "drizzle.svg".to_string()
             },
             4203 | 42030 | 42031 => WeatherCode {
                 description: "Mostly Clear and Drizzle".to_string(),
                 icon: 3,
-                svg: "./assets/mono/drizzle.svg".to_string()
+                svg: "drizzle.svg".to_string()
             },
             4204 | 42040 | 42041 => WeatherCode {
                 description: "Partly Cloudy and Drizzle".to_string(),
                 icon: 3,
-                svg: "./assets/mono/drizzle.svg".to_string(),
+                svg: "drizzle.svg".to_string(),
             },
             4205 | 42050 | 42051 => WeatherCode {
                 description: "Mostly Cloudy and Drizzle".to_string(),
                 icon: 3,
-                svg: "./assets/mono/drizzle.svg".to_string()
+                svg: "drizzle.svg".to_string()
             },
             // Rain
             4001 | 40010 | 40011 => WeatherCode {
                 description: "Rain".to_string(),
                 icon: 21,
-                svg: "./assets/mono/drizzle.svg".to_string()
+                svg: "drizzle.svg".to_string()
             },
             4200 | 42000 => WeatherCode {
                 description: "Light Rain".to_string(),
                 icon: 21,
-                svg: "./assets/mono/cloudy_with_rain_light.svg".to_string()
+                svg: "cloudy_with_rain_light.svg".to_string()
             },
             4201 | 42010 => WeatherCode {
                 description: "Heavy Rain".to_string(),
                 icon: 20,
-                svg: "./assets/mono/heavy_rain.svg".to_string()
+                svg: "heavy_rain.svg".to_string()
             },
             4213 | 42130 | 42131 => WeatherCode {
                 description: "Mostly Clear and Light Rain".to_string(),
                 icon: 21,
-                svg: "./assets/mono/cloudy_with_rain_light.svg".to_string()
+                svg: "cloudy_with_rain_light.svg".to_string()
             },
             4214 | 42140 | 42141 => WeatherCode {
                 description: "Partly Cloudy and Light Rain".to_string(),
                 icon: 21,
-                svg: "./assets/mono/cloudy_with_rain_light.svg".to_string()
+                svg: "cloudy_with_rain_light.svg".to_string()
             },
             4215 | 42150 | 42151 => WeatherCode {
                 description: "Mostly Cloudy and Light Rain".to_string(),
                 icon: 21,
-                svg: "./assets/mono/cloudy_with_rain_light.svg".to_string()
+                svg: "cloudy_with_rain_light.svg".to_string()
             },
             4209 | 42090 | 42091 => WeatherCode {
                 description: "Mostly Clear and Rain".to_string(),
                 icon: 21,
-                svg: "./assets/mono/cloudy_with_rain_light.svg".to_string()
+                svg: "cloudy_with_rain_light.svg".to_string()
             },
             4208 | 42080 | 42081 => WeatherCode {
                 description: "Partly Cloudy and Rain".to_string(),
                 icon: 21,
-                svg: "./assets/mono/showers_rain.svg".to_string()
+                svg: "showers_rain.svg".to_string()
             },
             4210 | 42100 | 42101 => WeatherCode {
                 description: "Mostly Cloudy and Rain".to_string(),
                 icon: 21,
-                svg: "./assets/mono/showers_rain.svg".to_string()
+                svg: "showers_rain.svg".to_string()
             },
             4211 | 42110 | 42111 => WeatherCode {
                 description: "Mostly Clear and Heavy Rain".to_string(),
                 icon: 20,
-                svg: "./assets/mono/heavy_rain.svg".to_string()
+                svg: "heavy_rain.svg".to_string()
             },
             4202 | 42020 | 42021 => WeatherCode {
                 description: "Partly Cloudy and Heavy Rain".to_string(),
                 icon: 20,
-                svg: "./assets/mono/heavy_rain.svg".to_string()
+                svg: "heavy_rain.svg".to_string()
             },
             4212 | 42120 | 42121 => WeatherCode {
                 description: "Mostly Cloudy and Heavy Rain".to_string(),
                 icon: 20,
-                svg: "./assets/mono/heavy_rain.svg".to_string()
+                svg: "heavy_rain.svg".to_string()
             },
             6220 | 62200 => WeatherCode {
                 description: "Light Rain and Freezing Rain".to_string(),
                 icon: 7,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6222 | 62220 => WeatherCode {
                 description: "Rain and Freezing Rain".to_string(),
                 icon: 8,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             // Snow
             5000 | 50000 | 50001 => WeatherCode {
                 description: "Snow".to_string(),
                 icon: 22,
-                svg: "./assets/mono/scattered_snow_showers_day.svg".to_string()
+                svg: "scattered_snow_showers_day.svg".to_string()
             },
             5001 | 50010 | 50011 => WeatherCode {
                 description: "Flurries".to_string(),
                 icon: 4,
-                svg: "./assets/mono/flurries.svg".to_string(),
+                svg: "flurries.svg".to_string(),
             },
             5100 | 51000 | 51001 => WeatherCode {
                 description: "Light Snow".to_string(),
                 icon: 24,
-                svg: "./assets/mono/light_snow.svg".to_string(),
+                svg: "light_snow.svg".to_string(),
             },
             5101 | 51010 | 51011 => WeatherCode {
                 description: "Heavy Snow".to_string(),
                 icon: 22,
-                svg: "./assets/mono/heavy_snow.svg".to_string(),
+                svg: "heavy_snow.svg".to_string(),
             },
             5102 | 51020 | 51021 => WeatherCode {
                 description: "Mostly Clear and Light Snow".to_string(),
                 icon: 24,
-                svg: "./assets/mono/cloudy_with_snow_light.svg".to_string(),
+                svg: "cloudy_with_snow_light.svg".to_string(),
             },
             5103 | 51030 | 51031 => WeatherCode {
                 description: "Partly Cloudy and Light Snow".to_string(),
                 icon: 24,
-                svg: "./assets/mono/cloudy_with_snow_light.svg".to_string(),
+                svg: "cloudy_with_snow_light.svg".to_string(),
             },
             5104 | 51040 | 51041 => WeatherCode {
                 description: "Mostly Cloudy and Light Snow".to_string(),
                 icon: 24,
-                svg: "./assets/mono/cloudy_with_snow_light.svg".to_string(),
+                svg: "cloudy_with_snow_light.svg".to_string(),
             },
             5105 | 51050 | 51051 => WeatherCode {
                 description: "Mostly Clear and Snow".to_string(),
                 icon: 24,
-                svg: "./assets/mono/cloudy_with_snow_light.svg".to_string(),
+                svg: "cloudy_with_snow_light.svg".to_string(),
             },
             5106 | 51060 | 51061 => WeatherCode {
                 description: "Partly Cloudy and Snow".to_string(),
                 icon: 24,
-                svg: "./assets/mono/cloudy_with_snow_light.svg".to_string(),
+                svg: "cloudy_with_snow_light.svg".to_string(),
             },
             5107 | 51070 | 51071 => WeatherCode {
                 description: "Mostly Cloudy and Snow".to_string(),
                 icon: 24,
-                svg: "./assets/mono/cloudy_with_snow_light.svg".to_string(),
+                svg: "cloudy_with_snow_light.svg".to_string(),
             },
             5119 | 51190 | 51191 => WeatherCode {
                 description: "Mostly Clear and Heavy Snow".to_string(),
                 icon: 22,
-                svg: "./assets/mono/heavy_snow.svg".to_string(),
+                svg: "heavy_snow.svg".to_string(),
             },
             5120 | 51200 | 51201 => WeatherCode {
                 description: "Partly Cloudy and Heavy Snow".to_string(),
                 icon: 22,
-                svg: "./assets/mono/heavy_snow.svg".to_string(),
+                svg: "heavy_snow.svg".to_string(),
             },
             5121 | 51210 | 51211 => WeatherCode {
                 description: "Mostly Cloudy and Heavy Snow".to_string(),
                 icon: 22,
-                svg: "./assets/mono/heavy_snow.svg".to_string(),
+                svg: "heavy_snow.svg".to_string(),
             },
             5115 | 51150 | 51151 => WeatherCode {
                 description: "Mostly Clear and Flurries".to_string(),
                 icon: 7,
-                svg: "./assets/mono/flurries.svg".to_string(),
+                svg: "flurries.svg".to_string(),
             },
             5116 | 51160 | 51161 => WeatherCode {
                 description: "Partly Cloudy and Flurries".to_string(),
                 icon: 4,
-                svg: "./assets/mono/flurries.svg".to_string(),
+                svg: "flurries.svg".to_string(),
             },
             5117 | 51170 | 51171 => WeatherCode {
                 description: "Mostly Cloudy and Flurries".to_string(),
                 icon: 4,
-                svg: "./assets/mono/flurries.svg".to_string(),
+                svg: "flurries.svg".to_string(),
             },
             5110 | 51100 | 51101 => WeatherCode {
                 description: "Drizzle and Snow".to_string(),
                 icon: 7,
-                svg: "./assets/mono/sleet_rain.svg".to_string(),
+                svg: "sleet_rain.svg".to_string(),
             },
             5108 | 51080 => WeatherCode {
                 description: "Rain and Snow".to_string(),
                 icon: 4,
-                svg: "./assets/mono/showers_snow.svg".to_string(),
+                svg: "showers_snow.svg".to_string(),
             },
             5122 | 51220 | 51221 => WeatherCode {
                 description: "Drizzle and Light Snow".to_string(),
                 icon: 4,
-                svg: "./assets/mono/showers_snow.svg".to_string(),
+                svg: "showers_snow.svg".to_string(),
             },
             // Freezing Drizzle / Rain
             6000 | 60000 | 60001 => WeatherCode {
                 description: "Freezing Drizzle".to_string(),
                 icon: 8,
-                svg: "./assets/mono/showers_snow.svg".to_string(),
+                svg: "showers_snow.svg".to_string(),
             },
             6001 | 60010 | 60011 => WeatherCode {
                 description: "Freezing Rain".to_string(),
                 icon: 8, 
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             6200 | 62000 | 62001 => WeatherCode {
                 description: "Light Freezing Rain".to_string(),
                 icon: 10,
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             6201 | 62010 | 62011 => WeatherCode {
                 description: "Heavy Freezing Rain".to_string(),
                 icon: 9,
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             6003 | 60030 | 60031 => WeatherCode {
                 description: "Mostly Clear and Freezing Drizzle".to_string(),
                 icon: 8,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6002 | 60020 | 60021 => WeatherCode {
                 description: "Partly Cloudy and Freezing Drizzle".to_string(),
                 icon: 8,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6004 | 60040 | 60041 => WeatherCode {
                 description: "Mostly Cloudy and Freezing Drizzle".to_string(),
                 icon: 8,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6204 | 62040 | 62041 => WeatherCode {
                 description: "Drizzle and Freezing Drizzle".to_string(),
                 icon: 8,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6206 | 62060 | 62061 => WeatherCode {
                 description: "Light Rain and Freezing Drizzle".to_string(),
                 icon: 8,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6205 | 62050 | 62051 => WeatherCode {
                 description: "Mostly Clear and Light Freezing Rain".to_string(),
                 icon: 10,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6203 | 62030 | 62031 => WeatherCode {
                 description: "Partly Cloudy and Light Freezing Rain".to_string(),
                 icon: 10,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6209 | 62090 | 62091 => WeatherCode {
                 description: "Mostly Cloudy and Light Freezing Rain".to_string(),
                 icon: 10,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6213 | 62130 | 62131 => WeatherCode {
                 description: "Mostly Clear and Freezing Rain".to_string(),
                 icon: 10,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6214 | 62140 | 62141 => WeatherCode {
                 description: "Partly Cloudy and Freezing Rain".to_string(),
                 icon: 10,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             6215 | 62150 | 62151 => WeatherCode {
                 description: "Mostly Cloudy and Freezing Rain".to_string(),
                 icon: 10,
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             6212 | 62120 | 62121 => WeatherCode {
                 description: "Drizzle and Freezing Rain".to_string(),
                 icon: 10,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             // Ice Pellets
             7000 | 70001 => WeatherCode {
                 description: "Ice Pellets".to_string(),
                 icon: 11,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7101 | 71010 => WeatherCode {
                 description: "Heavy Ice Pellets".to_string(),
                 icon: 12,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7102 | 71020 | 71021 => WeatherCode {
                 description: "Light Ice Pellets".to_string(),
                 icon: 13,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7105 | 71050 | 71051 => WeatherCode {
                 description: "Drizzle and Ice Pellets".to_string(),
                 icon: 13,
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             7106 | 71060 | 71061 => WeatherCode {
                 description: "Freezing Rain and Ice Pellets".to_string(),
                 icon: 13,
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             7115 | 71150 | 71151 => WeatherCode {
                 description: "Light Rain and Ice Pellets".to_string(),
                 icon: 13,
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             7117 | 71170 | 71171 => WeatherCode {
                 description: "Rain and Ice Pellets".to_string(),
                 icon: 13,
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             7103 | 71030 | 71031 => WeatherCode {
                 description: "Freezing Rain and Heavy Ice Pellets".to_string(),
                 icon: 12,
-                svg: "./assets/mono/mixed_rain_hail_sleet.svg".to_string(),
+                svg: "mixed_rain_hail_sleet.svg".to_string(),
             },
             7113 | 71130 | 71131 => WeatherCode {
                 description: "Mostly Clear and Heavy Ice Pellets".to_string(),
                 icon: 12,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7114 | 71140 | 71141 => WeatherCode {
                 description: "Partly Cloudy and Heavy Ice Pellets".to_string(),
                 icon: 12,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7116 | 71160 | 71161 => WeatherCode {
                 description: "Mostly Cloudy and Heavy Ice Pellets".to_string(),
                 icon: 12,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7108 | 71080 | 71081 => WeatherCode {
                 description: "Mostly Clear and Ice Pellets".to_string(),
                 icon: 11,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7107 | 71070 | 71071 => WeatherCode {
                 description: "Partly Cloudy and Ice Pellets".to_string(),
                 icon: 11,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7109 | 71090 | 71091 => WeatherCode {
                 description: "Mostly Cloudy and Ice Pellets".to_string(),
                 icon: 11,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7110 | 71100 | 71101 => WeatherCode {
                 description: "Mostly Clear and Light Ice Pellets".to_string(),
                 icon: 11,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7111 | 71110 | 71111 => WeatherCode {
                 description: "Partly Cloudy and Light Ice Pellets".to_string(),
                 icon: 11,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             7112 | 71120 | 71121 => WeatherCode {
                 description: "Mostly Cloudy and Light Ice Pellets".to_string(),
                 icon: 11,
-                svg: "./assets/mono/icy.svg".to_string(),
+                svg: "icy.svg".to_string(),
             },
             // Thunderstorm
             8000 | 80000 => WeatherCode {
                 description: "Thunderstorm".to_string(),
                 icon: 25,
-                svg: "./assets/mono/strong_thunderstorms.svg".to_string(),
+                svg: "strong_thunderstorms.svg".to_string(),
             },
             8001 | 80010 | 80011 => WeatherCode {
                 description: "Mostly Clear and Thunderstorm".to_string(),
                 icon: 25,
-                svg: "./assets/mono/isolated_thunderstorms.svg".to_string(),
+                svg: "isolated_thunderstorms.svg".to_string(),
             },
             8002 | 80020 | 80021 => WeatherCode {
                 description: "Mostly Cloudy and Thunderstorm".to_string(),
                 icon: 25,
-                svg: "./assets/mono/isolated_thunderstorms.svg".to_string(),
+                svg: "isolated_thunderstorms.svg".to_string(),
             },
             8003 | 80030 | 80031 => WeatherCode {
                 description: "Partly Cloudy and Thunderstorm".to_string(),
                 icon: 25,
-                svg: "./assets/mono/isolated_thunderstorms.svg".to_string(),
+                svg: "isolated_thunderstorms.svg".to_string(),
             },
             _ => WeatherCode {
                 description: "Unknown".to_string(),
                 icon: 26,
-                svg: "./assets/mono/umberella.svg".to_string(),
+                svg: "umberella.svg".to_string(),
             },
         };
         if self.translate.len() > 0 {

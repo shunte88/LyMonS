@@ -2062,9 +2062,10 @@ impl OledDisplay {
             return Ok(()); // Nothing to draw if no weather client
         };
 
-        let icon_w = 34;
+        let icon_w = 2 + self.display.size().height as u32/2;
         let temp_units = &weather_data.weather_data.temperature_units.clone();
         let wind_speed_units = &weather_data.weather_data.windspeed_units.clone();
+        let base_folder = &weather_data.base_folder.clone();
 
         // Display current or forecast based on the flag
         if show_current_weather {
@@ -2088,7 +2089,7 @@ impl OledDisplay {
             let wind_speed = format!("{:.0} {} {}", current.wind_speed_avg, wind_speed_units, wind_dir);
             let pop =  format!("{}%", current.precipitation_probability_avg);
             let _icon_idx = current.weather_code.icon;
-            let svg = current.weather_code.svg.clone();
+            let svg = format!("{}{}", base_folder.clone(), current.weather_code.svg.clone());
 
             put_svg(
                 &mut self.display,
@@ -2167,7 +2168,7 @@ impl OledDisplay {
                     );
                     let pop =  format!("{}%", forecast.precipitation_probability_avg);
 
-                    let svg = forecast.weather_code.svg.clone();
+                    let svg = format!("{}{}", base_folder.clone(), forecast.weather_code.svg.clone());
                     put_svg(
                         &mut self.display,
                         svg.as_str(), icon_x, day_y, icon_w-4, icon_w-4)

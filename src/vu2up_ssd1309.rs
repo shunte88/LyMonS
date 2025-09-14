@@ -33,7 +33,7 @@ pub fn draw_vu_face<D>(
     panel: Rectangle,
     sweep_min: i32, // = -48;
     sweep_max: i32, // = 48;
-) -> Result<(Point), D::Error>
+) -> Result<Point, D::Error>
 where
     D: DrawTarget<Color = BinaryColor> + OriginDimensions,
 {
