@@ -58,7 +58,7 @@ use ssd1306::{
     Ssd1306, 
 };
 
-use log::{debug, info, error};
+use log::{debug, info, error, warn};
 use std::{time::{Duration, Instant}};
 use std::error::Error; // Import the Error trait
 use std::fmt; // Import fmt for Display trait
@@ -73,7 +73,7 @@ use display_interface::DisplayError;
 use crate::imgdata;   // imgdata, glyphs and such
 use crate::vu2up_ssd1309::{
     draw_vu_face as draw_vu_face_1309,
-    vu_db_to_meter_angle as vu_db_to_meter_angle_1309 
+    draw_vu_needle as draw_vu_needle_1309,
 };
 use crate::vuphysics::{
     VuNeedleNew,
@@ -83,7 +83,7 @@ use crate::vuphysics::{
     needle_tip
 };   // VU physics
 use crate::constants; // constants
-use crate::climacell; // weather glyphs - need to move to SVG impl.
+use crate::weather_glyph; // weather glyphs - need to move to SVG impl.
 use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
 use crate::deutils::seconds_to_hms;
 use crate::weather::{Weather, WeatherData};
@@ -100,6 +100,7 @@ use crate::draw::{
     draw_text_region_align,
     draw_rectangle,
     draw_rect_with_style,
+    draw_text_align_style,
     draw_circle_from_center,
     draw_circle,
     draw_arc,
@@ -180,7 +181,7 @@ const CAP_HOLD: Duration = Duration::from_millis(1000);
 const CAP_DECAY_LPS: f32 = 64.0;
 const CAP_THICKNESS_PX: u32 = 1;
 
-fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usize, vu_init: bool) {
+fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usize) {
 
     let now = Instant::now();
     let mut ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
@@ -449,25 +450,28 @@ pub async fn put_svg<D>(
 where
     D: DrawTarget<Color = BinaryColor> + OriginDimensions,
 {
+    if fs::metadata(path).await.is_ok() {
 
-    let data = fs::read_to_string(path).await.map_err(PutSvgError::Io)?;
+        let data = fs::read_to_string(path).await.map_err(PutSvgError::Io)?;
 
-    let bytes_per_row = ((width + 7) / 8) as usize;
-    let buffer_size = height as usize * bytes_per_row;
-    let mut buffer = vec![0u8; buffer_size];
+        let bytes_per_row = ((width + 7) / 8) as usize;
+        let buffer_size = height as usize * bytes_per_row;
+        let mut buffer = vec![0u8; buffer_size];
 
-    let svg_renderer = SvgImageRenderer::new(&data, width, height)
-        .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
-    svg_renderer
-        .render_to_buffer(&mut buffer)
-        .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+        let svg_renderer = SvgImageRenderer::new(&data, width, height)
+            .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+        svg_renderer
+            .render_to_buffer(&mut buffer)
+            .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
 
-    // Blit to target
-    let raw = ImageRaw::<BinaryColor>::new(&buffer, width);
-    Image::new(&raw, Point::new(x, y))
-        .draw(target)
-        .map_err(PutSvgError::Draw)?;
-
+        // Blit to target
+        let raw = ImageRaw::<BinaryColor>::new(&buffer, width);
+        Image::new(&raw, Point::new(x, y))
+            .draw(target)
+            .map_err(PutSvgError::Draw)?;
+    }else{
+        warn!("{path} does bot exist!");
+    }
     Ok(())
 }
 
@@ -481,7 +485,7 @@ fn draw_vu_panel<D>(
     panel_size: Size,
     sweep_min: i32, // = -48;
     sweep_max: i32, // = 48;
-    displacement: f32,
+    db: f32,
     overload: bool,
 ) -> Result<(), D::Error>
 where
@@ -505,25 +509,21 @@ where
 
     let w = panel_size.width as i32;
     let h = panel_size.height as i32;
+    // init - we'll specify shortly
+    let mut center = Point::new(w / 2, h / 2);
+
     // handle downmix and combi - as well as display driver variants here
-    let center = if display.size().width == 128 {
-        let c = draw_vu_face_1309 (
+    if display.size().width == 128 {
+        center = draw_vu_face_1309 (
             display, 
             panel,
             sweep_min,
             sweep_max,
         )
         .map_err(|e| D::Error::from(e))?;
-        c
-    } else {
-        Point::new(origin.x as i32 + w/2,label_pos - 1 + label_height as i32 / 2)
     };
 
-    //let center_y = label_pos - 1 + label_height as i32 / 2;
-    let mut legend_y = center.y + 8;
-    //let needle_len = 8 + panel_size.height as i32 / 2;
-    let (tip, _base) = needle_tip(displacement, center.x, w, center.y);
-
+    let mut legend_y = origin.y+9;
     draw_text_region_align(
         display,
         "-", 
@@ -555,12 +555,16 @@ where
         led_fill)
         .map_err(|e| D::Error::from(e))?;
 
-    // Create a styled line
-    let needle_style = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
-    let _needle = Line::new(center, tip)
-        .into_styled(needle_style)
-        .draw(display)
+    if display.size().width == 128 {
+        let _ = draw_vu_needle_1309 (
+            display, 
+            panel,
+            db,
+            sweep_min,
+            sweep_max,
+        )
         .map_err(|e| D::Error::from(e))?;
+    };
 
     draw_rectangle(
         display,
@@ -581,12 +585,22 @@ where
         &FONT_4X6)
         .map_err(|e| D::Error::from(e))?;
 
+/*
+
     draw_circle_from_center(
         display, 
         center, 
-        (w / 4) as i32, 
+        3, // (w / 4) as i32, 
         PrimitiveStyle::with_stroke(BinaryColor::On, 2))
         .map_err(|e| D::Error::from(e))?;
+    draw_circle_from_center(
+        display, 
+        center, 
+        6, 
+        PrimitiveStyle::with_stroke(BinaryColor::On, 1))
+        .map_err(|e| D::Error::from(e))?;
+
+*/
 
     Ok(())
 
@@ -769,8 +783,6 @@ impl OledDisplay {
         let wide = display.size().width > 128;
         let mut state = LastVizState::default();
         state.wide = wide;
-        // initialize vu scale - minimize heavy lifting at vizualization stage - should be nsec but hey...
-        ensure_band_state(&mut state, 0, 0, 0, true);
 
         // Create TextScrollers for lines 1 to 4 (index 1 to 4 in a 0-indexed array)
         // Line 0 is status, Line 5 is player info.
@@ -1003,7 +1015,7 @@ impl OledDisplay {
                 &FONT_6X10).unwrap();
             y += 13;
         }
-        draw_line(&mut self.display,Point::new(2, y), Point::new(124, y), BinaryColor::On, 2).unwrap();
+        draw_line(&mut self.display,Point::new(2, y), Point::new(124, y), BinaryColor::On, 3).unwrap();
         self.display.flush().unwrap();
 
         sleep(Duration::from_millis(2500));
@@ -1114,10 +1126,10 @@ impl OledDisplay {
     
     }
  
-    fn enable_vizualization(&mut self, on:bool) {
+    fn enable_vizualization(&mut self, on_off:bool) {
         match self.viz.as_mut() {
             Some(viz) => {
-                viz.enable(on);
+                viz.enable(on_off);
             },
             None => {}
         }
@@ -1136,6 +1148,10 @@ impl OledDisplay {
             if mode == DisplayMode::Clock || mode == DisplayMode::EasterEggs || mode == DisplayMode::WeatherCurrent || mode == DisplayMode::WeatherForecast {
                 for scroller in &mut self.scrollers {
                     scroller.stop().await;
+                }
+                // re-init weather (for flushable)
+                if mode == DisplayMode::WeatherCurrent {
+                    self.last_weather_draw_data = vec![WeatherData::default();4];
                 }
             }
 
@@ -1444,7 +1460,7 @@ impl OledDisplay {
 
         if current_date_string != self.last_date_drawn {
 
-            // rtool to region
+            // retool to region
             draw_rectangle(
                 &mut self.display,
                 Point::new(0, date_y),
@@ -1509,9 +1525,6 @@ impl OledDisplay {
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
 
-        // initialize vu scale attributes
-        ensure_band_state(state, 0, 0, 0, true);
-
         let changed = 
             state.last_metric[0] != l_db as i32 ||
             state.last_metric[1] != r_db as i32;
@@ -1521,9 +1534,10 @@ impl OledDisplay {
         // save the latest inputs
         state.last_db_l = l_db;
         state.last_db_r = r_db;
-        let (disp_l, over_l) = state.vu_l.update_drive(l_db);
-        let (disp_r, over_r) = state.vu_r.update_drive(r_db);
 
+        //let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
+        //let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+        let (over_l, over_r) = (false, false);
         // if nothing would change on screen, skip work (non-blocking) early doors
         //if !changed && !state.init {
         //    return Ok(false);
@@ -1547,8 +1561,6 @@ impl OledDisplay {
         // ssd1309 - make dynamic!!!
         let sweep_min: i32 = -48;
         let sweep_max: i32 = 48;
-        let disp_l = vu_db_to_meter_angle_1309(l_db, sweep_min, sweep_max);
-        let disp_r = vu_db_to_meter_angle_1309(l_db, sweep_min, sweep_max);
 
         draw_vu_panel(
             display,
@@ -1557,7 +1569,7 @@ impl OledDisplay {
             Size::new(pane_w as u32, inner_h as u32),
             sweep_min,
             sweep_max,
-            disp_l, over_l,
+            l_db, over_l,
         ).map_err(|e| D::Error::from(e))?;
 
         draw_vu_panel(
@@ -1567,7 +1579,7 @@ impl OledDisplay {
             Size::new(pane_w as u32, inner_h as u32),
             sweep_min,
             sweep_max,
-            disp_r, over_r,
+            r_db, over_r,
         ).map_err(|e| D::Error::from(e))?;
 
         Ok(true)
@@ -1597,7 +1609,44 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        Ok(false)
+        let changed = state.last_db_m != db;
+
+        // save the latest inputs
+        state.last_db_m = db;
+
+        let over = false;
+        // if nothing would change on screen, skip work (non-blocking) early doors
+        //if !changed && !state.init {
+        //    return Ok(false);
+        //}
+        state.init = false;
+
+        // layout horizontal (h=true)
+        let Size { width, height } = display.size();
+
+        let mx: i32 = 3;
+        let my: i32 = 6;
+        let title_base = 10;
+        let inner_w = width - 2 * mx as u32;
+        let inner_h = height - my as u32 - title_base - 1;
+        let title_pos = height - title_base;
+
+        // ssd1309 - make dynamic!!!
+        let sweep_min: i32 = -45;
+        let sweep_max: i32 = 45;
+
+        draw_vu_panel(
+            display,
+            "Downmix", title_base as u32, title_pos as i32,
+            Point::new(mx, my),
+            Size::new(inner_w as u32, inner_h as u32),
+            sweep_min,
+            sweep_max,
+            db, over,
+        ).map_err(|e| D::Error::from(e))?;
+
+        Ok(true)
+
     }
 
     fn draw_aio_vu<D>(
@@ -1746,7 +1795,7 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, false);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0);
 
         // store latest inputs
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1829,7 +1878,7 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, false);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0);
 
         // 2) Save the latest inputs (debug/inspection)
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1909,7 +1958,7 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, 0, 0, bands.len(), false);
+        ensure_band_state(state, 0, 0, bands.len());
 
         // store latest inputs
         state.last_bands_m.copy_from_slice(&bands);
@@ -2078,59 +2127,59 @@ impl OledDisplay {
                 self.display.clear(BinaryColor::Off).unwrap(); // Clear the screen completely for a new weather display
                 self.last_weather_draw_data[0] = current.clone();
 
-            let conditions = current.weather_code.description.clone();
+                let conditions = current.weather_code.description.clone();
 
-            let curr_feels_temp = format!(
-                "{:.0}({:.0}) {}",
-                current.temperature_avg, current.temperature_apparent_avg, temp_units
-            );
-            let humidity = format!("{:.0}%", current.humidity_avg);
-            let wind_dir = current.wind_direction.clone();
-            let wind_speed = format!("{:.0} {} {}", current.wind_speed_avg, wind_speed_units, wind_dir);
-            let pop =  format!("{}%", current.precipitation_probability_avg);
-            let _icon_idx = current.weather_code.icon;
-            let svg = format!("{}{}", base_folder.clone(), current.weather_code.svg.clone());
+                let curr_feels_temp = format!(
+                    "{:.0}({:.0}) {}",
+                    current.temperature_avg, current.temperature_apparent_avg, temp_units
+                );
+                let humidity = format!("{:.0}%", current.humidity_avg);
+                let wind_dir = current.wind_direction.clone();
+                let wind_speed = format!("{:.0} {} {}", current.wind_speed_avg, wind_speed_units, wind_dir);
+                let pop =  format!("{}%", current.precipitation_probability_avg);
+                let _icon_idx = current.weather_code.icon;
+                let svg = format!("{}{}", base_folder.clone(), current.weather_code.svg.clone());
 
-            put_svg(
-                &mut self.display,
-                svg.as_str(), 12, 10, icon_w, icon_w)
-                .await
-                .unwrap();
+                put_svg(
+                    &mut self.display,
+                    svg.as_str(), 12, 10, icon_w, icon_w)
+                    .await
+                    .unwrap();
 
-            // Draw weather details
-            let glyph_w = 12;
-            let glyph_x = 52;
-            let text_x = glyph_x as i32 + 2 + glyph_w;
-            let mut text_y = 2;
+                // Draw weather details
+                let glyph_w = 12;
+                let glyph_x = 52;
+                let text_x = glyph_x as i32 + 2 + glyph_w;
+                let mut text_y = 2;
 
-            for (label, glyph_idx) in [(curr_feels_temp, 0), (humidity, 2), (wind_speed, 1), (pop, 3)] {
-                let (height, font, ty) = if glyph_idx == 0 {
-                    (glyph_w+2, &FONT_6X13_BOLD, text_y)} else {(glyph_w, &FONT_5X8, text_y-1)};
-                let _glyph = ImageRaw::<BinaryColor>::new(
-                    imgdata::get_glyph_slice(
-                        climacell::THERMO_RAW_DATA, 
-                        glyph_idx as usize, glyph_w as u32, glyph_w as u32),glyph_w as u32);
-                Image::new(&_glyph, Point::new(glyph_x, ty))
-                    .draw(&mut self.display).unwrap();
+                for (label, glyph_idx) in [(curr_feels_temp, 0), (humidity, 2), (wind_speed, 1), (pop, 3)] {
+                    let (height, font, ty) = if glyph_idx == 0 {
+                        (glyph_w+2, &FONT_6X13_BOLD, text_y)} else {(glyph_w, &FONT_5X8, text_y-1)};
+                    let _glyph = ImageRaw::<BinaryColor>::new(
+                        imgdata::get_glyph_slice(
+                            weather_glyph::THERMO_RAW_DATA, 
+                            glyph_idx as usize, glyph_w as u32, glyph_w as u32),glyph_w as u32);
+                    Image::new(&_glyph, Point::new(glyph_x, ty))
+                        .draw(&mut self.display).unwrap();
+                    draw_text_region_align(
+                        &mut self.display,
+                        label.as_str(), 
+                        Point::new(text_x, text_y), Size::new(124-text_x as u32,height as u32),
+                        HorizontalAlignment::Left, VerticalAlignment::Middle, 
+                        font
+                    ).unwrap();
+                    text_y += if glyph_idx == 0 { 13 } else { 10 };
+                }
+
+                text_y += 1;
                 draw_text_region_align(
                     &mut self.display,
-                    label.as_str(), 
-                    Point::new(text_x, text_y), Size::new(124-text_x as u32,height as u32),
-                    HorizontalAlignment::Left, VerticalAlignment::Middle, 
-                    font
-                ).unwrap();
-                text_y += if glyph_idx == 0 { 13 } else { 10 };
-            }
+                    conditions.as_str(), 
+                    Point::new(2, text_y), Size::new(constants::DISPLAY_WIDTH as u32 - 4, 14),
+                    HorizontalAlignment::Center, VerticalAlignment::Middle, 
+                    &FONT_7X14).unwrap();
 
-            text_y += 1;
-            draw_text_region_align(
-                &mut self.display,
-                conditions.as_str(), 
-                Point::new(2, text_y), Size::new(constants::DISPLAY_WIDTH as u32 - 4, 14),
-                HorizontalAlignment::Center, VerticalAlignment::Middle, 
-                &FONT_7X14).unwrap();
-
-            needs_flush = true;
+                needs_flush = true;
             }
 
         } else {
@@ -2143,78 +2192,96 @@ impl OledDisplay {
                 let fore1 = forecasts[1].clone();
                 let fore2 = forecasts[2].clone();
 
-            if fore0 != self.last_weather_draw_data[1] ||
-                fore1 != self.last_weather_draw_data[2] ||
-                fore2 != self.last_weather_draw_data[3]
-            {
+                if fore0 != self.last_weather_draw_data[1] ||
+                    fore1 != self.last_weather_draw_data[2] ||
+                    fore2 != self.last_weather_draw_data[3]
+                {
 
-                self.last_weather_draw_data[1] = fore0;
-                self.last_weather_draw_data[2] = fore1;
-                self.last_weather_draw_data[3] = fore2;
+                    self.last_weather_draw_data[1] = fore0;
+                    self.last_weather_draw_data[2] = fore1;
+                    self.last_weather_draw_data[3] = fore2;
 
-                self.display.clear(BinaryColor::Off).unwrap(); // Clear the screen completely for a new weather display
+                    // Clear the screen completely for a new weather forecast display
+                    self.display.clear(BinaryColor::Off).unwrap(); 
 
-                let mut icon_x = 7;
-                for (_i, forecast) in forecasts.iter().enumerate() {
+                    let textbox_style = TextBoxStyleBuilder::new()
+                        .alignment(HorizontalAlignment::Center)
+                        .vertical_alignment(VerticalAlignment::Middle)
+                        .build();
+                    let mut icon_x = 7;
+                    for (_i, forecast) in forecasts.iter().enumerate() {
 
-                    let mut day_y = 1;
-                    let day_of_week = forecast.sunrise_time
-                        .map_or("".to_string(), |dt| dt.with_timezone(&Local).format("~ %a ~").to_string());
-                    let min_max_temp = format!(
-                        "{:.0}{2}|{:.0}{2}",
-                        forecast.temperature_min,
-                        forecast.temperature_max,
-                        temp_units
-                    );
-                    let pop =  format!("{}%", forecast.precipitation_probability_avg);
+                        let mut day_y = 1;
+                        let day_of_week = forecast.sunrise_time
+                            .map_or("".to_string(), |dt| dt.with_timezone(&Local)
+                            .format("%a").to_string());
+                        let min_max_temp = format!(
+                            "{:.0}{2}|{:.0}{2}",
+                            forecast.temperature_min,
+                            forecast.temperature_max,
+                            temp_units
+                        );
+                        let pop =  format!("{}%", forecast.precipitation_probability_avg);
 
-                    let svg = format!("{}{}", base_folder.clone(), forecast.weather_code.svg.clone());
-                    put_svg(
-                        &mut self.display,
-                        svg.as_str(), icon_x, day_y, icon_w-4, icon_w-4)
-                        .await
-                        .unwrap();
+                        // find the bug that created this issue!
+                        let svg = format!("{}{}", 
+                            base_folder.clone(), 
+                            if forecast.weather_code.svg.contains(".svg") {
+                                forecast.weather_code.svg.clone()
+                            }else{
+                                "no_data.svg".to_string()
+                            }
+                        );
+                        put_svg(
+                            &mut self.display,
+                            svg.as_str(), icon_x, day_y, icon_w-4, icon_w-4)
+                            .await
+                            .unwrap();
 
-                    day_y += icon_w as i32 + 1;
+                        day_y += icon_w as i32 + 1;
+                        draw_rectangle(
+                            &mut self.display,
+                            Point::new(icon_x-4, day_y-2),
+                            icon_w + 6, 9,
+                            BinaryColor::Off,
+                            Some(1), Some(BinaryColor::On))
+                        .map_err(|e| DisplayDrawingError::from(e))?;
+                        draw_text_align_style(
+                            &mut self.display,
+                            &day_of_week,
+                            Point::new(icon_x, day_y),
+                            icon_w - 2,
+                            textbox_style,
+                            &FONT_4X6)?;
+                        day_y += 9;
+                        draw_rectangle(
+                            &mut self.display,
+                            Point::new(icon_x-4, day_y-3),
+                            icon_w + 6, 18,
+                            BinaryColor::Off,
+                            Some(1), Some(BinaryColor::On))
+                        .map_err(|e| DisplayDrawingError::from(e))?;
+                        draw_text_align_style(
+                            &mut self.display,
+                            &min_max_temp,
+                            Point::new(icon_x, day_y),
+                            icon_w - 2,
+                            textbox_style,
+                            &FONT_4X6)?;
+                        day_y += 7;
+                        draw_text_align_style(
+                            &mut self.display,
+                            &pop,
+                            Point::new(icon_x, day_y),
+                            icon_w - 2,
+                            textbox_style,
+                            &FONT_4X6)?;
 
-                    draw_rectangle(
-                        &mut self.display,
-                        Point::new(icon_x-4, day_y-2),
-                        icon_w + 6, 9,
-                        BinaryColor::Off,
-                        Some(1), Some(BinaryColor::On))
-                    .map_err(|e| DisplayDrawingError::from(e))?;
+                        icon_x += icon_w as i32 + 6; // next day forecast position
 
-                    // Draw Day of Week (left-aligned)
-                    let day_width = Self::get_text_width_specific_font(&day_of_week, &FONT_4X6);
-                    let day_x = icon_x + ((icon_w as i32 - day_width as i32) / 2);
-                    draw_text(&mut self.display,&day_of_week, day_x, day_y, &FONT_4X6)?;
-
-                    day_y += 9;
-                    draw_rectangle(
-                        &mut self.display,
-                        Point::new(icon_x-4, day_y-3),
-                        icon_w + 6, 18,
-                        BinaryColor::Off,
-                        Some(1), Some(BinaryColor::On))
-                    .map_err(|e| DisplayDrawingError::from(e))?;
-
-                    // Draw Min/Max Temp (right-aligned)
-                    let temp_width = Self::get_text_width_specific_font(&min_max_temp, &FONT_4X6);
-                    let temp_x = icon_x + ((icon_w as i32 - temp_width as i32) / 2);
-                    draw_text(&mut self.display,&min_max_temp, temp_x, day_y, &FONT_4X6)?;
-
-                    // and POP
-                    day_y += 7;
-                    let pop_width = Self::get_text_width_specific_font(&pop, &FONT_4X6);
-                    let pop_x = icon_x + ((icon_w as i32 - pop_width as i32) / 2);
-                    draw_text(&mut self.display,&pop, pop_x, day_y, &FONT_4X6)?;
-
-                    icon_x += icon_w as i32 + 6; // next day forecast position
-
+                    }
+                    needs_flush = true;
                 }
-                needs_flush = true;
-            }
             }
         }
 

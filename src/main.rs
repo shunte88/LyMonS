@@ -49,7 +49,7 @@ mod httprpc;
 mod sliminfo;
 mod weather;
 mod textable;
-mod climacell;
+mod weather_glyph;
 mod geoloc;
 mod translate;
 mod eggs;

@@ -26,8 +26,44 @@ use embedded_graphics::{
     primitives::{Line, PrimitiveStyle, Rectangle},
 };
 
+/// Draw the SSD1309 2-up VU needle
+#[allow(dead_code)]
+pub fn draw_vu_needle<D>(
+    display: &mut D,
+    panel: Rectangle,
+    db: f32,
+    sweep_min: i32,
+    sweep_max: i32,
+) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+    let origin = panel.top_left;
+    let Size { width, height } = panel.size;
+
+    if width < 40 || height < 32 {
+        return Ok(());
+    }
+    
+    // Layout: pivot near bottom center; radius sized to panel
+    let h = height as i32;
+    let cx = origin.x + width as i32/ 2;
+    let cy = origin.y + h - 6;
+    let r_arc  = h/2 + h/6;
+    let r_needle = r_arc - 28;
+    let style = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
+
+    let ang = vu_db_to_meter_angle(db, sweep_min, sweep_max); // degrees; −3 dB => 0°
+    let p_out = polar_point(cx, cy, r_arc, ang);
+    let p_in  = polar_point(cx, cy, r_needle, ang);
+    Line::new(p_in, p_out).into_styled(style).draw(display)?;
+
+    Ok(())
+}
+
 /// Draw the SSD1309 2-up VU face (one panel): arc + ticks.
 /// `panel`: the rectangle already laid out for this meter panel.
+#[allow(dead_code)]
 pub fn draw_vu_face<D>(
     display: &mut D,
     panel: Rectangle,
@@ -59,13 +95,16 @@ where
     let style0 = PrimitiveStyle::with_stroke(BinaryColor::On, 2);
     // minor
     let style1 = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
-
-    // --- Arc: polyline at radius r_arc from ~-48° to +48° (1° steps) ---
+    let mut style = style1;
+    // --- Arc: polyline at radius r_arc across sweep (1° steps) ---
     let mut prev: Option<Point> = None;
-    for deg in sweep_min..=sweep_max {  // (-48..=48).step_by(5) { // 1-3 step, more gets chunky chunk
+    for deg in sweep_min..=sweep_max {
         let p = polar_point(cx, cy, r_arc, vu_meter_angle_deg(deg as f32));
         if let Some(pp) = prev {
-            Line::new(pp, p).into_styled(style0).draw(display)?;
+            if deg == 5 {
+                style = style0;
+            }
+            Line::new(pp, p).into_styled(style).draw(display)?;
         }
         prev = Some(p);
     }
@@ -76,12 +115,13 @@ where
     // Minor: the intermediates; shorter
     const DB_MINOR: [f32; 8] = [-7.0, -6.0, -5.0, -4.0, -2.0, -1.0, 1.0, 2.0];
 
+    style = style1;
     // Draw major ticks
     for &db in &DB_MAJOR {
         let ang = vu_db_to_meter_angle(db, sweep_min, sweep_max); // degrees; −3 dB => 0°
         let p_out = polar_point(cx, cy, r_tick, ang);
         let p_in  = polar_point(cx, cy, r_in_major, ang);
-        Line::new(p_in, p_out).into_styled(style0).draw(display)?;
+        Line::new(p_in, p_out).into_styled(style).draw(display)?;
     }
 
     // Draw minor ticks
@@ -89,7 +129,7 @@ where
         let ang = vu_db_to_meter_angle(db, sweep_min, sweep_max);
         let p_out = polar_point(cx, cy, r_tick, ang);
         let p_in  = polar_point(cx, cy, r_in_minor, ang);
-        Line::new(p_in, p_out).into_styled(style1).draw(display)?;
+        Line::new(p_in, p_out).into_styled(style).draw(display)?;
     }
 
     Ok(Point::new(cx,cy))
@@ -98,6 +138,7 @@ where
 /// Map VU dB to the **meter angle in degrees** with exponential spacing:
 /// angle = θ * 10^(db/20) shifted so −3 dB is 0°.
 /// Positive angles sweep to the right; negative to the left.
+#[allow(dead_code)]
 #[inline]
 pub fn vu_db_to_meter_angle(db: f32, sweep_min: i32, sweep_max: i32) -> f32 {
     // θ from original C: sweep / sqrt(2)
@@ -111,12 +152,14 @@ pub fn vu_db_to_meter_angle(db: f32, sweep_min: i32, sweep_max: i32) -> f32 {
 /// Convert a *relative* meter angle (deg, − left .. + right) into the
 /// absolute drawing angle for the panel arc sweep. Here we keep it equal,
 /// but you can remap if your coordinate system needs it.
+#[allow(dead_code)]
 #[inline]
 fn vu_meter_angle_deg(rel_deg: f32) -> f32 {
     rel_deg
 }
 
 /// Simple polar helper (degrees).
+#[allow(dead_code)]
 #[inline]
 fn polar_point(cx: i32, cy: i32, r: i32, deg: f32) -> Point {
     let rad = deg.to_radians();

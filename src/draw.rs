@@ -10,11 +10,10 @@ use embedded_graphics::{
 };
 
 use embedded_text::{
-    TextBox,
-    alignment::{HorizontalAlignment, VerticalAlignment},
-    style::TextBoxStyleBuilder,
+    alignment::{HorizontalAlignment, VerticalAlignment}, style::{TextBoxStyle, TextBoxStyleBuilder}, TextBox
 };
 
+#[allow(dead_code)]
 pub fn draw_line<D>(
     target: &mut D,
     start: Point,
@@ -32,8 +31,8 @@ where
     Ok(())
 }
 
-
 /// Clears a rectangular region of the target buffer to background color (BinaryColor::Off).
+#[allow(dead_code)]
 pub fn clear_region<D>(target: &mut D, region: Rectangle) -> Result<(), D::Error>
 where
     D: DrawTarget<Color = BinaryColor> + OriginDimensions,
@@ -49,6 +48,7 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn draw_text<D>(
     target: &mut D,
     text: &str,
@@ -73,6 +73,53 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
+pub fn draw_text_align<D>(
+    target: &mut D,
+    text: &str,
+    top_left: Point,
+    length: u32,
+    align: HorizontalAlignment,
+    font: &MonoFont,
+) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+    let h = font.character_size.height;
+    let size = Size::new(length, h);
+    let character_style = MonoTextStyle::new(font, BinaryColor::On);
+    let textbox_style = TextBoxStyleBuilder::new()
+        .alignment(align)
+        .vertical_alignment(VerticalAlignment::Middle)
+        .build();
+    let label_rect = Rectangle::new(top_left, size);
+    let label_box = TextBox::with_textbox_style(text, label_rect, character_style, textbox_style);
+    label_box.draw(target)?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn draw_text_align_style<D>(
+    target: &mut D,
+    text: &str,
+    top_left: Point,
+    length: u32,
+    style: TextBoxStyle,
+    font: &MonoFont,
+) -> Result<(), D::Error>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+    let h = font.character_size.height;
+    let size = Size::new(length, h);
+    let character_style = MonoTextStyle::new(font, BinaryColor::On);
+    let label_rect = Rectangle::new(top_left, size);
+    let label_box = TextBox::with_textbox_style(text, label_rect, character_style, style);
+    label_box.draw(target)?;
+    Ok(())
+}
+
+#[allow(dead_code)]
 pub fn draw_text_region_align<D>(
     target: &mut D,
     text: &str,
@@ -96,6 +143,7 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn draw_circle_from_center<D, C>(
     target: &mut D,
     center: Point,
@@ -108,16 +156,15 @@ where
 {
     assert!(diameter >= 0, "diameter must be non-negative");
     let r = diameter / 2;
-
     // Convert (center, diameter) -> (top_left, diameter)
     let top_left = Point::new(center.x - r, center.y - r);
-
     Circle::new(top_left, diameter as u32)
         .into_styled(style)
         .draw(target)?;
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn draw_circle<D>(
     target: &mut D,
     origin: Point,
@@ -142,6 +189,7 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn draw_arc<D>(
     target: &mut D,
     origin: Point,
@@ -160,6 +208,7 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn draw_rectangle<D>(
     target: &mut D,
     top_left: Point,
@@ -192,6 +241,7 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn draw_rect_with_style<D, C>(
     target: &mut D,
     rect: Rectangle,
@@ -201,7 +251,6 @@ where
     D: DrawTarget<Color = C> + OriginDimensions,
     C: PixelColor,
 {
-
     rect
         .into_styled(style)
         .draw(target)?;
