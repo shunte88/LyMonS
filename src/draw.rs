@@ -1,17 +1,64 @@
+/*
+ *  draw.rs
+ * 
+ *  LyMonS - worth the squeeze
+ *	(c) 2020-25 Stuart Hunter
+ *
+ *	TODO:
+ *
+ *	This program is free software: you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation, either version 3 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	See <http://www.gnu.org/licenses/> to get a copy of the GNU General
+ *	Public License.
+ *
+ */
+
 use embedded_graphics::{
-    image::{Image, ImageRaw},
     mono_font::{
         MonoFont, MonoTextStyle, MonoTextStyleBuilder,
     },
     pixelcolor::BinaryColor,
     prelude::*,
     primitives::{Arc, Circle, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle},
-    text::{self, Baseline, Text, renderer::TextRenderer},
+    text::{Baseline, Text},
 };
+use embedded_graphics::pixelcolor::PixelColor;
 
 use embedded_text::{
     alignment::{HorizontalAlignment, VerticalAlignment}, style::{TextBoxStyle, TextBoxStyleBuilder}, TextBox
 };
+
+// when we get to gray4 follow this pattern
+#[allow(dead_code)]
+pub fn draw_text_c<C, D>(
+    target: &mut D,
+    text: &str,
+    x: i32,
+    y: i32,
+    font: &MonoFont,
+    color: C,
+) -> Result<(), D::Error>
+where
+    C: PixelColor,
+    D: DrawTarget<Color = C> + OriginDimensions,
+{
+    Text::with_baseline(
+        text,
+        Point::new(x, y),
+        MonoTextStyleBuilder::new().font(font).text_color(color).build(),
+        Baseline::Top,
+    )
+    .draw(target)?;
+    Ok(())
+}
 
 #[allow(dead_code)]
 pub fn draw_line<D>(
@@ -26,8 +73,7 @@ where
 {
     let _ = Line::new(start, end)
         .into_styled(PrimitiveStyleBuilder::new().stroke_width(width).stroke_color(color).build())
-        .draw(target)
-        .map_err(|e| D::Error::from(e))?;
+        .draw(target)?;
     Ok(())
 }
 
@@ -43,8 +89,7 @@ where
                 .fill_color(BinaryColor::Off)
                 .build(),
         )
-        .draw(target) 
-        .map_err(|e| D::Error::from(e))?;
+        .draw(target)?;
     Ok(())
 }
 
@@ -68,8 +113,7 @@ where
             .build(),
         Baseline::Top,
     )
-    .draw(target) // Draw on the passed mutable target reference
-    .map_err(|e| D::Error::from(e))?;
+    .draw(target)?;
     Ok(())
 }
 

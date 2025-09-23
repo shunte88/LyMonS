@@ -20,25 +20,20 @@
  *	Public License.
  *
  */
-// - scans /dev/shm for "squeezelite-*" and maps to it
 
-use libc::{open, pthread_rwlock_t, pthread_rwlock_tryrdlock, pthread_rwlock_unlock, time_t, EBUSY};
+/// scans /dev/shm for "squeezelite-*" and maps to it
+
+use libc::{pthread_rwlock_t, pthread_rwlock_tryrdlock, pthread_rwlock_unlock, time_t, EBUSY};
 use memmap2::{MmapMut, MmapOptions};
 use std::fs::OpenOptions;
 use std::io;
 use std::path::PathBuf;
 use std::mem::size_of;
-use std::prelude::v1;
-use log::{info, error};
 use std::ptr;
 use std::sync::atomic::{fence, Ordering};
 use std::time::{Duration, Instant};
-use crate::func_timer::FunctionTimer;
 use std::thread::sleep;
-use crate::vuphysics::{
-    VuNeedleNew,   // VU physics
-    VuNeedle       // VU physics
-};
+use crate::vuphysics::{VuNeedle};
 
 use crate::shm_path::find_squeezelite_shm_path;
 
@@ -58,44 +53,30 @@ const LOCK_TRY_WINDOW_MS: u32 = 5;              // total budget for try-loop
 pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~60 FPS
 pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
 
-/// VU meter arc digits
-#[derive(Debug, PartialEq, Clone)]
-pub struct VuArcDigits {
-    pub label: String,
-    pub db: f32,
-    pub theta: f32,
-    pub angle: f32,
-    pub meterangle: f32,
-    pub color: i16,
-    pub lnudge: i16,
-    pub above: bool,
-}
-
-impl VuArcDigits {
-    pub fn default() -> Self {
-        Self {
-            label: String::new().clone(),
-            db: 0.0,
-            theta: 0.0,
-            angle: 0.0,
-            meterangle: 0.0,
-            color: 0,
-            lnudge: 0,
-            above: false,
-        }
-    }
-}
-
 /// simple state carried across calls (last metrics + peak-hold)
 #[derive(Debug, PartialEq, Clone)]
 pub struct LastVizState {
 
     pub wide: bool,
-    pub last_metric: [i32; 2],
-    pub hold: [u8; 2],
+    pub init_vu: bool,
 
-    pub vu_arc_digits: Vec<VuArcDigits>,
-    pub vu_arc_pct: Vec<VuArcDigits>,
+    pub buffer: Vec<u8>,
+
+    pub last_disp_m: f32,
+    pub last_disp_l: f32,
+    pub last_disp_r: f32,
+
+    pub last_over_m: bool,
+    pub last_over_l: bool,
+    pub last_over_r: bool,
+
+    pub last_peak_m: u8,
+    pub last_peak_l: u8,
+    pub last_peak_r: u8,
+
+    pub last_hold_m: u8,
+    pub last_hold_l: u8,
+    pub last_hold_r: u8,
 
     pub last_db_m: f32,
     pub last_db_l: f32,
@@ -133,15 +114,28 @@ pub struct LastVizState {
 }
 
 impl Default for LastVizState {
-    
+
     fn default() -> Self {
 
         Self {
             wide: false,
-            last_metric: [i32::MIN; 2],
-            hold: [0, 0],
-            vu_arc_digits: Vec::new(),
-            vu_arc_pct: Vec::new(),
+            init_vu: false,
+            buffer: Vec::new(),
+
+            last_peak_m: u8::MIN,
+            last_peak_l: u8::MIN,
+            last_peak_r: u8::MIN,
+
+            last_disp_m: f32::MIN,
+            last_disp_l: f32::MIN,
+            last_disp_r: f32::MIN,
+
+            last_over_m: false,
+            last_over_l: false,
+            last_over_r: false,
+            last_hold_m: u8::MIN,
+            last_hold_l: u8::MIN,
+            last_hold_r: u8::MIN,
             last_db_m: f32::MIN,
             last_db_l: f32::MIN,
             last_db_r: f32::MIN,
@@ -162,9 +156,7 @@ impl Default for LastVizState {
             cap_last_update_r: Vec::new(),
             init: true,
             vu_init: true,
-            //vu_m: VuNeedleNew::new_vu(),
-            //vu_l: VuNeedleNew::new_vu(),
-            //vu_r: VuNeedleNew::new_vu(),
+ 
             vu_m: VuNeedle::new(),
             vu_l: VuNeedle::new(),
             vu_r: VuNeedle::new(),
@@ -522,7 +514,7 @@ fn header_looks_good(size: usize, idx: usize, rate: u32) -> bool {
 unsafe fn lock_read_best_effort(
     p: *mut pthread_rwlock_t,
     window_ms: u32,
-) -> io::Result<Option<ReadGuard>> {
+) -> io::Result<Option<ReadGuard>> { unsafe {
     //let _ = FunctionTimer::new("vision::lock_read_best_effort");
     let rc = pthread_rwlock_tryrdlock(p);
     if rc == 0 {
@@ -545,7 +537,7 @@ unsafe fn lock_read_best_effort(
         sleep(POLL_IDLE);
     }
     Ok(None) // let caller fall back to unlocked snapshot
-}
+}}
 
 /// Fast peak/RMS helpers (reuse your slices each call)
 pub fn peak_and_rms(ch: &[i16]) -> (i16, f32) {
@@ -568,6 +560,7 @@ fn db_to_level(db: f32) -> u8 {
     let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
     (x * PEAK_METER_LEVELS_MAX as f32).round() as u8
 }
+
 /// Map dBFS to integer meter steps [0..=PEAK_METER_LEVELS_MAX] and scaled headroom (20%)
 #[inline]
 fn db_to_level_scale(db: f32) -> u8 {

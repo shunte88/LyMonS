@@ -75,7 +75,7 @@ fn reduce_pi_over_2(x: f32) -> (f32, i32) {
     let n_i = n as i32;
 
     // r = x - n*(pi/2) using a split to reduce cancelation error
-    let r = ((x - n * PIO2_1) - n * PIO2_2);
+    let r = (x - n * PIO2_1) - n * PIO2_2;
 
     (r, n_i)
 }

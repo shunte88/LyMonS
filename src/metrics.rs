@@ -23,7 +23,7 @@
 //! A Rust library for gathering system metrics from /proc and /sys files.
 
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self};
 
 /// A struct to hold metrics information.
 /// Corresponds to meminfo_t in the C code.

@@ -21,6 +21,7 @@
  *
  */
 use embedded_graphics::{
+    image::{Image, ImageRaw},
     pixelcolor::BinaryColor,
     prelude::*,
     primitives::{Line, PrimitiveStyle, Rectangle},
@@ -29,7 +30,7 @@ use embedded_graphics::{
 /// Draw the SSD1309 2-up VU needle
 #[allow(dead_code)]
 pub fn draw_vu_needle<D>(
-    display: &mut D,
+    target: &mut D,
     panel: Rectangle,
     db: f32,
     sweep_min: i32,
@@ -56,7 +57,7 @@ where
     let ang = vu_db_to_meter_angle(db, sweep_min, sweep_max); // degrees; −3 dB => 0°
     let p_out = polar_point(cx, cy, r_arc, ang);
     let p_in  = polar_point(cx, cy, r_needle, ang);
-    Line::new(p_in, p_out).into_styled(style).draw(display)?;
+    Line::new(p_in, p_out).into_styled(style).draw(target)?;
 
     Ok(())
 }
@@ -65,10 +66,11 @@ where
 /// `panel`: the rectangle already laid out for this meter panel.
 #[allow(dead_code)]
 pub fn draw_vu_face<D>(
-    display: &mut D,
+    target: &mut D,
     panel: Rectangle,
     sweep_min: i32, // = -48;
     sweep_max: i32, // = 48;
+    buffer: Vec<u8>,
 ) -> Result<Point, D::Error>
 where
     D: DrawTarget<Color = BinaryColor> + OriginDimensions,
@@ -84,55 +86,65 @@ where
     let w = width as i32;
     let h = height as i32;
     let cx = origin.x + w / 2;
-    let cy = origin.y + h - 6;   // a few px above panel bottom
-    let r_arc  = h/2 + h/6;
-    let _r_arc  = (h * 3) / 4;    // arc radius
-    let r_tick = r_arc;          // outer tick radius
-    let r_in_major = r_tick - 8; // major tick length
-    let r_in_minor = r_tick - 4; // minor tick length
+    let mut cy = origin.y + h - 6;   // a few px above panel bottom
+    if buffer.len() == 0 {
 
-    // major
-    let style0 = PrimitiveStyle::with_stroke(BinaryColor::On, 2);
-    // minor
-    let style1 = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
-    let mut style = style1;
-    // --- Arc: polyline at radius r_arc across sweep (1° steps) ---
-    let mut prev: Option<Point> = None;
-    for deg in sweep_min..=sweep_max {
-        let p = polar_point(cx, cy, r_arc, vu_meter_angle_deg(deg as f32));
-        if let Some(pp) = prev {
-            if deg == 5 {
-                style = style0;
+        let r_arc  = h/2 + h/6;
+        let _r_arc  = (h * 3) / 4;    // arc radius
+        let r_tick = r_arc;          // outer tick radius
+        let r_in_major = r_tick - 8; // major tick length
+        let r_in_minor = r_tick - 4; // minor tick length
+
+        // major
+        let style0 = PrimitiveStyle::with_stroke(BinaryColor::On, 2);
+        // minor
+        let style1 = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
+        let mut style = style1;
+        // --- Arc: polyline at radius r_arc across sweep (1° steps) ---
+        let mut prev: Option<Point> = None;
+        for deg in sweep_min..=sweep_max {
+            let p = polar_point(cx, cy, r_arc, vu_meter_angle_deg(deg as f32));
+            if let Some(pp) = prev {
+                if deg == 5 {
+                    style = style0;
+                }
+                Line::new(pp, p).into_styled(style).draw(target)?;
             }
-            Line::new(pp, p).into_styled(style).draw(display)?;
+            prev = Some(p);
         }
-        prev = Some(p);
+
+        // --- Ticks ---
+        // Major: sparse, longer lines
+        const DB_MAJOR: [f32; 5] = [-20.0, -10.0, -3.0, 0.0, 3.0];
+        // Minor: the intermediates; shorter
+        const DB_MINOR: [f32; 8] = [-7.0, -6.0, -5.0, -4.0, -2.0, -1.0, 1.0, 2.0];
+
+        style = style1;
+        // Draw major ticks
+        for &db in &DB_MAJOR {
+            let ang = vu_db_to_meter_angle(db, sweep_min, sweep_max); // degrees; −3 dB => 0°
+            let p_out = polar_point(cx, cy, r_tick, ang);
+            let p_in  = polar_point(cx, cy, r_in_major, ang);
+            Line::new(p_in, p_out).into_styled(style).draw(target)?;
+        }
+
+        // Draw minor ticks
+        for &db in &DB_MINOR {
+            let ang = vu_db_to_meter_angle(db, sweep_min, sweep_max);
+            let p_out = polar_point(cx, cy, r_tick, ang);
+            let p_in  = polar_point(cx, cy, r_in_minor, ang);
+            Line::new(p_in, p_out).into_styled(style).draw(target)?;
+        }
+    } else {
+        // Blit to target
+        let raw = ImageRaw::<BinaryColor>::new(&buffer, width);
+        Image::new(&raw, Point::new(panel.top_left.x, panel.top_left.y))
+            .draw(target)
+            .map_err(|e|D::Error::from(e))?;
+        cy = 84;
     }
-
-    // --- Ticks ---
-    // Major: sparse, longer lines
-    const DB_MAJOR: [f32; 5] = [-20.0, -10.0, -3.0, 0.0, 3.0];
-    // Minor: the intermediates; shorter
-    const DB_MINOR: [f32; 8] = [-7.0, -6.0, -5.0, -4.0, -2.0, -1.0, 1.0, 2.0];
-
-    style = style1;
-    // Draw major ticks
-    for &db in &DB_MAJOR {
-        let ang = vu_db_to_meter_angle(db, sweep_min, sweep_max); // degrees; −3 dB => 0°
-        let p_out = polar_point(cx, cy, r_tick, ang);
-        let p_in  = polar_point(cx, cy, r_in_major, ang);
-        Line::new(p_in, p_out).into_styled(style).draw(display)?;
-    }
-
-    // Draw minor ticks
-    for &db in &DB_MINOR {
-        let ang = vu_db_to_meter_angle(db, sweep_min, sweep_max);
-        let p_out = polar_point(cx, cy, r_tick, ang);
-        let p_in  = polar_point(cx, cy, r_in_minor, ang);
-        Line::new(p_in, p_out).into_styled(style).draw(display)?;
-    }
-
     Ok(Point::new(cx,cy))
+
 }
 
 /// Map VU dB to the **meter angle in degrees** with exponential spacing:
@@ -144,6 +156,7 @@ pub fn vu_db_to_meter_angle(db: f32, sweep_min: i32, sweep_max: i32) -> f32 {
     // θ from original C: sweep / sqrt(2)
     let sweep = sweep_min.abs() as f32 + sweep_max.abs() as f32;
     let theta = sweep / 2.0_f32.sqrt();
+    let theta = 90.00 / 2.0_f32.sqrt();
     let a_db   = theta * 10f32.powf(db / 20.0);
     let a_m3db = theta * 10f32.powf(-3.0 / 20.0); // reference at −3 dB
     a_db - a_m3db

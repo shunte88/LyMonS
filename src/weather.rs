@@ -25,7 +25,7 @@ use serde_json::{Value, Error as JsonError};
 use reqwest::{Client, header};
 use std::fmt::{self, Display};
 use std::time::{Duration, Instant}; // Added Instant for tracking last update
-use log::{info, error, debug};
+use log::{info, error};
 use tokio::sync::{mpsc, Mutex as TokMutex};
 use tokio::task::JoinHandle;
 use std::sync::Arc;
@@ -34,23 +34,35 @@ use chrono::{DateTime, Local}; // Import Duration for adding to DateTime
 use flate2::read::GzDecoder;
 use std::io::Read;
 use std::thread;
-use std::fs;
 
 use crate::geoloc::{fetch_location};
 use crate::translate::Translation;
 
-use embedded_graphics::{
-    image::{ImageRaw},
-    pixelcolor::BinaryColor,
-    prelude::*, 
-    primitives::{Rectangle}, 
-};
+use embedded_graphics::prelude::*;
 
 /// Represents the audio bitrate mode for displaying the correct glyph.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum IconSet {
     Mono = 1,
     Basic = 2,
+}
+
+#[derive(Debug)]
+pub enum WeatherCondition {
+    Current = 0,
+    ForecastDay1 = 1,
+    ForecastDay2 = 2,
+    ForecastDay3 = 3,
+}
+
+#[derive(Debug)]
+pub struct WeatherDisplay{
+    pub temp_units: String,
+    pub wind_speed_units: String,
+    pub current: WeatherData,
+    pub forecasts: Vec<WeatherData>,
+    pub svg: String,
+    pub fsvg: Vec<String>,
 }
 
 // Custom error type for weather API operations.
@@ -138,7 +150,8 @@ pub struct WeatherData {
 // Main weather data struct
 #[derive(Debug, Clone, PartialEq)] // Added PartialEq
 pub struct WeatherConditions {
-    pub location_name: String,
+    location_name: String,
+    pub base_folder: String,
     pub temperature_units: String, // "C" or "F"
     pub windspeed_units: String, // "km/h" or "mph"
     pub current: WeatherData,
@@ -158,7 +171,6 @@ pub struct Weather {
     translate: String,
     client: Client,
     icons: i32,
-    pub base_folder: String,
     pub weather_data: WeatherConditions, // Public so OledDisplay can read it
     stop_sender: Option<mpsc::Sender<()>>,
     poll_handle: Option<JoinHandle<()>>,
@@ -166,9 +178,10 @@ pub struct Weather {
 }
 
 impl WeatherConditions {
-    pub fn new(location_name: String, units: String) -> Self {
+    pub fn new(location_name: String, units: String, base_folder: String) -> Self {
         Self {
             location_name,
+            base_folder,
             temperature_units: if units == "imperial" { "F" } else { "C" }.to_string(),
             windspeed_units: if units == "imperial" { "mph" } else { "km/h" }.to_string(),
             current: WeatherData::default(),
@@ -176,6 +189,49 @@ impl WeatherConditions {
             last_updated: Local::now(),
         }
     }
+    fn get_svg_path(&self, wc: WeatherCondition) -> String {
+        let svg = match wc {
+            WeatherCondition::Current => &self.current.weather_code.svg.clone(),
+            WeatherCondition::ForecastDay1 => &self.forecast[0].weather_code.svg.clone(),
+            WeatherCondition::ForecastDay2 => &self.forecast[1].weather_code.svg.clone(),
+            WeatherCondition::ForecastDay3 => &self.forecast[2].weather_code.svg.clone(),
+        };
+        let ret = format!("{}{}", &self.base_folder.clone(), 
+            if svg.contains(".svg") {
+                svg.clone()
+            }else{
+                "no_data.svg".to_string()
+            }
+        );
+        ret
+    }
+
+    pub fn get_weather_display(&self) -> WeatherDisplay {
+        let temp_units = self.temperature_units.clone();
+        let wind_speed_units = self.windspeed_units.clone();
+        let current = self.current.clone();
+        let forecasts = self.forecast.clone();
+        let svg = self.get_svg_path(WeatherCondition::Current).clone();
+        let mut fsvg: Vec<String> = Vec::new();
+        for _i in 0..3 {
+            let wc = match _i {
+                0 => WeatherCondition::ForecastDay1,
+                1 => WeatherCondition::ForecastDay2,
+                2 => WeatherCondition::ForecastDay3,
+                _ => WeatherCondition::ForecastDay1,
+            };
+            fsvg.push(self.get_svg_path(wc).clone());
+        }
+        WeatherDisplay {
+            temp_units,
+            wind_speed_units,
+            current,
+            forecasts,
+            svg,
+            fsvg,
+        }
+    }
+
 }
 
 #[allow(dead_code)]
@@ -268,8 +324,8 @@ impl Weather {
             translate: transl.to_string(),
             client,
             icons,
-            base_folder,
-            weather_data: WeatherConditions::new(location_name, conditions_units),
+            //base_folder,
+            weather_data: WeatherConditions::new(location_name, conditions_units, base_folder),
             stop_sender: None,
             poll_handle: None,
             last_fetch_time: None,

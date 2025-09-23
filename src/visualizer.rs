@@ -26,7 +26,7 @@
 use tokio::sync::mpsc::{self, Sender, Receiver};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, Duration, Instant};
+use tokio::time::sleep;
 
 use log::{info, error};
 
@@ -34,8 +34,10 @@ use crate::spectrum::{
     SpectrumEngine,
     SPECTRUM_BANDS_COUNT,
 };
+use crate::dbfs;
 use crate::vision::{
-    VisReader, peak_and_rms, dbfs,
+    VisReader, 
+    peak_and_rms, dbfs,
     PEAK_METER_LEVELS_MAX, 
     LEVEL_DECAY_STEPS_PER_FRAME,
     LEVEL_FLOOR_DB, 
@@ -194,7 +196,7 @@ async fn visualizer_worker(
     let mut peak_hold_m: u8 = 0;
 
     info!("visualizer worker started (idle)");
-    let mut last_is_playing = false;
+    let last_is_playing = false;
 
     'outer: loop {
         // drain any pending commands
@@ -207,19 +209,6 @@ async fn visualizer_worker(
         }
 
         let is_playing = *playing_rx.borrow();
-        /*
-        // send status change payload - early doors!!!
-        if last_is_playing != is_playing {
-            last_is_playing = is_playing;
-            //debug!("Visualizer: playing is now {}", if is_playing { "on" } else { "off" });
-            publish(&mut out_tx,
-                0_i64,
-                is_playing,
-                44_100,
-                Visualization::NoVisualization,
-                VizPayload::NoVisualization {});
-        }
-        */
         
         // if not ebabled or playing - nap then continue
         if !enabled || !is_playing {
@@ -245,8 +234,8 @@ async fn visualizer_worker(
                 Visualization::VuStereo => {
                     let (_pk_l, rms_l) = peak_and_rms(left);
                     let (_pk_r, rms_r) = peak_and_rms(right);
-                    let l_db = dbfs(rms_l);
-                    let r_db = dbfs(rms_r);
+                    let l_db = dbfs::dbfs_to_vudb(dbfs(rms_l)); // includes VU meter adj.
+                    let r_db = dbfs::dbfs_to_vudb(dbfs(rms_r)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::VuStereo { l_db, r_db });
                 }
@@ -256,7 +245,7 @@ async fn visualizer_worker(
                     let (_pk_r, rms_r) = peak_and_rms(right);
                     // downmix RMS ≈ sqrt((L^2 + R^2)/2)
                     let mono_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
-                    let db = dbfs(mono_rms);
+                    let db = dbfs::dbfs_to_vudb(dbfs(mono_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::VuMono { db });
                 }

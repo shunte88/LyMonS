@@ -37,10 +37,13 @@ use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
 // move these to mod.rs
 //mod singles;
 mod trig;
+mod pacer;
+mod dbfs;
 mod draw;
 mod display;
 mod mac_addr;
 mod metrics;
+mod const_oled;
 mod constants;
 mod imgdata;
 mod clock_font;
@@ -54,6 +57,7 @@ mod geoloc;
 mod translate;
 mod eggs;
 mod spectrum;
+mod vframebuf;
 mod vision;
 mod visualizer;
 mod vu2up_ssd1309;
@@ -100,7 +104,7 @@ fn check_half_hour(test:&String, active: bool) -> u8 {
     let now = Local::now();
     let minute = now.minute();
     let second = now.second();
-    if minute == 5 || minute == 25 || minute == 45 {
+    if minute == 10 || minute == 30 || minute == 50 {
         if second < 30 {
             1
         } else {
@@ -309,7 +313,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scrolling_poll_duration = Duration::from_millis(50);
     // clock display sleep duration
     let clock_poll_duration = Duration::from_millis(100);
-    let viz_poll_duration = Duration::from_millis(32); // > 30Hz (16=60Hz)
+    let viz_poll_duration = Duration::from_millis(36); // ~30Hz balance I2C refresh (16=60Hz)
 
     // Initialize the LMS server, discover it, fetch players, init tags, and start polling
     // init_server now returns Arc<TokMutex<LMSServer>>

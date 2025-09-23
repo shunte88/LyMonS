@@ -1,6 +1,6 @@
 [package]
 name = "LyMonS"
-version = "0.1.43"
+version = "0.1.44"
 edition = "2024"
 
 [build-dependencies]
@@ -11,23 +11,25 @@ chrono = { version = "0.4.41", features = ["serde"] }
 clap = "4.5.39"
 display-interface = "0.5.0"
 embedded-graphics = "0.8.1"
+embedded-graphics-framebuf = "0.5.0"
+embedded-text = "0.7.2"
+embedded-hal = "1.0.0"
+linux-embedded-hal = "0.4.0"
 env = "1.0.1"
 env_logger = "0.11.8"
-linux-embedded-hal = "0.4.0"
 log = "0.4.27"
-reqwest = { version = "0.12.15", features = ["json", "rustls-tls", "stream"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+reqwest = { version = "0.12.23", features = ["json", "rustls-tls", "stream"] }
+serde = { version = "1.0.225", features = ["derive"] }
+serde_json = "1.0.145"
 ssd1306 = "0.10.0"
 ssd1309 = "0.4.0"
 ssd1322 = "0.3.0"
 thiserror = "2.0.12"
 anyhow = "1.0.98"
 translators = { version = "0.1.5", features = ["google", "tokio-async"] }
-tokio = { version = "1.45.0", features = ["full","rt-multi-thread"] }
+tokio = { version = "1.47.1", features = ["full","rt-multi-thread"] }
 mini-moka = "0.10.3"
 async-compression = { version = "0.4.25", features = ["gzip", "futures-io"] }
-embedded-text = "0.7.2"
 flate2 = "1.1.2"
 rand = "0.9.2"
 mac_address = "1.1.8"
@@ -36,7 +38,6 @@ mac_address = "1.1.8"
 tiny-skia = { version = "0.11.4", default-features = false, features = ["std"] } # Explicitly control tiny-skia features
 resvg = { version = "0.45.1" }
 usvg = { version = "0.45.1" }
-#roxmltree = "0.20.0"
 
 # Real hardware dependency (only compiled if `emulated-hardware` feature is OFF)
 rppal = { version = "0.14", optional = true }
@@ -48,7 +49,7 @@ local-ip-address = "0.6.5"
 memmap2 = "0.9.8"
 
 [profile.release]
-opt-level = "z"       # prioritize size over speed (or use "s" for balanced)
+opt-level = "s"       # "z" we prioritize size over speed, "s" is balanced
 lto = true            # enable link-time optimization
 codegen-units = 1     # fewer parallel codegen units, better optimization
 panic = "abort"       # strip panic backtrace machinery

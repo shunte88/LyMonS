@@ -28,16 +28,14 @@ use chrono::{Timelike, DateTime, Local};
 use embedded_graphics::{
     image::{Image, ImageRaw},
     mono_font::{
-        ascii::FONT_7X13, iso_8859_13::{
-            FONT_4X6, FONT_5X7, FONT_5X8, FONT_6X10, FONT_6X13_BOLD, FONT_6X9, FONT_7X14}, MonoFont, MonoTextStyle, MonoTextStyleBuilder
+        iso_8859_13::{
+            FONT_4X6, FONT_5X8, FONT_6X10, FONT_6X13_BOLD, FONT_7X14}, MonoFont, MonoTextStyle, MonoTextStyleBuilder
     }, 
     pixelcolor::BinaryColor, 
     prelude::*, 
-    primitives::{Arc as CircleArc, Circle, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle}, 
-    text::{self, 
-        renderer::TextRenderer, 
+    primitives::{PrimitiveStyle, PrimitiveStyleBuilder, Rectangle}, 
+    text::{renderer::TextRenderer, 
         Baseline, 
-        Text, 
     }
 };
 
@@ -47,22 +45,23 @@ use embedded_text::{
     TextBox,
 };
 
-use libc::_CS_POSIX_V6_ILP32_OFF32_CFLAGS;
 use linux_embedded_hal::{I2cdev, I2CError as LinuxI2CError};
+//use linux_embedded_hal::{Spidev, SPIError as LinuxSPIError};
 
 use ssd1306::{
-    mode::{self, BufferedGraphicsMode},
+    mode::{BufferedGraphicsMode},
     prelude::*,
-    size::{self, DisplaySize128x64},
+    size::{DisplaySize128x64},
     I2CDisplayInterface,
     Ssd1306, 
 };
 
 use log::{debug, info, error, warn};
-use std::{time::{Duration, Instant}};
+use std::time::{Duration, Instant};
 use std::error::Error; // Import the Error trait
 use std::fmt; // Import fmt for Display trait
 use std::thread::sleep;
+use std::fs as fs_std;
 use tokio::sync::Mutex as TokMutex;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -70,29 +69,28 @@ use tokio::sync::mpsc::error::TryRecvError;
 use tokio::fs;
 use display_interface::DisplayError;
 
+use crate::vframebuf::VarFrameBuf;
+use crate::pacer::{AutoPacer};
+
+use crate::constants; // constants
+use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
+use crate::deutils::seconds_to_hms;
+use crate::weather_glyph; // weather glyphs - need to move to SVG impl.
+use crate::weather::{Weather, WeatherData};
+use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode, GAP_BETWEEN_LOOP_TEXT_FIXED};
+use crate::svgimage::SvgImageRenderer;
+use crate::metrics::{MachineMetrics};
+
+use crate::eggs::{Eggs, set_easter_egg};
+
 use crate::imgdata;   // imgdata, glyphs and such
 use crate::vu2up_ssd1309::{
     draw_vu_face as draw_vu_face_1309,
     draw_vu_needle as draw_vu_needle_1309,
 };
-use crate::vuphysics::{
-    VuNeedleNew,
-    VuNeedle,
-    VU_FLOOR_DB, VU_CEIL_DB, VU_GAMMA, 
-    db_to_drive,
-    needle_tip
-};   // VU physics
-use crate::constants; // constants
-use crate::weather_glyph; // weather glyphs - need to move to SVG impl.
-use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
-use crate::deutils::seconds_to_hms;
-use crate::weather::{Weather, WeatherData};
-use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode, GAP_BETWEEN_LOOP_TEXT_FIXED};
-use crate::svgimage::{SvgImageRenderer, SvgImageError};
-use crate::metrics::{MachineMetrics};
-use crate::eggs::{Eggs, set_easter_egg};
+
 use crate::visualizer::{VizPayload, Visualizer, VizFrameOut};
-use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX, LastVizState, VuArcDigits};
+use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX, LastVizState};
 use crate::draw::{
     clear_region,
     draw_line,
@@ -101,11 +99,8 @@ use crate::draw::{
     draw_rectangle,
     draw_rect_with_style,
     draw_text_align_style,
-    draw_circle_from_center,
     draw_circle,
-    draw_arc,
 };
-use crate::trig::{cosf, sinf, DEG_TO_RAD};
 
 /// Custom error type for drawing operations that implements `std::error::Error`.
 #[derive(Debug)]
@@ -181,12 +176,22 @@ const CAP_HOLD: Duration = Duration::from_millis(1000);
 const CAP_DECAY_LPS: f32 = 64.0;
 const CAP_THICKNESS_PX: u32 = 1;
 
-fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usize) {
+fn concat_path(folder: String, file: String) -> String {
+    format!("{folder}{file}")
+}
+
+fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usize, init_vu: bool) {
 
     let now = Instant::now();
-    let mut ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
-    let mut ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
+    let ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
+    let ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
 
+    if state.init_vu && init_vu {
+        // load and cache the vu meter glyph
+        let buffer_size = 64 * (128+7)/8;
+        ensure(&mut state.buffer, buffer_size); // will resize as required in get_svg
+        let _ = get_svg("./assets/vuwide.svg", 128, 64, &mut state.buffer);
+    }
     ensure(&mut state.draw_bands_m, n_m);
     ensure(&mut state.draw_bands_l, n_l);
     ensure(&mut state.draw_bands_r, n_r);
@@ -206,6 +211,7 @@ fn ensure_band_state(state: &mut LastVizState, n_l: usize, n_r: usize, n_m: usiz
     ensure_t(&mut state.cap_last_update_m, n_m);
     ensure_t(&mut state.cap_last_update_l, n_l);
     ensure_t(&mut state.cap_last_update_r, n_r);
+
 }
 
 fn update_body_decay(dst: &mut [u8], src: &[u8], elapsed: Duration) -> bool {
@@ -259,6 +265,23 @@ fn update_caps(
         *lu = now; // advance decay clock
     }
     changed
+}
+
+/// Helper to draw a custom clock character using the currently loaded font.
+fn draw_custom_clock_char<D>(
+    display: &mut D, 
+    char_to_draw: char, 
+    x: i32, y: i32,
+    clock_font: &ClockFontData<'static>
+) -> Result<(), D::Error> 
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+    // "Character '{char_to_draw}' not found in current clock font."
+    let char_image_raw = clock_font.get_char_image_raw(char_to_draw).unwrap();
+    Image::new(char_image_raw, Point::new(x, y))
+        .draw(display)?;
+    Ok(())
 }
 
 fn draw_hist_panel_with_caps<D>(
@@ -357,7 +380,6 @@ where
     Ok(())
 }
 
-
 // Reuseable helper: draw a single histogram panel
 fn draw_hist_panel<D>(
     display: &mut D,
@@ -404,8 +426,6 @@ where
         let bar_h = ((level_u * h_u) / max_level) as i32;
         if bar_h <= 0 { continue; }
 
-        //debug_str = format!("{}{:>4}->{:>4}", debug_str, lvl, bar_h);
-
         let x = origin.x + (i as i32) * stride;
         let y = origin.y + (h - bar_h);
 
@@ -439,7 +459,75 @@ impl<DE: fmt::Debug> fmt::Display for PutSvgError<DE> {
 impl<DE: fmt::Debug> std::error::Error for PutSvgError<DE> {}
 
 /// Direct SVG rendering with scale (no SVG dynamics).
-pub async fn put_svg<D>(
+pub async fn get_svg(
+    path: &str,
+    width: u32,
+    height: u32,
+    buffer: &mut Vec<u8>,
+) -> Result<(), PutSvgError<std::io::Error>>
+{
+    if fs::metadata(path).await.is_ok() {
+
+        let data = fs::read_to_string(path).await.map_err(PutSvgError::Io)?;
+
+        let bytes_per_row = ((width + 7) / 8) as usize;
+        let buffer_size = height as usize * bytes_per_row;
+        *buffer = vec![0u8; buffer_size];
+
+        let svg_renderer = SvgImageRenderer::new(&data, width, height)
+            .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+        svg_renderer
+            .render_to_buffer(buffer)
+            .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+
+    }else{
+        warn!("{path} doesn't exist!");
+    }
+    Ok(())
+
+}
+
+
+/// Direct SVG rendering with scale (no SVG dynamics).
+pub fn put_svg<D>(
+    target: &mut D,
+    path: &str,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<(), PutSvgError<D::Error>>
+where
+    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+{
+    if fs_std::metadata(path).is_ok() {
+
+        let data = fs_std::read_to_string(path).map_err(PutSvgError::Io)?;
+
+        let bytes_per_row = ((width + 7) / 8) as usize;
+        let buffer_size = height as usize * bytes_per_row;
+        let mut buffer = vec![0u8; buffer_size];
+
+        let svg_renderer = SvgImageRenderer::new(&data, width, height)
+            .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+        svg_renderer
+            .render_to_buffer(&mut buffer)
+            .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+
+        // Blit to target
+        let raw = ImageRaw::<BinaryColor>::new(&buffer, width);
+        Image::new(&raw, Point::new(x, y))
+            .draw(target)
+            .map_err(PutSvgError::Draw)?;
+    }else{
+        warn!("{path} doesn't exist!");
+    }
+    Ok(())
+
+}
+
+/// Direct SVG rendering with scale (no SVG dynamics) async.
+pub async fn put_svg_async<D>(
     target: &mut D,
     path: &str,
     x: i32,
@@ -470,7 +558,7 @@ where
             .draw(target)
             .map_err(PutSvgError::Draw)?;
     }else{
-        warn!("{path} does bot exist!");
+        warn!("{path} doesn't exist!");
     }
     Ok(())
 }
@@ -487,6 +575,7 @@ fn draw_vu_panel<D>(
     sweep_max: i32, // = 48;
     db: f32,
     overload: bool,
+    buffer: &Vec<u8>
 ) -> Result<(), D::Error>
 where
     D: DrawTarget<Color = BinaryColor> + OriginDimensions,
@@ -519,6 +608,7 @@ where
             panel,
             sweep_min,
             sweep_max,
+            buffer.to_vec(),
         )
         .map_err(|e| D::Error::from(e))?;
     };
@@ -544,7 +634,7 @@ where
         .map_err(|e| D::Error::from(e))?;
 
     // LED
-    legend_y += 14;
+    legend_y += 18;
     let led_fill = if overload { BinaryColor::On} else {BinaryColor::Off}; 
     draw_circle(
         display, 
@@ -656,25 +746,24 @@ fn map_shuffle_mode(mode: u8) -> ShuffleMode {
 #[allow(dead_code)]
 pub enum DisplayMode {
     #[allow(dead_code)]
-    Visualizer,     // WIP  - visualizations - meters, meters, meters
-    EasterEggs,     // Done - easter eggs
-    Scrolling,      // Done - Now Playing mode
-    Clock,          // Done - Clock mode
-    WeatherCurrent, // Done - Current Weather mode
-    WeatherForecast,// Done - Weather Forecast mode
+    Visualizer,      // WIP  - visualizations - meters, meters, meters
+    EasterEggs,      // Easter Eggs
+    Scrolling,       // Now Playing mode
+    Clock,           // Clock mode
+    WeatherCurrent,  // Current Weather mode
+    WeatherForecast, // Weather Forecast mode
 }
 
 #[allow(dead_code)]
-pub struct OledDisplay {
+pub struct OledDisplay{
 
     // this definition is 100% correct - DO NOT MODIFY
     display: Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>,
     // this definition is 100% correct - DO NOT MODIFY
 
     scrollers: Vec<TextScroller>,
+    fb_buf: VarFrameBuf<BinaryColor>,
 
-    default_mono_style: MonoTextStyle<'static, BinaryColor>,
-    
     // Status line (Line 0) specific data
     volume_percent: u8, // 0-100
     is_muted: bool,
@@ -714,6 +803,8 @@ pub struct OledDisplay {
     title: String,
     level: u8,
     pct: f64,
+    // flush pacer for visualization - should make Option<AutoPacer>
+    pacer: AutoPacer,
     viz: Option<Visualizer>,
     easter_egg: Eggs,
     show_metrics: bool,
@@ -735,7 +826,9 @@ impl OledDisplay {
         scroll_mode: &str, 
         clock_font: &str, 
         show_metrics: bool,
-        egg_name: &str) -> Result<Self, DisplayDrawingError> {
+        egg_name: &str) -> Result<Self, DisplayDrawingError> 
+    {
+
         info!("Initializing Display on {}", i2c_bus_path);
 
         let i2c = I2cdev::new(i2c_bus_path)
@@ -763,24 +856,29 @@ impl OledDisplay {
             DisplaySize128x64,
             DisplayRotation::Rotate0,
         ).into_buffered_graphics_mode();
-
+        
         display.init().map_err(|e| DisplayDrawingError::InitializationError(e))?;
+
+        let size = display.size();
+        let w = size.width;
+        let h = size.height;
+
+        let wide = w > 128;
+
+        // direct display clear - use framebuffer here on out
         display.clear_buffer();
         display.flush().map_err(|e| DisplayDrawingError::DrawingFailed(e))?;
 
-        info!("Display initialized successfully.");
+        // pacer depends on the display interface
+        let pacer = AutoPacer::new(/*initial I²C*/ 20, /*max*/ 30, /*min*/ 10);
+        //let pacer = AutoPacer::new(/*initial SPI*/ 60, /*max*/ 60, /*min*/ 20);
 
-        let default_mono_style = MonoTextStyleBuilder::new()
-            .font(&FONT_5X8)
-            .text_color(BinaryColor::On)
-            .build();
+        info!("Display initialized successfully.");
 
         // --- Initialize TextScrollers for scrolling display mode ---
         let mut scrollers: Vec<TextScroller> = Vec::with_capacity(constants::MAX_LINES);
-        let main_font = &FONT_5X8; // Use FONT_5X8 as the default for scrolling lines
         let real_scroll_mode = transform_scroll_mode(scroll_mode);
 
-        let wide = display.size().width > 128;
         let mut state = LastVizState::default();
         state.wide = wide;
 
@@ -793,7 +891,7 @@ impl OledDisplay {
                 Point::new(constants::DISPLAY_REGION_X_OFFSET, y_pos),
                 constants::DISPLAY_REGION_WIDTH,
                 String::from(""), // Initial empty text
-                *main_font, // Pass the actual MonoFont
+                FONT_5X8, // Pass the actual MonoFont
                 real_scroll_mode, // Initial mode
             ));
         }
@@ -801,7 +899,7 @@ impl OledDisplay {
         Ok(OledDisplay {
             display,
             scrollers, // Store the created scrollers
-            default_mono_style,
+            fb_buf: VarFrameBuf::new(w, h, BinaryColor::Off),
             // Status line (Line 0) specific data
             volume_percent: 0,
             is_muted: false,
@@ -837,6 +935,7 @@ impl OledDisplay {
             title: String::new(),
             level: 1,
             pct: 0.00,
+            pacer,
             viz: None,
             easter_egg: set_easter_egg(egg_name),
             show_metrics,
@@ -845,6 +944,38 @@ impl OledDisplay {
             last_viz_state: state,
         })
 
+    }
+
+    pub fn draw<F, R>(&mut self, mut f: F) -> R
+    where
+        F: FnMut(&mut VarFrameBuf<BinaryColor>) -> R,
+    {
+        f(&mut self.fb_buf)
+    }
+
+    pub fn clear_region(&mut self) {
+        self.fb_buf.clear_color(BinaryColor::Off);
+    }
+
+    pub fn flush_region(&mut self, _area: Rectangle) -> Result<(), DisplayError> {
+
+        // Build an iterator of Pixel(BinaryColor) from our VarFrameBuf
+        let size = self.fb_buf.size();
+        let w = size.width as usize;
+        let h = size.height as usize;
+        let buf = self.fb_buf.as_slice();
+
+        let pixels = (0..h).flat_map(|y| {
+            let row = &buf[y * w .. (y + 1) * w];
+            row.iter().enumerate().map(move |(x, &c)| {
+                Pixel(Point::new(x as i32, y as i32), c)
+            })
+        });
+
+        let _ = self.display.draw_iter(pixels);
+        self.display.flush().unwrap();
+
+        Ok(())
     }
 
     /// Sets the `Arc<TokMutex<LMSWeather>>` for the display to access weather data.
@@ -857,6 +988,7 @@ impl OledDisplay {
         self.display.flush().unwrap();
     
     }
+
     /// Clears the display buffer.
     pub fn clear(&mut self) {
         self.display.clear_buffer();
@@ -1030,26 +1162,41 @@ impl OledDisplay {
         build_date: &str
     ) -> Result<(), DisplayDrawingError> {
         self.display.clear_buffer();
+        self.clear_region(); // not auto-flush here
+
         if show_splash {
    
-            // 1. Set brightness to zero
             let mut contrast:u8 = 0;
             let _ = self.set_brightness(contrast);
 
-            put_svg(
-                &mut self.display,
-                "./assets/lymonslogo.svg", 
-                0, 0, 
-                constants::DISPLAY_WIDTH as u32, constants::DISPLAY_HEIGHT as u32)
-                .await.unwrap();
-            self.display.flush().unwrap();
+            let w: u32 = self.display.size().width;
+            let h: u32 = self.display.size().height;
 
-            let mut x = (constants::DISPLAY_WIDTH - (6*version.chars().count() as u32)) / 2;
-            draw_text(&mut self.display, version, x as i32, constants::PLAYER_TRACK_INFO_LINE_Y_POS-17,&FONT_6X13_BOLD).unwrap();
-            x = (constants::DISPLAY_WIDTH - (5*build_date.chars().count() as u32)) / 2;
-            draw_text(&mut self.display, build_date, x as i32, constants::PLAYER_TRACK_INFO_LINE_Y_POS,&FONT_5X8).unwrap();
-    
-            self.display.flush().unwrap(); // Flush to display - yes at zero brightness
+            self.draw(|fb| {
+
+                put_svg(
+                    fb,
+                    "./assets/lymonslogo.svg", 
+                    0, 0, 
+                    w, h
+                )
+                .unwrap();
+                draw_text_region_align(
+                    fb,
+                    version, 
+                    Point::new(0, constants::PLAYER_TRACK_INFO_LINE_Y_POS-17), Size::new(w, 15),
+                    HorizontalAlignment::Center, VerticalAlignment::Middle, 
+                    &FONT_6X13_BOLD
+                ).unwrap();
+                draw_text_region_align(
+                    fb,
+                    build_date, 
+                    Point::new(0, constants::PLAYER_TRACK_INFO_LINE_Y_POS), Size::new(w, 10),
+                    HorizontalAlignment::Center, VerticalAlignment::Middle, 
+                    &FONT_5X8
+                ).unwrap();    
+            });
+            self.flush_region(Rectangle::new(Point::zero(), self.display.size())).unwrap();
 
             const FADE_DURATION_MS: u64 = 3500;
             const FADE_STEPS: u8 = 60; // More steps for smoother fade
@@ -1076,14 +1223,16 @@ impl OledDisplay {
 
     /// Calculates the width of the given text in pixels using the provided font.
     // This is a static/associated function, not a method, so it doesn't borrow self.
+    #[inline]
     fn get_text_width_specific_font(text: &str, font: &MonoFont) -> u32 {
         MonoTextStyleBuilder::new().font(font).text_color(BinaryColor::On).build()
             .measure_string(text, Point::zero(), Baseline::Top).bounding_box.size.width
     }
 
     /// Calculates the width of the given text in pixels using either the custom font or the default.
+    #[inline]
     fn get_text_width(&self, text: &str) -> u32 {
-        self.default_mono_style.measure_string(text, Point::zero(), Baseline::Top).bounding_box.size.width
+        Self::get_text_width_specific_font(text, &FONT_5X8)
     }
 
     pub async fn setup_visualizer(&mut self, viz_type: &str, rx: watch::Receiver<bool>) -> Result<(), Box<dyn std::error::Error>> {
@@ -1126,10 +1275,10 @@ impl OledDisplay {
     
     }
  
-    fn enable_vizualization(&mut self, on_off:bool) {
+    fn enable_vizualization(&mut self, enable:bool) {
         match self.viz.as_mut() {
             Some(viz) => {
-                viz.enable(on_off);
+                viz.enable(enable);
             },
             None => {}
         }
@@ -1140,9 +1289,11 @@ impl OledDisplay {
         if self.current_mode != mode {
             info!("Changing display mode to {:?}", mode);
             self.current_mode = mode;
+
             // Clear the buffer when changing modes to avoid visual artifacts
-            self.display.clear_buffer();
-            self.display.flush().unwrap(); // Attempt to flush, ignore error for mode change
+            self.clear_region();  // not auto-flush here
+            //self.display.clear_buffer();
+            //self.display.flush().unwrap(); // Attempt to flush, ignore error for mode change
 
             // If switching to Clock or Weather, stop all text scrollers
             if mode == DisplayMode::Clock || mode == DisplayMode::EasterEggs || mode == DisplayMode::WeatherCurrent || mode == DisplayMode::WeatherForecast {
@@ -1191,17 +1342,6 @@ impl OledDisplay {
         Image::new(&raw_image, Point::new(x, y))
             .draw(&mut self.display)
             .map_err(|e| DisplayDrawingError::from(e))
-    }
-
-    /// Helper to draw a custom clock character using the currently loaded font.
-    fn draw_custom_clock_char(&mut self, char_to_draw: char, x: i32, y: i32) -> Result<(), DisplayDrawingError> {
-        let char_image_raw = self.clock_font.get_char_image_raw(char_to_draw)
-            .ok_or_else(|| DisplayDrawingError::Other(format!("Character '{}' not found in current clock font.", char_to_draw)))?;
-
-        Image::new(char_image_raw, Point::new(x, y))
-            .draw(&mut self.display)
-            .map_err(DisplayDrawingError::DrawingFailed)?;
-        Ok(())
     }
 
     pub fn set_status_line_data(&mut self, volume_percent: u8, is_muted: bool, samplesize: String, samplerate: String, repeat_mode: u8, shuffle_mode: u8)
@@ -1324,7 +1464,11 @@ impl OledDisplay {
     /// This method is intended to be called frequently (e.g., every frame or second).
     pub fn update_and_draw_clock(&mut self, current_time: DateTime<Local>) -> Result<(), DisplayDrawingError> {
 
-        let mut needs_flush = false; // No longer clear the entire buffer for each clock update to maintain persistence.
+        let w: u32 = self.display.size().width;
+        let h: u32 = self.display.size().height;
+        let mut needs_flush = false;
+
+        let cf = &self.clock_font.clone();
 
         // get fractional seconds - there has to be a cleaner way to get this
         let current_second_fidelity:f32 = current_time.format("%S.%f").to_string().parse::<f32>().unwrap_or(0.00);
@@ -1367,14 +1511,14 @@ impl OledDisplay {
         let total_block_height = digit_height + total_lower_elements_height;
 
         // Calculate starting Y for the entire block to center it vertically
-        let clock_y_start = (constants::DISPLAY_HEIGHT as i32 - total_block_height) / 2;
+        let clock_y_start = (h as i32 - total_block_height) / 2;
 
         // Now set individual Y positions relative to clock_y_start
         let progress_bar_y = clock_y_start + digit_height + constants::CLOCK_PROGRESS_BAR_GAP;
         let date_y = progress_bar_y + progress_bar_height as i32 + constants::PROGRESS_BAR_DATE_GAP;
 
         // Calculate X positions for clock digits (horizontal centering remains the same as before)
-        let clock_x_start: i32 = (constants::DISPLAY_WIDTH as i32 - total_clock_visual_width) / 2;
+        let clock_x_start: i32 = (w as i32 - total_clock_visual_width) / 2;
 
         let x_positions: [i32; 5] = [
             clock_x_start, // H1
@@ -1395,43 +1539,33 @@ impl OledDisplay {
 
             if char_changed || colon_state_changed {
                 // blanking rectangle
-                draw_rectangle(
-                    &mut self.display,
-                    Point::new(x_offset, y_offset),
-                    self.clock_font.digit_width, self.clock_font.digit_height,
-                    BinaryColor::Off,
-                    None, None)
-                    .map_err(|e| DisplayDrawingError::from(e))?;
-                // and draw the clock character
-                self.draw_custom_clock_char(current_char_for_position, x_offset, y_offset)
-                    .map_err(|e| DisplayDrawingError::from(e))?;
-                
-                self.last_clock_digits[i] = current_char_for_position;
+                self.draw(|fb| {
+                    draw_rectangle(
+                        fb,
+                        Point::new(x_offset, y_offset),
+                        cf.digit_width, cf.digit_height,
+                        BinaryColor::Off,
+                        None, None).unwrap();
+                    // and draw the clock character
+                    draw_custom_clock_char(
+                        fb,
+                        current_char_for_position, 
+                        x_offset, y_offset,
+                        cf
+                    ).unwrap();
+                });
                 needs_flush = true;
+                self.last_clock_digits[i] = current_char_for_position;
             }
         }
         
-        // Update the stored colon state *after* the loop, as it's used for comparison next iteration.
         self.colon_on = new_colon_on_state; 
 
-        // --- Seconds Progress Bar ---
-        let progress_bar_width_total = constants::DISPLAY_WIDTH as i32 - 4; // Display width minus 2px padding on each side
-        let progress_bar_x = (constants::DISPLAY_WIDTH as i32 - progress_bar_width_total) / 2;
+        let progress_bar_width_total = w as i32 - 4; // Display width minus 2px padding on each side
+        let progress_bar_x = (w as i32 - progress_bar_width_total) / 2;
 
         if current_second_fidelity != self.last_second_drawn {
 
-            draw_rectangle(
-                &mut self.display,
-                Point::new(progress_bar_x, progress_bar_y),
-                progress_bar_width_total as u32, progress_bar_height,
-                BinaryColor::Off,
-                Some(border_thickness as u32),
-                Some(BinaryColor::On)
-            )
-            .map_err(|e| DisplayDrawingError::from(e))?;
-
-            // Calculate the filled width based on seconds (0.0000 to 59.99999)
-            // Maps to a fill ratio from 0.0 to 1.0
             let fill_ratio = current_second_fidelity / 59.99999; 
             let fill_width_pixels = (progress_bar_width_total as f32 * fill_ratio).round() as i32;
 
@@ -1439,65 +1573,62 @@ impl OledDisplay {
             let inner_fill_width = (fill_width_pixels - (2 * border_thickness)).max(0);
             let inner_height = progress_bar_height - (2 * border_thickness as u32);
 
-            // Draw the filled part of the progress bar if there's actual fill to show
-            if inner_fill_width > 0 {
+            self.draw(|fb| {
                 draw_rectangle(
-                    &mut self.display,
-                    Point::new(progress_bar_x+ border_thickness, progress_bar_y+ border_thickness),
-                    inner_fill_width as u32, inner_height,
-                    BinaryColor::On,None, None
-                )
-                .map_err(|e| DisplayDrawingError::from(e))?;
-            }
+                    fb,
+                    Point::new(progress_bar_x, progress_bar_y),
+                    progress_bar_width_total as u32, progress_bar_height,
+                    BinaryColor::Off,
+                    Some(border_thickness as u32),
+                    Some(BinaryColor::On)
+                ).unwrap();
+                // Draw the filled part of the progress bar if there's actual fill to show
+                if inner_fill_width > 0 {
+                    draw_rectangle(
+                        fb,
+                        Point::new(progress_bar_x+ border_thickness, progress_bar_y+ border_thickness),
+                        inner_fill_width as u32, inner_height,
+                        BinaryColor::On,None, None
+                    ).unwrap();
+                }
+            });
+            needs_flush = true;
             self.last_second_drawn = current_second_fidelity;
-            needs_flush = true; // Mark for flush if progress bar updated
         }
 
-        // --- Date Drawing ---
         let current_date_string = chrono::Local::now().format("%a %b %d").to_string(); // e.g., "Mon Jun 09"
-        let date_text_width = self.get_text_width(&current_date_string);
-        let date_x_pos = (constants::DISPLAY_WIDTH as i32 - date_text_width as i32) / 2;
-
         if current_date_string != self.last_date_drawn {
-
-            // retool to region
-            draw_rectangle(
-                &mut self.display,
-                Point::new(0, date_y),
-                constants::DISPLAY_WIDTH, constants::DATE_FONT_HEIGHT,
-                BinaryColor::Off,None, None
-            )
-            .map_err(|e| DisplayDrawingError::from(e))?;
-
-            draw_text(&mut self.display, &current_date_string,date_x_pos-4, date_y, &FONT_6X10).unwrap();
-
-            self.last_date_drawn = current_date_string;
+            self.draw(|fb| {
+                draw_text_region_align(
+                    fb,
+                    current_date_string.as_str(), 
+                    Point::new(0, date_y), Size::new(w, date_font_height),
+                    HorizontalAlignment::Center, VerticalAlignment::Top, 
+                    &FONT_6X10
+                ).unwrap();
+            });
             needs_flush = true;
+            self.last_date_drawn = current_date_string;
         }
 
         if self.show_metrics {
-            let metrics_y = 39;
             let metrics = self.device_metrics.check();
             if metrics != self.device_metrics {
                 self.device_metrics.update(metrics);
                 let buff = format!("{:>3}% {:>2.1}C", 
                     metrics.cpu_load as u8, 
                     metrics.cpu_temp);
-                draw_rectangle(
-                    &mut self.display,
-                    Point::new(0, metrics_y),
-                    constants::DISPLAY_WIDTH, 6,
-                    BinaryColor::Off,None, None
-                )
-                .map_err(|e| DisplayDrawingError::from(e))?;
-                draw_text(&mut self.display, &buff,2, metrics_y, &FONT_4X6).unwrap();
+                let region = Rectangle::new(Point::new(0, 39), Size::new(w/2, 6));
+                self.draw(|fb| {
+                    clear_region(fb, region).unwrap();
+                    draw_text(fb, &buff, region.top_left.x, region.top_left.y, &FONT_4X6).unwrap();
+                });
                 needs_flush = true;
             }
 
         }
-
         if needs_flush {
-            self.display.flush().unwrap();
+            self.flush_region(Rectangle::new(Point::zero(), self.display.size())).unwrap();
         }
         Ok(())
 
@@ -1525,9 +1656,13 @@ impl OledDisplay {
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
 
-        let changed = 
-            state.last_metric[0] != l_db as i32 ||
-            state.last_metric[1] != r_db as i32;
+        // resize state buffers if band count changed
+        ensure_band_state(state, 0, 0, 0, true);
+
+        let mut changed = 
+            state.last_db_l != l_db ||
+            state.last_db_r != r_db;
+
         // last metric is not taking into account time based decay
         // need to review before adding early doors
 
@@ -1535,13 +1670,20 @@ impl OledDisplay {
         state.last_db_l = l_db;
         state.last_db_r = r_db;
 
-        //let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
-        //let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
-        let (over_l, over_r) = (false, false);
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+
+        changed |= state.last_disp_l != _disp_l ||
+            state.last_disp_r != _disp_r;
+
+        state.last_disp_l = _disp_l;
+        state.last_disp_r = _disp_r;
+
+ 
         // if nothing would change on screen, skip work (non-blocking) early doors
-        //if !changed && !state.init {
-        //    return Ok(false);
-        //}
+        if !changed && !state.init {
+            return Ok(false);
+        }
         state.init = false;
 
         // layout horizontal (h=true)
@@ -1569,7 +1711,8 @@ impl OledDisplay {
             Size::new(pane_w as u32, inner_h as u32),
             sweep_min,
             sweep_max,
-            l_db, over_l,
+            _disp_l, over_l,
+            &state.buffer,
         ).map_err(|e| D::Error::from(e))?;
 
         draw_vu_panel(
@@ -1579,7 +1722,8 @@ impl OledDisplay {
             Size::new(pane_w as u32, inner_h as u32),
             sweep_min,
             sweep_max,
-            r_db, over_r,
+            _disp_r, over_r,
+            &state.buffer,
         ).map_err(|e| D::Error::from(e))?;
 
         Ok(true)
@@ -1609,29 +1753,39 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        let changed = state.last_db_m != db;
+
+        // resize state buffers if band count changed
+        ensure_band_state(state, 0, 0, 0, true);
+
+        let mut changed = 
+            state.last_db_m != db;
 
         // save the latest inputs
         state.last_db_m = db;
 
-        let over = false;
+        let (_disp, over) = state.vu_m.update_drive(db);
+
+        changed |= state.last_disp_m != _disp;
+
+        state.last_disp_m = _disp;
+ 
         // if nothing would change on screen, skip work (non-blocking) early doors
-        //if !changed && !state.init {
-        //    return Ok(false);
-        //}
+        if !changed && !state.init {
+            return Ok(false);
+        }
         state.init = false;
 
         // layout horizontal (h=true)
         let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
 
-        let mx: i32 = 3;
-        let my: i32 = 6;
+        let mx = 3;
+        let my = 6;
         let title_base = 10;
-        let inner_w = width - 2 * mx as u32;
-        let inner_h = height - my as u32 - title_base - 1;
-        let title_pos = height - title_base;
+        let inner_w = w - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+        let title_pos = h - title_base;
 
-        // ssd1309 - make dynamic!!!
         let sweep_min: i32 = -45;
         let sweep_max: i32 = 45;
 
@@ -1643,6 +1797,7 @@ impl OledDisplay {
             sweep_min,
             sweep_max,
             db, over,
+            &state.buffer,
         ).map_err(|e| D::Error::from(e))?;
 
         Ok(true)
@@ -1657,6 +1812,8 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
+        // resize state buffers if band count changed
+        ensure_band_state(state, 0, 0, 0, true);
         Ok(false)
     }
 
@@ -1671,7 +1828,6 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-
         // we implement darw and erase, only initialize on first call
         if state.init {
             let raw_image = ImageRaw::<BinaryColor>::new(imgdata::PEAK_RMS_RAW_DATA, 128);
@@ -1691,30 +1847,28 @@ impl OledDisplay {
         let mut xpos = 15;
         let ypos:[u8;2] = [7, 40];
 
-        if state.last_metric[0] == l_level as i32 &&
-            state.last_metric[1] == r_level as i32 &&
-            state.hold[0] == l_hold &&
-            state.hold[1] == r_hold {
+        if state.last_peak_l == l_level &&
+            state.last_peak_r == r_level &&
+            state.last_hold_l == l_hold &&
+            state.last_hold_r == r_hold {
             return Ok(false);
         }
 
-        state.last_metric[0] = l_level as i32; 
-        state.last_metric[1] = r_level as i32; 
-        state.hold[0] = l_hold;
-        state.hold[1] = r_hold;
+        state.last_peak_l = l_level; 
+        state.last_peak_r = r_level; 
+        state.last_hold_l = l_hold;
+        state.last_hold_r = r_hold;
 
         for l in level_brackets {
             let nodeo = if l < 0 {5} else {7};
             let nodew = if l < 0 {2} else {4};
             for c in 0..2 {
-                // levels are 0..48 - adjust to fit the display scaling
-                // PEAK_METER_LEVELS_MAX
-                //println!("{}", -PEAK_METER_LEVELS_MAX + state.last_metric[c] / PEAK_METER_LEVELS_MAX as i32 )
-                let mv = level_brackets[0] as i32 + state.last_metric[c];
-                let color = if mv >= l as i32 {
+                let mv = level_brackets[0] + if c==0 {state.last_peak_l as i16}else{state.last_peak_r as i16};
+                let color = if mv >= l {
                     BinaryColor::On
                 } else {
-                    BinaryColor::Off};
+                    BinaryColor::Off
+                };
                 draw_rectangle(
                     display,
                     Point::new(xpos, ypos[c] as i32),
@@ -1754,20 +1908,20 @@ impl OledDisplay {
         let mut xpos = 15;
         let ypos = 23;
 
-        if state.last_metric[0] == level as i32 && 
-            state.hold[0] == hold {
+        if state.last_peak_m == level && 
+            state.last_hold_m == hold {
             return Ok(false);
         }
 
-        state.last_metric[0] = level as i32; 
-        state.hold[0] = hold;
+        state.last_peak_m = level; 
+        state.last_hold_m = hold;
 
         for l in level_brackets {
             let nodeo = if l < 0 {5} else {7};
             let nodew = if l < 0 {2} else {4};
             // levels are 0..48 - adjust to fit the display scaling
-            let mv = level_brackets[0] as i32 + state.last_metric[0];
-            let color = if mv >= l as i32 {
+            let mv = level_brackets[0] + state.last_peak_m as i16;
+            let color = if mv >= l {
                 BinaryColor::On
             } else {
                 BinaryColor::Off
@@ -1795,7 +1949,7 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, false);
 
         // store latest inputs
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1878,7 +2032,7 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, false);
 
         // 2) Save the latest inputs (debug/inspection)
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1958,7 +2112,7 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, 0, 0, bands.len());
+        ensure_band_state(state, 0, 0, bands.len(), false);
 
         // store latest inputs
         state.last_bands_m.copy_from_slice(&bands);
@@ -2043,108 +2197,109 @@ impl OledDisplay {
         Ok(latest)
     }
 
+    /// Updates and draws the track playing details
+    pub async fn update_and_draw_track_details(&mut self) -> Result<(), DisplayDrawingError> {
+        // move the scroller block here
+        Ok(())
+    }
+
     /// Updates and draws the visualization
     pub async fn update_and_draw_visualizer(&mut self) -> Result<(), DisplayDrawingError> {
 
         if self.viz_init_clear {
-            self.display.clear_buffer();
+            //self.display.clear_buffer();
+            self.clear_region(); // not auto-flush here
             self.viz_init_clear = false;
         }
-        let _ = self.drain_frame_queue().await.unwrap();
+        let frame = self.drain_frame_queue().await.unwrap();
         // draw the active meter/visualization
         let mut need_flush = false;
-        //let mut burst = 0;
-        //loop {
-            let frame = self.viz.as_mut().unwrap().rx.recv().await;
-            //let frame = self.drain_frame_queue().await.unwrap();
-            //burst += 1;
-
-            //if burst > 120 || frame.is_none() {
-            if !frame.is_none() {
-        let mut state = self.last_viz_state.clone();
-                let frame = frame.unwrap();
-                // we can remove if viz is performative
-                //if !frame.playing { // should we hold on pause??? would need decay peaks impl.
-                //    return Ok(());
-                //} else {
-                    match frame.payload {
-                        VizPayload::VuStereo { l_db, r_db } => 
-                            need_flush = Self::draw_vu_pair(&mut self.display, l_db, r_db, true, &mut state)?,
-                        VizPayload::VuStereoWithCenterPeak { l_db, r_db, peak_level, peak_hold } => 
-                            need_flush = Self::draw_viz_combi(&mut self.display, l_db, r_db, peak_level, peak_hold, &mut state)?,
-                        VizPayload::VuMono { db } => 
-                            need_flush = Self::draw_vu_mono(&mut self.display, db, &mut state)?,
-                        VizPayload::AioVuMono { db } => 
-                            need_flush = Self::draw_aio_vu(&mut self.display, db, &mut state)?,
-                        VizPayload::PeakStereo { l_level, r_level, l_hold, r_hold } => 
-                            need_flush = Self::draw_peak_pair(&mut self.display, l_level, r_level, l_hold, r_hold, &mut state)?,
-                        VizPayload::PeakMono { level, hold } => 
-                            need_flush = Self::draw_peak_mono(&mut self.display, level, hold, &mut state)?,
-                        VizPayload::HistStereo { bands_l, bands_r } => 
-                            need_flush = Self::draw_hist_pair(&mut self.display, bands_l, bands_r, &mut state)?,
-                        VizPayload::HistMono { bands } => 
-                            need_flush = Self::draw_hist_mono(&mut self.display, bands, &mut state)?,
-                        VizPayload::AioHistMono { bands } => 
-                            need_flush = Self::draw_aio_hist(&mut self.display, bands, &mut state)?,
-                        _ => {}
-                    }
-                    self.last_viz_state = state;
-                //}
-                if need_flush {
-                    self.display.flush().unwrap();
-                }
+        //let frame = self.viz.as_mut().unwrap().rx.recv().await;
+        if !frame.is_none() {
+            let mut state = self.last_viz_state.clone();
+            let frame = frame.unwrap();
+            match frame.payload {
+                VizPayload::VuStereo { l_db, r_db } => 
+                    need_flush = Self::draw_vu_pair(&mut self.display, l_db, r_db, true, &mut state)?,
+                VizPayload::VuStereoWithCenterPeak { l_db, r_db, peak_level, peak_hold } => 
+                    need_flush = Self::draw_viz_combi(&mut self.display, l_db, r_db, peak_level, peak_hold, &mut state)?,
+                VizPayload::VuMono { db } => 
+                    need_flush = Self::draw_vu_mono(&mut self.display, db, &mut state)?,
+                VizPayload::AioVuMono { db } => 
+                    need_flush = Self::draw_aio_vu(&mut self.display, db, &mut state)?,
+                VizPayload::PeakStereo { l_level, r_level, l_hold, r_hold } => 
+                    need_flush = Self::draw_peak_pair(&mut self.display, l_level, r_level, l_hold, r_hold, &mut state)?,
+                VizPayload::PeakMono { level, hold } => 
+                    need_flush = Self::draw_peak_mono(&mut self.display, level, hold, &mut state)?,
+                VizPayload::HistStereo { bands_l, bands_r } => 
+                    need_flush = Self::draw_hist_pair(&mut self.display, bands_l, bands_r, &mut state)?,
+                VizPayload::HistMono { bands } => 
+                    need_flush = Self::draw_hist_mono(&mut self.display, bands, &mut state)?,
+                VizPayload::AioHistMono { bands } => 
+                    need_flush = Self::draw_aio_hist(&mut self.display, bands, &mut state)?,
+                _ => {}
             }
-//        }
+            self.last_viz_state = state;
+
+            // time limited flush so we don't overlaod the display
+            if need_flush && self.pacer.should_flush() {
+                let t0 = std::time::Instant::now();
+                self.flush_region(Rectangle::new(Point::zero(), self.display.size())).unwrap();
+                let dt = t0.elapsed();
+                self.pacer.record_flush_ms(dt.as_secs_f32() * 1000.0);
+                print!(".");
+            }
+
+        }
         Ok(())
 
     }
 
-    /// Updates and draws the weather data to display. Only flushes if changes occurred.
+    /// Updates and draws the weather data to display. 
+    /// Only flushes if changes occur.
     pub async fn update_and_draw_weather(&mut self, show_current_weather: bool) -> Result<(), DisplayDrawingError> {
 
         let mut needs_flush = false;
-        // Acquire a lock on the weather data
+        let icon_w = 2 + self.display.size().height as u32/2;
+
+        // Acquire a lock on the weather data, and capture details - avoid mutable hrspky!!
         let weather_data = if let Some(ref weather_arc) = self.weather_data_arc {
             weather_arc.lock().await
         } else {
             error!("Weather client not setup.");
             return Ok(()); // Nothing to draw if no weather client
         };
-
-        let icon_w = 2 + self.display.size().height as u32/2;
-        let temp_units = &weather_data.weather_data.temperature_units.clone();
-        let wind_speed_units = &weather_data.weather_data.windspeed_units.clone();
-        let base_folder = &weather_data.base_folder.clone();
+        let wd = &weather_data.weather_data.get_weather_display();
+        drop(weather_data);
 
         // Display current or forecast based on the flag
         if show_current_weather {
 
-            // Display current weather
-            let current = &weather_data.weather_data.current.clone();
+            let current = wd.current.clone();
 
-            if *current != self.last_weather_draw_data[0] {
+            if current != self.last_weather_draw_data[0] {
 
-                self.display.clear(BinaryColor::Off).unwrap(); // Clear the screen completely for a new weather display
-                self.last_weather_draw_data[0] = current.clone();
+                self.fb_buf.clear_color(BinaryColor::Off);
+                self.last_weather_draw_data[0] = wd.current.clone();
 
                 let conditions = current.weather_code.description.clone();
-
                 let curr_feels_temp = format!(
                     "{:.0}({:.0}) {}",
-                    current.temperature_avg, current.temperature_apparent_avg, temp_units
+                    current.temperature_avg, current.temperature_apparent_avg, wd.temp_units
                 );
                 let humidity = format!("{:.0}%", current.humidity_avg);
                 let wind_dir = current.wind_direction.clone();
-                let wind_speed = format!("{:.0} {} {}", current.wind_speed_avg, wind_speed_units, wind_dir);
+                let wind_speed = format!("{:.0} {} {}", current.wind_speed_avg, wd.wind_speed_units, wind_dir);
                 let pop =  format!("{}%", current.precipitation_probability_avg);
-                let _icon_idx = current.weather_code.icon;
-                let svg = format!("{}{}", base_folder.clone(), current.weather_code.svg.clone());
 
-                put_svg(
-                    &mut self.display,
-                    svg.as_str(), 12, 10, icon_w, icon_w)
-                    .await
-                    .unwrap();
+                self.draw(|fb| {
+                    put_svg(
+                        fb,
+                        wd.svg.as_str(), 
+                        12, 10, 
+                        icon_w, icon_w
+                    ).unwrap();
+                });
 
                 // Draw weather details
                 let glyph_w = 12;
@@ -2158,34 +2313,40 @@ impl OledDisplay {
                     let _glyph = ImageRaw::<BinaryColor>::new(
                         imgdata::get_glyph_slice(
                             weather_glyph::THERMO_RAW_DATA, 
-                            glyph_idx as usize, glyph_w as u32, glyph_w as u32),glyph_w as u32);
-                    Image::new(&_glyph, Point::new(glyph_x, ty))
-                        .draw(&mut self.display).unwrap();
-                    draw_text_region_align(
-                        &mut self.display,
-                        label.as_str(), 
-                        Point::new(text_x, text_y), Size::new(124-text_x as u32,height as u32),
-                        HorizontalAlignment::Left, VerticalAlignment::Middle, 
-                        font
-                    ).unwrap();
+                            glyph_idx as usize, 
+                            glyph_w as u32, 
+                            glyph_w as u32),glyph_w as u32);
+                    self.draw(|fb| {
+                        Image::new(&_glyph, Point::new(glyph_x, ty))
+                            .draw(fb).unwrap();
+                        draw_text_region_align(
+                            fb,
+                            label.as_str(), 
+                            Point::new(text_x, text_y), Size::new(124-text_x as u32, height as u32),
+                            HorizontalAlignment::Left, VerticalAlignment::Middle, 
+                            font
+                        ).unwrap();
+                    });
                     text_y += if glyph_idx == 0 { 13 } else { 10 };
                 }
 
                 text_y += 1;
-                draw_text_region_align(
-                    &mut self.display,
-                    conditions.as_str(), 
-                    Point::new(2, text_y), Size::new(constants::DISPLAY_WIDTH as u32 - 4, 14),
-                    HorizontalAlignment::Center, VerticalAlignment::Middle, 
-                    &FONT_7X14).unwrap();
-
+                self.draw(|fb| {
+                    draw_text_region_align(
+                        fb,
+                        conditions.as_str(), 
+                        Point::new(2, text_y), Size::new(constants::DISPLAY_WIDTH as u32 - 4, 14),
+                        HorizontalAlignment::Center, VerticalAlignment::Middle, 
+                        &FONT_7X14).unwrap();
+                    });
                 needs_flush = true;
             }
 
         } else {
 
+            let forecasts = wd.forecasts.clone();
+
             // Display 3-day forecast
-            let forecasts = &weather_data.weather_data.forecast;
             if forecasts.len() > 0 {
 
                 let fore0 = forecasts[0].clone();
@@ -2201,8 +2362,8 @@ impl OledDisplay {
                     self.last_weather_draw_data[2] = fore1;
                     self.last_weather_draw_data[3] = fore2;
 
-                    // Clear the screen completely for a new weather forecast display
-                    self.display.clear(BinaryColor::Off).unwrap(); 
+                    // Clear the buffer for a new weather forecast display
+                    self.fb_buf.clear_color(BinaryColor::Off);
 
                     let textbox_style = TextBoxStyleBuilder::new()
                         .alignment(HorizontalAlignment::Center)
@@ -2219,64 +2380,64 @@ impl OledDisplay {
                             "{:.0}{2}|{:.0}{2}",
                             forecast.temperature_min,
                             forecast.temperature_max,
-                            temp_units
+                            wd.temp_units
                         );
                         let pop =  format!("{}%", forecast.precipitation_probability_avg);
-
-                        // find the bug that created this issue!
-                        let svg = format!("{}{}", 
-                            base_folder.clone(), 
-                            if forecast.weather_code.svg.contains(".svg") {
-                                forecast.weather_code.svg.clone()
-                            }else{
-                                "no_data.svg".to_string()
-                            }
-                        );
-                        put_svg(
-                            &mut self.display,
-                            svg.as_str(), icon_x, day_y, icon_w-4, icon_w-4)
-                            .await
-                            .unwrap();
-
+                        self.draw(|fb| {
+                            put_svg(
+                                fb,
+                                wd.fsvg[_i].as_str(), 
+                                icon_x, day_y, 
+                                icon_w-4, icon_w-4
+                            ).unwrap();
+                        });
                         day_y += icon_w as i32 + 1;
-                        draw_rectangle(
-                            &mut self.display,
-                            Point::new(icon_x-4, day_y-2),
-                            icon_w + 6, 9,
-                            BinaryColor::Off,
-                            Some(1), Some(BinaryColor::On))
-                        .map_err(|e| DisplayDrawingError::from(e))?;
-                        draw_text_align_style(
-                            &mut self.display,
-                            &day_of_week,
-                            Point::new(icon_x, day_y),
-                            icon_w - 2,
-                            textbox_style,
-                            &FONT_4X6)?;
+                        self.draw(|fb| {
+                            draw_rectangle(
+                                fb,
+                                Point::new(icon_x-4, day_y-2),
+                                icon_w + 6, 9,
+                                BinaryColor::Off,
+                                Some(1), Some(BinaryColor::On)
+                            ).unwrap();
+                            draw_text_align_style(
+                                fb,
+                                &day_of_week,
+                                Point::new(icon_x, day_y),
+                                icon_w - 2,
+                                textbox_style,
+                                &FONT_4X6
+                            ).unwrap();
+                        });
                         day_y += 9;
-                        draw_rectangle(
-                            &mut self.display,
-                            Point::new(icon_x-4, day_y-3),
-                            icon_w + 6, 18,
-                            BinaryColor::Off,
-                            Some(1), Some(BinaryColor::On))
-                        .map_err(|e| DisplayDrawingError::from(e))?;
-                        draw_text_align_style(
-                            &mut self.display,
-                            &min_max_temp,
-                            Point::new(icon_x, day_y),
-                            icon_w - 2,
-                            textbox_style,
-                            &FONT_4X6)?;
+                        self.draw(|fb| {
+                            draw_rectangle(
+                                fb,
+                                Point::new(icon_x-4, day_y-3),
+                                icon_w + 6, 18,
+                                BinaryColor::Off,
+                                Some(1), Some(BinaryColor::On)
+                            ).unwrap();
+                            draw_text_align_style(
+                                fb,
+                                &min_max_temp,
+                                Point::new(icon_x, day_y),
+                                icon_w - 2,
+                                textbox_style,
+                                &FONT_4X6
+                            ).unwrap();
+                        });
                         day_y += 7;
-                        draw_text_align_style(
-                            &mut self.display,
-                            &pop,
-                            Point::new(icon_x, day_y),
-                            icon_w - 2,
-                            textbox_style,
-                            &FONT_4X6)?;
-
+                        self.draw(|fb| {
+                            draw_text_align_style(
+                                fb,
+                                &pop,
+                                Point::new(icon_x, day_y),
+                                icon_w - 2,
+                                textbox_style,
+                                &FONT_4X6
+                            ).unwrap();
+                        });
                         icon_x += icon_w as i32 + 6; // next day forecast position
 
                     }
@@ -2286,7 +2447,7 @@ impl OledDisplay {
         }
 
         if needs_flush {
-            self.display.flush().unwrap();
+            self.flush_region(Rectangle::new(Point::zero(), self.display.size())).unwrap();
         }
         Ok(())
 
@@ -2312,7 +2473,6 @@ impl OledDisplay {
 
     /// Renders a single frame of the display animation based on the current mode.
     ///
-    /// This method either renders the scrolling LMS text or the large digital clock.
     pub async fn render_frame(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         match self.current_mode {
             DisplayMode::Clock => {
@@ -2328,24 +2488,20 @@ impl OledDisplay {
                 )
                 .await?;
             },
-            DisplayMode::WeatherCurrent => {
-                // When in weather mode, drawing is self contained
-                self.update_and_draw_weather(true).await?;
-            },
             DisplayMode::Visualizer => {
-                // When in weather mode, drawing is self contained
                 self.update_and_draw_visualizer().await?;
             },
+            DisplayMode::WeatherCurrent => {
+                self.update_and_draw_weather(true).await?;
+            },
             DisplayMode::WeatherForecast => {
-                // When in weather mode, drawing is self contained
                 self.update_and_draw_weather(false).await?;
             },
             DisplayMode::Scrolling => {
-                //self.clear(); // Clear the entire buffer for each frame of scrolling
 
                 let mut needs_flush = false; // Track if anything changed to warrant a flush
 
-                // --- Render Line 0 (Status Line) ---
+                // Render Line 0 (Status Line)
                 let mut current_x: i32 = constants::DISPLAY_REGION_X_OFFSET; // X position for drawing elements on line 0, offset by region start
 
                 // 1. Volume Glyph and Text (Left justified)
@@ -2366,7 +2522,6 @@ impl OledDisplay {
                 
                 draw_text(&mut self.display, &vol_text, current_x, constants::DISPLAY_REGION_Y_OFFSET, &FONT_5X8).unwrap();
 
-                // 2. Shuffle Glyph
                 let shuffle_glyph_data = if self.shuffle_mode == ShuffleMode::ByTracks {
                     Some(&imgdata::GLYPH_SHUFFLE_TRACKS)
                 } else if self.shuffle_mode == ShuffleMode::ByAlbums {
@@ -2375,7 +2530,6 @@ impl OledDisplay {
                     Some(&imgdata::GLYPH_NONE)
                 };
 
-                // 3. Repeat Glyph
                 let repeat_glyph_data = if self.repeat_mode == RepeatMode::RepeatOne {
                     Some(&imgdata::GLYPH_REPEAT_ONE)
                 } else if self.repeat_mode == RepeatMode::RepeatAll {
@@ -2384,7 +2538,6 @@ impl OledDisplay {
                     Some(&imgdata::GLYPH_NONE)
                 };
 
-                // 4. Bitrate Text and Audio Glyph (Right justified)
                 let audio_glyph_data = match self.audio_bitrate {
                     AudioBitrate::HD => Some(&imgdata::GLYPH_AUDIO_HD),
                     AudioBitrate::SD => Some(&imgdata::GLYPH_AUDIO_SD),
@@ -2395,18 +2548,18 @@ impl OledDisplay {
                 let bitrate_text_width = self.get_text_width(&self.bitrate_text.clone()) as i32;
                 let audio_glyph_full_width = if audio_glyph_data.is_some() { constants::GLYPH_WIDTH as i32 } else { 0 };
 
+                // >>>>>>>>>>>>>>> replace with alignment draw text calls <<<<<<<<<<<<<<<
+
                 // Calculate total width of right-justified elements (bitrate text + audio glyph)
                 let total_right_elements_width = bitrate_text_width + audio_glyph_full_width;
 
                 // Calculate starting X for right-justified block within the display region
                 let mut right_block_x = constants::DISPLAY_REGION_X_OFFSET + constants::DISPLAY_REGION_WIDTH as i32 - total_right_elements_width;
 
-                // Draw bitrate text
                 draw_text(&mut self.display, &self.bitrate_text.clone(),right_block_x, constants::DISPLAY_REGION_Y_OFFSET, &FONT_5X8).unwrap();
 
                 right_block_x += bitrate_text_width;
 
-                // Draw audio glyph
                 if let Some(glyph_data) = audio_glyph_data {
                     self.draw_glyph(glyph_data, right_block_x, constants::DISPLAY_REGION_Y_OFFSET)?;
                 }
@@ -2421,7 +2574,7 @@ impl OledDisplay {
                     self.draw_glyph(glyph_data, repeat_x, constants::DISPLAY_REGION_Y_OFFSET)?;
                 }
 
-                // --- Player Track Progress Bar ---
+                // Track Progress Bar
                 let player_progress_bar_x = constants::DISPLAY_REGION_X_OFFSET;
                 let player_progress_bar_y = constants::PLAYER_PROGRESS_BAR_Y_POS;
 
@@ -2429,7 +2582,6 @@ impl OledDisplay {
                                           self.track_duration_secs != self.last_track_duration_secs;
 
                 if progress_bar_changed {
-                    // draw progress bar
                     draw_rectangle(
                         &mut self.display,
                         Point::new(player_progress_bar_x, player_progress_bar_y),
@@ -2504,7 +2656,7 @@ impl OledDisplay {
 
                 }
 
-                // --- New Track Info Line (Current Time | Mode | Remaining Time) ---
+                // Bottom Info Line (Current Time | Mode | Remaining Time)
                 let info_line_y = constants::PLAYER_TRACK_INFO_LINE_Y_POS;
                 let current_time_str = seconds_to_hms(self.current_track_time_secs);
                 let remaining_time_str = format!("-{}", seconds_to_hms(self.remaining_time_secs));
@@ -2553,8 +2705,6 @@ impl OledDisplay {
                 if needs_flush {
                     self.display.flush().unwrap();
                 }
-                // drain chatter from vizualizer
-                let _ = self.drain_frame_queue().await.unwrap();
             }
         }
         Ok(())
@@ -2562,8 +2712,6 @@ impl OledDisplay {
     }
 
 }
-
-
 
 // Implement Drop trait to stop the background thread when OledDisplay goes out of scope
 impl Drop for OledDisplay {

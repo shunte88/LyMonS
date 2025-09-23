@@ -98,7 +98,7 @@ impl SpectrumEngine {
         // turn to (start,end) per band, ensure non-empty ranges
         let mut out = Vec::with_capacity(bands);
         for i in 0..bands {
-            let mut a = edges[i];
+            let a = edges[i];
             let mut b = edges[i + 1];
             if b <= a { b = (a + 1).min(nfft / 2); }
             out.push((a, b));

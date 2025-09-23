@@ -21,9 +21,9 @@
  *
  */
 
-// vu_physics.rs
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use embedded_graphics::prelude::*;
+use crate::dbfs;
 
 // classic visual range for scale
 #[allow(dead_code)]
@@ -32,7 +32,6 @@ pub const VU_FLOOR_DB: f32 = -20.0;
 pub const VU_CEIL_DB:  f32 = 5.0;
 #[allow(dead_code)]
 pub const VU_GAMMA:    f32 = 0.7; // lift lows a bit; 1.0 = linear
-
 
 /// Classic 2nd-order needle: m ẍ + c ẋ + k x + c2 |ẋ| ẋ = g * u
 /// x in [0,1] is needle deflection, u in [0,1] is drive (from audio level map).
@@ -297,7 +296,8 @@ pub fn needle_tip(deflection_0_1: f32, x_offset: i32, width: i32, pivot_y: i32) 
 pub fn vu_db_to_meter_angle(db: f32, sweep_min: i32, sweep_max: i32) -> f32 {
     // θ from original C: sweep / sqrt(2)
     let sweep = sweep_min.abs() as f32 + sweep_max.abs() as f32;
-    let theta = sweep / 2.0_f32.sqrt();
+    //let theta = sweep / 2.0_f32.sqrt();
+    let theta = 90.0 / 2.0_f32.sqrt();
     let a_db   = theta * 10f32.powf(db / 20.0);
     let a_m3db = theta * 10f32.powf(-3.0 / 20.0); // reference at −3 dB
     a_db - a_m3db
@@ -319,4 +319,16 @@ fn polar_point(cx: i32, cy: i32, r: i32, deg: f32) -> Point {
     let rad = deg.to_radians();
     let (s, c) = (rad.sin(), rad.cos());
     Point::new(cx + (s * r as f32) as i32, cy - (c * r as f32) as i32)
+}
+
+/// Map dBFS → normalized deflection 0..1 using VU’s exponential scale.
+/// This matches the arc geometry (−20..+3 → ~−48°..+48°).
+#[inline]
+fn dbfs_to_vu_deflection(dbfs: f32, sweep_min: i32, sweep_max: i32) -> f32 {
+    let vudb = dbfs::dbfs_to_vudb(dbfs);                     // apply −18 dBFS ↔ 0 VU
+    let theta = 90.0 / 2f32.sqrt();                    // 90 or abs sum of sweep ???
+    let a = theta * 10f32.powf(vudb / 20.0);           // degrees
+    let a_ref = theta * 10f32.powf(-3.0 / 20.0);       // −3 dB reference
+    let ang = a - a_ref;                               // ≈ sweep e.g. −48..+48
+    ((ang + sweep_max as f32) / (sweep_max + sweep_min.abs()) as f32).clamp(0.000, 1.000)  // → 0..1
 }

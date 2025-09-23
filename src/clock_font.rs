@@ -35,6 +35,7 @@ pub const CLK_DIGIT_HEIGHT: u32 = 44;
 
 /// A struct that encapsulates all necessary data for a specific clock font.
 /// This allows different clock fonts to be loaded and used interchangeably.
+#[derive(Debug, Clone)]
 pub struct ClockFontData<'a> {
     pub digit_width: u32,
     pub digit_height: u32,
