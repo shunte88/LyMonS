@@ -67,6 +67,22 @@ where
     Ok(n)
 }
 
+pub fn deserialize_numeric_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    let v = Value::deserialize(deserializer)?;
+    // debug!("in i32 {:#?}",v); // Remove or adjust log based on deutils context
+    let n = v
+        .as_f64()
+        .or_else(|| v.as_str().and_then(|s| s.replace('"', "").parse().ok()))
+        .ok_or_else(|| D::Error::custom("non-floating-point"))?
+        .try_into()
+        .map_err(|_| D::Error::custom("overflow?"))?;
+    Ok(n)
+}
+
 pub fn deserialize_numeric_i16<'de, D>(deserializer: D) -> Result<i16, D::Error>
 where
     D: Deserializer<'de>,

@@ -119,4 +119,5 @@ impl<C: PixelColor + Clone> DrawTarget for VarFrameBuf<C> {
         }
         Ok(())
     }
+    
 }

@@ -47,21 +47,10 @@ use crate::vision::{
     POLL_IDLE
 
 };
-
-/// Which visualization to produce.
-#[derive(Debug, Clone, Copy)]
-pub enum Visualization {
-    VuStereo,                 // two VU meters (L/R)
-    VuMono,                   // downmix to mono VU
-    PeakStereo,               // two peak meters with hold/decay
-    PeakMono,                 // mono peak meter with hold/decay
-    HistStereo,               // two histogram bars (L/R)
-    HistMono,                 // mono histogram (downmix)
-    VuStereoWithCenterPeak,   // L/R VU with a central mono peak meter
-    AioVuMono,                // All In One with downmix VU
-    AioHistMono,              // All In One with downmix histogram
-    NoVisualization,          // no visualization
-}
+use crate::visualization::{
+    Visualization, 
+    transpose_kind
+};
 
 /// A published frame for the display to render.
 #[derive(Debug, Clone)]
@@ -105,22 +94,6 @@ pub struct Visualizer {
     join: Option<JoinHandle<()>>,
     /// Display consumes frames from here.
     pub rx: Receiver<VizFrameOut>,
-}
-
-fn transpose_kind(kind: &str) -> Visualization {
-    match kind {
-        "vu_stereo" => Visualization::VuStereo,
-        "vu_mono" => Visualization::VuMono,
-        "peak_stereo" => Visualization::PeakStereo,
-        "peak_mono" => Visualization::PeakMono,
-        "hist_stereo" => Visualization::HistStereo,
-        "hist_mono" => Visualization::HistMono,
-        "vu_stereo_with_center_peak" | "combination" => Visualization::VuStereoWithCenterPeak,
-        "aio_vu_mono" => Visualization::AioVuMono,
-        "aio_hist_mono" => Visualization::AioHistMono,
-        "no_viz" => Visualization::NoVisualization,
-        &_ => Visualization::NoVisualization,
-    }
 }
 
 impl Visualizer {
@@ -229,7 +202,7 @@ async fn visualizer_worker(
                 None => eng = Some(SpectrumEngine::new(frame.sample_rate, left.len(), need_bands)),
             }
 
-            // Compute per chosen viz
+            // Compute metrics per chosen viz
             match kind {
                 Visualization::VuStereo => {
                     let (_pk_l, rms_l) = peak_and_rms(left);
@@ -239,7 +212,6 @@ async fn visualizer_worker(
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::VuStereo { l_db, r_db });
                 }
-
                 Visualization::VuMono | Visualization::AioVuMono => {
                     let (_pk_l, rms_l) = peak_and_rms(left);
                     let (_pk_r, rms_r) = peak_and_rms(right);
@@ -249,7 +221,6 @@ async fn visualizer_worker(
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::VuMono { db });
                 }
-
                 Visualization::PeakStereo => {
                     // Peaks in dBFS → level
                     let (pk_l_i16, _) = peak_and_rms(left);
@@ -272,7 +243,6 @@ async fn visualizer_worker(
                             l_hold: peak_hold_l, r_hold: peak_hold_r,
                         });
                 }
-
                 Visualization::PeakMono => {
                     let (pk_l_i16, _) = peak_and_rms(left);
                     let (pk_r_i16, _) = peak_and_rms(right);
@@ -284,7 +254,6 @@ async fn visualizer_worker(
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::PeakMono { level, hold: peak_hold_m });
                 }
-
                 Visualization::HistStereo => {
                     if let Some(e) = &mut eng {
                         let (bands_l, bands_r) = e.compute_levels(left, right);
@@ -292,7 +261,6 @@ async fn visualizer_worker(
                             VizPayload::HistStereo { bands_l, bands_r });
                     }
                 }
-
                 Visualization::HistMono | Visualization::AioHistMono => {
                     if let Some(e) = &mut eng {
                         let (l, r) = e.compute_levels(left, right);
@@ -304,7 +272,6 @@ async fn visualizer_worker(
                             VizPayload::HistMono { bands });
                     }
                 }
-
                 Visualization::VuStereoWithCenterPeak => {
                     let (pk_l_i16, rms_l) = peak_and_rms(left);
                     let (pk_r_i16, rms_r) = peak_and_rms(right);
@@ -321,7 +288,6 @@ async fn visualizer_worker(
                             l_db, r_db, peak_level: level, peak_hold: peak_hold_m
                         });
                 }
-
                 Visualization::NoVisualization => {}
             }
         }) {

@@ -33,7 +33,17 @@ use std::ptr;
 use std::sync::atomic::{fence, Ordering};
 use std::time::{Duration, Instant};
 use std::thread::sleep;
+
 use crate::vuphysics::{VuNeedle};
+use crate::vuphysics::{Scale};
+
+use crate::visualization::{Visualization, get_visualizer_panel};
+use crate::drawsvg::{get_svg};
+
+// added for VuNeed in state - future color support
+use embedded_graphics::{
+    pixelcolor::{BinaryColor, PixelColor},
+};
 
 use crate::shm_path::find_squeezelite_shm_path;
 
@@ -48,7 +58,6 @@ pub const LEVEL_CEIL_DB: f32 =   0.0;           // ~0 dBFS
 pub const LEVEL_DECAY_STEPS_PER_FRAME: u8 = 1;  // visual fall rate (levels / frame)
 const LOCK_TRY_WINDOW_MS: u32 = 5;              // total budget for try-loop
 
-
 // Timings
 pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~60 FPS
 pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
@@ -57,11 +66,14 @@ pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
 #[derive(Debug, PartialEq, Clone)]
 pub struct LastVizState {
 
+    pub init: bool,
     pub wide: bool,
-    pub init_vu: bool,
 
+    pub init_svg: bool,
+    pub svg_file: String,
     pub buffer: Vec<u8>,
 
+    // COULD SUB-STRUCT THE M,L,R BUT KEEP IT SIMPLE AND A TAD 'WET', NOT DRY?, FOR NOW
     pub last_disp_m: f32,
     pub last_disp_l: f32,
     pub last_disp_r: f32,
@@ -96,21 +108,24 @@ pub struct LastVizState {
     pub cap_m: Vec<u8>,
     pub cap_l: Vec<u8>,
     pub cap_r: Vec<u8>,
+
     pub cap_hold_until_m: Vec<Instant>,  // until this time, hold current cap
     pub cap_hold_until_l: Vec<Instant>,
     pub cap_hold_until_r: Vec<Instant>,
+    
     pub cap_last_update_m: Vec<Instant>, // last time we updated decay
     pub cap_last_update_l: Vec<Instant>,
     pub cap_last_update_r: Vec<Instant>,
 
-    pub init: bool,
-    pub vu_init: bool,
+    // NEED TO SUPPORT COLOR
+    pub vu_m: VuNeedle<BinaryColor>,
+    pub vu_l: VuNeedle<BinaryColor>,
+    pub vu_r: VuNeedle<BinaryColor>,
 
-    pub vu_m: VuNeedle,
-    pub vu_l: VuNeedle,
-    pub vu_r: VuNeedle,
+    pub vu_test: Scale<BinaryColor>,
 
     pub last_tick: Instant,
+
 }
 
 impl Default for LastVizState {
@@ -118,8 +133,12 @@ impl Default for LastVizState {
     fn default() -> Self {
 
         Self {
+
+            init: true,
             wide: false,
-            init_vu: false,
+
+            init_svg: true, // instatiate and populate only once
+            svg_file: String::new(),
             buffer: Vec::new(),
 
             last_peak_m: u8::MIN,
@@ -154,15 +173,132 @@ impl Default for LastVizState {
             cap_last_update_m: Vec::new(),
             cap_last_update_l: Vec::new(),
             cap_last_update_r: Vec::new(),
-            init: true,
-            vu_init: true,
  
             vu_m: VuNeedle::new(),
             vu_l: VuNeedle::new(),
             vu_r: VuNeedle::new(),
+
+            // vu init as downmix (ssd1309 flavor)
+            vu_test: Scale::init(
+                -45.00, 
+                45.00, 
+                -22.00, 
+                4.80, 
+                10, 
+                73,
+            ),
+
             last_tick: Instant::now(),
+
         }
+
     }
+
+}
+
+impl LastVizState {
+
+    pub fn reset(&mut self) {
+
+        if self.init { return };
+
+        // [re]init the state but not the svg
+        self.init = true;
+
+        self.last_peak_m = u8::MIN;
+        self.last_peak_l = u8::MIN;
+        self.last_peak_r = u8::MIN;
+
+        self.last_disp_m = f32::MIN;
+        self.last_disp_l = f32::MIN;
+        self.last_disp_r = f32::MIN;
+
+        self.last_over_m = false;
+        self.last_over_l = false;
+        self.last_over_r = false;
+        self.last_hold_m = u8::MIN;
+        self.last_hold_l = u8::MIN;
+        self.last_hold_r = u8::MIN;
+        self.last_db_m = f32::MIN;
+        self.last_db_l = f32::MIN;
+        self.last_db_r = f32::MIN;
+        self.last_bands_m = Vec::new();
+        self.last_bands_l = Vec::new();
+        self.last_bands_r = Vec::new();
+        self.draw_bands_m = Vec::new();
+        self.draw_bands_l = Vec::new();
+        self.draw_bands_r = Vec::new();
+        self.cap_m = Vec::new();
+        self.cap_l = Vec::new();
+        self.cap_r = Vec::new();
+        self.cap_hold_until_m = Vec::new();
+        self.cap_hold_until_l = Vec::new();
+        self.cap_hold_until_r = Vec::new();
+        self.cap_last_update_m = Vec::new();
+        self.cap_last_update_l = Vec::new();
+        self.cap_last_update_r = Vec::new();
+
+    }
+
+}
+
+pub fn ensure_band_state(
+    state: &mut LastVizState, 
+    n_l: usize, 
+    n_r: usize, 
+    n_m: usize,
+    vk: Visualization,
+    init_svg: bool,
+    // ADDED FOR TESTING BUT MAY CARRY OVER TO VUNEEDLE
+    sweep_min: f64,
+    sweep_max: f64,
+    scale_min: f64,
+    scale_max: f64,
+    top_scale: i32,
+    bottom_scale: i32, 
+) 
+{
+
+    let now = Instant::now();
+    let ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
+    let ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
+
+    if state.init_svg && init_svg {
+        let width = if state.wide {256}else{128};
+        state.svg_file = get_visualizer_panel(vk, state.wide);
+        let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
+        state.init_svg = false;
+        state.vu_test = Scale::init(
+            sweep_min,
+            sweep_max,
+            scale_min,
+            scale_max,
+            top_scale,
+            bottom_scale, 
+        );
+
+    } // init svg
+
+    ensure(&mut state.draw_bands_m, n_m);
+    ensure(&mut state.draw_bands_l, n_l);
+    ensure(&mut state.draw_bands_r, n_r);
+
+    ensure(&mut state.last_bands_m, n_m);
+    ensure(&mut state.last_bands_l, n_l);
+    ensure(&mut state.last_bands_r, n_r);
+
+    ensure(&mut state.cap_m, n_m);
+    ensure(&mut state.cap_l, n_l);
+    ensure(&mut state.cap_r, n_r);
+
+    ensure_t(&mut state.cap_hold_until_m, n_m);
+    ensure_t(&mut state.cap_hold_until_l, n_l);
+    ensure_t(&mut state.cap_hold_until_r, n_r);
+
+    ensure_t(&mut state.cap_last_update_m, n_m);
+    ensure_t(&mut state.cap_last_update_l, n_l);
+    ensure_t(&mut state.cap_last_update_r, n_r);
+
 }
 
 // --- internal RAII read-guard used by timed/try lock paths ---

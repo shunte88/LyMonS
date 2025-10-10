@@ -294,5 +294,4 @@ impl SvgImageRenderer {
         Ok(())
     }
 
-
 }

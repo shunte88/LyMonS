@@ -40,12 +40,13 @@ mod trig;
 mod pacer;
 mod dbfs;
 mod draw;
+mod drawsvg;
 mod display;
 mod mac_addr;
 mod metrics;
 mod const_oled;
 mod constants;
-mod imgdata;
+mod glyphs;
 mod clock_font;
 mod deutils;
 mod httprpc;
@@ -59,8 +60,9 @@ mod eggs;
 mod spectrum;
 mod vframebuf;
 mod vision;
+mod visualization;
 mod visualizer;
-mod vu2up_ssd1309;
+//mod vuneedle;
 mod vuphysics;
 mod svgimage;
 mod shm_path;
@@ -104,7 +106,7 @@ fn check_half_hour(test:&String, active: bool) -> u8 {
     let now = Local::now();
     let minute = now.minute();
     let second = now.second();
-    if minute == 10 || minute == 30 || minute == 50 {
+    if minute == 5 || minute == 25 || minute == 45 {
         if second < 30 {
             1
         } else {
@@ -217,6 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .default_value("config.toml")
         .help("monitor config file")
         .required(false)) // false as defaulted
+        // change this to interface/oled_interface
         .arg(Arg::new("i2c-bus")
         .long("i2c-bus")
         .default_value("/dev/i2c-1") // Default I2C bus path for Raspberry Pi
@@ -231,8 +234,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "vu_mono",       // downmix to mono VU
             "peak_stereo",   // two peak meters with hold/decay
             "peak_mono",     // mono peak meter with hold/decay
-            "hist_stereo",   // two histogram bars (L/R)
-            "hist_mono",     // mono histogram (downmix)
+            "hist_stereo",   // two freq. histogram "bars" (L/R)
+            "hist_mono",     // mono freq. histogram "bars" (downmix)
             "combination",   // L/R VU with a central mono peak meter
             "aio_vu_mono",   // All In One with downmix VU
             "aio_hist_mono", // All In One with downmix histogram,

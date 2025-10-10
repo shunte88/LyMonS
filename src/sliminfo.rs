@@ -37,6 +37,7 @@ const VARIOUS_ARTISTS: &str = "Various Artists";
 
 use crate::deutils::{
     deserialize_bool_from_anything,
+    deserialize_numeric_f64, // Used by PlayerStatus
     deserialize_numeric_i16, // Used by PlayerStatus
     default_false,    // Used by Player and PlayerStatus
 };
@@ -91,7 +92,8 @@ pub struct Player {
 pub struct PlayerStatus {
     mode: Option<String>,
     power: Option<u8>,
-    time: Option<f64>,
+    #[serde(deserialize_with="deserialize_numeric_f64")]
+    time: f64,
     #[serde(rename = "mixer volume")]
     mixer_volume: Option<u8>,
     #[serde(rename = "playlist mode")]
@@ -117,7 +119,8 @@ struct Track {
     composer: Option<String>,
     conductor: Option<String>,
     performer: Option<String>,
-    duration: Option<f64>,
+    #[serde(deserialize_with="deserialize_numeric_f64")]
+    duration: f64,  // intermittent receipt of quoted value - use deutil
     #[serde(rename = "playlist index")]
     #[serde(deserialize_with="deserialize_numeric_i16")]
     playlist_index: i16,
@@ -235,7 +238,7 @@ impl SlimInfo {
                     compilation: None,
                     composer: None,
                     conductor: None,
-                    duration: None,
+                    duration: 0.00,
                     performer: None,
                     playlist_index: 0,
                     remote: None,
@@ -256,17 +259,22 @@ impl SlimInfo {
                 .and_then(|v| v.parse::<i32>().ok())
                 .unwrap_or(0)
         };
+        let parse_f64 = |s: &Option<String>| {
+            s.as_deref()
+                .and_then(|v| v.replace('"', "").parse::<f64>().ok())
+                .unwrap_or(0.0)
+        };
         let s_or = |s: &Option<String>, d: &str| s.clone().unwrap_or_else(|| d.to_string());
-        let _f_or = |f: Option<f64>, d: f64| f.unwrap_or(d);
         let u8_or = |v: Option<u8>, d: u8| v.unwrap_or(d);
 
         let mode = ps.mode.unwrap_or_else(|| "stop".into());
         let is_playing = ps.power.unwrap_or(0) == 1 && mode == "play";
 
-        let duration = fmt_time(track.as_ref().and_then(|t| t.duration));
-        let tracktime = fmt_time(ps.time);
-        let dur: f64 = duration.raw - tracktime.raw;
-        let remaining = fmt_time(Some(dur));
+        let d = track.as_ref().and_then(|t| Some(t.duration)).unwrap_or(0.0);
+        let duration = fmt_time(Some(d));
+        let tracktime = fmt_time(Some(ps.time));
+        let d: f64 = duration.raw - tracktime.raw;
+        let remaining = fmt_time(Some(d));
         
         let compilation = to_bool(&track.as_ref().and_then(|t| t.compilation.clone()));
         let performer = s_or(&track.as_ref().and_then(|t| t.performer.clone()), "");

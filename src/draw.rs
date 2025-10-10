@@ -79,7 +79,10 @@ where
 
 /// Clears a rectangular region of the target buffer to background color (BinaryColor::Off).
 #[allow(dead_code)]
-pub fn clear_region<D>(target: &mut D, region: Rectangle) -> Result<(), D::Error>
+pub fn clear_region<D>(
+    target: &mut D, 
+    region: Rectangle
+) -> Result<(), D::Error>
 where
     D: DrawTarget<Color = BinaryColor> + OriginDimensions,
 {

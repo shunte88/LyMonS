@@ -25,7 +25,7 @@
     pixelcolor::BinaryColor,
     image::ImageRaw,
 };
-use crate::imgdata::get_glyph_slice;
+use crate::glyphs::get_glyph_slice;
 use log::{info};
 
 // Define the dimensions of our custom clock digits.
