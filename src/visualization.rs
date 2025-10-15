@@ -57,14 +57,14 @@ pub fn get_visualizer_panel(kind: Visualization, wide:bool) -> String {
     let panel = match kind {
         Visualization::VuStereo => format!("{folder}vu2up.svg"),
         Visualization::VuMono  => format!("{folder}vudownmix.svg"),
+        Visualization::VuStereoWithCenterPeak => format!("{folder}vucombi.svg"),
+        Visualization::AioVuMono => format!("{folder}vuaio.svg"),
         Visualization::PeakStereo => format!("{folder}peak.svg"),
         Visualization::PeakMono  => format!("{folder}peakmono.svg"),
-        Visualization::NoVisualization | 
-        Visualization::AioHistMono | 
-        Visualization::HistStereo| 
-        Visualization::HistMono => "".to_string(),
-        Visualization::VuStereoWithCenterPeak => format!("{folder}vucombi.svg"),
-        Visualization::AioVuMono => format!("{folder}aiovu.svg"),
+        Visualization::AioHistMono => format!("{folder}histaio.svg"),
+        Visualization::HistStereo | 
+        Visualization::HistMono |
+        Visualization::NoVisualization => "".to_string(),
     };
     panel.clone()
 }

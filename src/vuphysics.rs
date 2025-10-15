@@ -24,7 +24,6 @@
 use log::{warn};
 use std::time::Instant;
 use core::any::Any;
-use std::f64::consts::PI;
 use core::convert::Infallible;
 use embedded_graphics::{
     geometry::{Point, Size},
@@ -33,7 +32,6 @@ use embedded_graphics::{
     primitives::{Line, PrimitiveStyle, Rectangle},
 };
 
-use crate::dbfs;
 use crate::vframebuf::VarFrameBuf;
 
 // classic visual range for scale
@@ -43,6 +41,136 @@ pub const VU_FLOOR_DB: f32 = -23.0;
 pub const VU_CEIL_DB:  f32 = 5.0;
 #[allow(dead_code)]
 pub const VU_GAMMA:    f32 = 0.7; // lift lows a bit; 1.0 = linear
+
+/// Row-major snapshot of a rectangle.
+#[derive(Debug, Clone, PartialEq)]
+struct SavedRegion<C: PixelColor> {
+    rect: Rectangle,
+    pixels: Vec<C>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Scale <C: PixelColor + Clone + Default>{
+    sweep_min: f64,
+    sweep_max: f64,
+    scale_min: f64,
+    scale_max: f64,
+    top_y: i32,
+    bottom_y: i32,
+    pub color: C,
+    saved: Option<SavedRegion<C>>,
+}
+
+
+impl <C: PixelColor + Clone + Default>Scale<C> {
+
+    pub fn init(
+        sweep_min: f64, 
+        sweep_max: f64, 
+        scale_min: f64, 
+        scale_max: f64, 
+        top_y: i32, 
+        bottom_y: i32,
+    ) -> Self {
+        Self {
+            sweep_min,
+            sweep_max,
+            scale_min,
+            scale_max,
+            top_y,
+            bottom_y,
+            color: C::default(),
+            saved: None,
+        }
+    }
+
+    fn map_value_to_angle(&self, value: f64) -> f64 {
+    
+        let mut value = value;
+        if value < self.scale_min {
+            value = self.scale_min as f64;
+        } else if value > self.scale_max {
+            value = self.scale_max as f64;
+        }
+        
+        let normalized = (value - self.scale_min) / (self.scale_max - self.scale_min);
+        self.sweep_min + normalized * (self.sweep_max - self.sweep_min)
+
+    }
+
+    // BlitBlat needle draw
+    pub fn draw_vu_needle<D>(
+        &mut self,
+        target: &mut D,
+        panel: Rectangle,
+        db: f32,
+        stroke_width: u32,
+        color: C,
+        border_color: C,
+    ) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = C> + OriginDimensions + 'static,
+        C: PixelColor + Clone + Default + 'static
+    {
+
+        // Restore prior background and erase last needle draw
+        //if let Some(saved) = self.saved.clone().take() {
+        if let Some(saved) = self.saved.take() {
+            restore_region(target, &saved).unwrap();
+        }
+
+        let origin = panel.top_left;
+        let width = panel.size.width;
+        
+        // layout
+        let mut cx = width as i32/ 2;
+        cx += origin.x;
+        let cy = self.bottom_y;
+        let r_arc  = self.bottom_y - self.top_y;
+
+        let style = PrimitiveStyle::with_stroke(
+            color.clone(),
+            stroke_width
+        );
+
+        // construct needle
+        let ang = self.map_value_to_angle(db as f64);
+        let p0 = Point::new(cx, cy);
+        let p1 = polar_point(cx, cy, r_arc, ang as f32);
+
+        // Build minimal rect and inflate by stroke width so we capture full needle thickness
+        let mut rect = rect_from_line(p0, p1);
+        rect = inflate_rect(rect, ((style.stroke_width as i32) + 2) / 2);
+
+        // Clip to framebuffer bounds - should limit to the panel specified
+        // so we can incorporate the "well and pivot"
+        let fb_rect = target.bounding_box();
+        let clipped = match rect.intersection(&fb_rect) {
+            r if r.size.width > 0 && r.size.height > 0 => r,
+            _ => {
+                Line::new(p0, p1).into_styled(style).draw(target)?;
+                return Ok(());
+            }
+        };
+
+        // save region for next draw
+        let saved = save_region(target, clipped);
+        self.saved = Some(saved);
+
+        // draw the new needle position with a drop-shadow
+        let cleanstyle = PrimitiveStyle::with_stroke(
+            border_color.clone(),
+            stroke_width
+        );
+        let shadow = Point::new(1,1); // bump down, right
+        Line::new(p0+shadow, p1+shadow).into_styled(cleanstyle).draw(target)?;
+        Line::new(p0, p1).into_styled(style).draw(target)?;
+
+        Ok(())
+
+    }
+
+}
 
 /// Classic 2nd-order needle: m ẍ + c ẋ + k x + c2 |ẋ| ẋ = g * u
 /// x in [0,1] is needle deflection, u in [0,1] is drive (from audio level map).
@@ -336,154 +464,6 @@ fn polar_point(cx: i32, cy: i32, r: i32, deg: f32) -> Point {
     let rad = deg.to_radians();
     let (s, c) = (rad.sin(), rad.cos());
     Point::new(cx + (s * r as f32) as i32, cy - (c * r as f32) as i32)
-}
-
-/// Map dBFS → normalized deflection 0..1 using VU’s exponential scale.
-/// This matches the arc geometry (−20..+3 → ~−48°..+48°).
-#[inline]
-fn dbfs_to_vu_deflection(dbfs: f32, sweep_min: i32, sweep_max: i32) -> f32 {
-    let vudb = dbfs::dbfs_to_vudb(dbfs);                     // apply −18 dBFS ↔ 0 VU
-    let theta = 90.0 / 2f32.sqrt();                    // 90 or abs sum of sweep ???
-    let a = theta * 10f32.powf(vudb / 20.0);           // degrees
-    let a_ref = theta * 10f32.powf(-3.0 / 20.0);       // −3 dB reference
-    let ang = a - a_ref;                               // ≈ sweep e.g. −48..+48
-    ((ang + sweep_max as f32) / (sweep_max + sweep_min.abs()) as f32).clamp(0.000, 1.000)  // → 0..1
-}
-
-/// Row-major snapshot of a rectangle.
-#[derive(Debug, Clone, PartialEq)]
-struct SavedRegion<C: PixelColor> {
-    rect: Rectangle,
-    pixels: Vec<C>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Scale <C: PixelColor + Clone + Default>{
-    sweep_min: f64,
-    sweep_max: f64,
-    scale_min: f64,
-    scale_max: f64,
-    top_y: i32,
-    bottom_y: i32,
-    pub color: C,
-    saved: Option<SavedRegion<C>>,
-}
-
-impl <C: PixelColor + Clone + Default>Scale<C> {
-
-    pub fn init(
-        sweep_min: f64, 
-        sweep_max: f64, 
-        scale_min: f64, 
-        scale_max: f64, 
-        top_y: i32, 
-        bottom_y: i32,
-    ) -> Self {
-        Self {
-            sweep_min,
-            sweep_max,
-            scale_min,
-            scale_max,
-            top_y,
-            bottom_y,
-            color: C::default(),
-            saved: None,
-        }
-    }
-
-    fn map_value_to_angle(&self, value: f64) -> f64 {
-    
-        let mut value = value;
-        if value < self.scale_min {
-            value = self.scale_min as f64;
-        } else if value > self.scale_max {
-            value = self.scale_max as f64;
-        }
-        
-        let normalized = (value - self.scale_min) / (self.scale_max - self.scale_min);
-        self.sweep_min + normalized * (self.sweep_max - self.sweep_min)
-
-    }
-
-    fn angle_to_cartesian(&self, angle_degrees: f64, radius: f64) -> Point {
-        let angle_radians = angle_degrees.to_radians();
-        let x = radius * angle_radians.cos();
-        let y = radius * angle_radians.sin();
-        Point::new(x as i32, y as i32)
-    }
-
-    // BlitBlat needle draw
-    pub fn draw_vu_needle<D>(
-        &mut self,
-        target: &mut D,
-        panel: Rectangle,
-        db: f32,
-        color: C,
-        border_color: C,
-    ) -> Result<(), D::Error>
-    where
-        D: DrawTarget<Color = C> + OriginDimensions + 'static,
-        C: PixelColor + Clone + Default + 'static
-    {
-
-        // Restore prior background and erase last needle draw
-        //if let Some(saved) = self.saved.clone().take() {
-        if let Some(saved) = self.saved.take() {
-            restore_region(target, &saved).unwrap();
-        }
-
-        let origin = panel.top_left;
-        let Size { width, height } = panel.size;
-
-        if width < 40 || height < 32 {
-            return Ok(());
-        }
-        
-        // layout
-        let stroke_width = 2;
-        let cx = origin.x + width as i32/ 2;
-        let cy = self.bottom_y;
-        let r_arc  = self.bottom_y - self.top_y;
-
-        let cleanstyle = PrimitiveStyle::with_stroke(
-            border_color.clone(),
-            stroke_width +2
-        );
-        let style = PrimitiveStyle::with_stroke(
-            color.clone(),
-            stroke_width
-        );
-
-        let p0 = Point::new(cx, cy);
-        let ang = self.map_value_to_angle(db as f64);
-        let p1 = polar_point(cx, cy, r_arc, ang as f32);
-
-        // Build minimal rect and inflate by stroke width so we capture full needle thickness
-        let mut rect = rect_from_line(p0, p1);
-        rect = inflate_rect(rect, ((cleanstyle.stroke_width as i32) + 1) / 2);
-
-        // Clip to framebuffer bounds - should limit to the panel specified
-        let fb_rect = target.bounding_box();
-        let clipped = match rect.intersection(&fb_rect) {
-            r if r.size.width > 0 && r.size.height > 0 => r,
-            _ => {
-                Line::new(p0, p1).into_styled(style).draw(target)?;
-                return Ok(());
-            }
-        };
-
-        // save region for next draw
-        let saved = save_region(target, clipped);
-        self.saved = Some(saved);
-
-        // draw new needle with shadow break
-        Line::new(p0, p1).into_styled(cleanstyle).draw(target)?;
-        Line::new(p0, p1).into_styled(style).draw(target)?;
-
-        Ok(())
-
-    }
-
 }
 
 fn rect_from_line(a: Point, b: Point) -> Rectangle {

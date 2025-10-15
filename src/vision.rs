@@ -73,6 +73,9 @@ pub struct LastVizState {
     pub svg_file: String,
     pub buffer: Vec<u8>,
 
+    pub last_artist: String,
+    pub last_title: String,
+
     // COULD SUB-STRUCT THE M,L,R BUT KEEP IT SIMPLE AND A TAD 'WET', NOT DRY?, FOR NOW
     pub last_disp_m: f32,
     pub last_disp_l: f32,
@@ -122,7 +125,9 @@ pub struct LastVizState {
     pub vu_l: VuNeedle<BinaryColor>,
     pub vu_r: VuNeedle<BinaryColor>,
 
-    pub vu_test: Scale<BinaryColor>,
+    pub vus_m: Scale<BinaryColor>,
+    pub vus_l: Scale<BinaryColor>,
+    pub vus_r: Scale<BinaryColor>,
 
     pub last_tick: Instant,
 
@@ -140,6 +145,9 @@ impl Default for LastVizState {
             init_svg: true, // instatiate and populate only once
             svg_file: String::new(),
             buffer: Vec::new(),
+
+            last_artist: String::new(),
+            last_title: String::new(),
 
             last_peak_m: u8::MIN,
             last_peak_l: u8::MIN,
@@ -178,14 +186,30 @@ impl Default for LastVizState {
             vu_l: VuNeedle::new(),
             vu_r: VuNeedle::new(),
 
-            // vu init as downmix (ssd1309 flavor)
-            vu_test: Scale::init(
-                -45.00, 
-                45.00, 
-                -22.00, 
+            // vu init as ssd1309 flavor
+            vus_m: Scale::init(
+                -46.00, 
+                46.00, 
+                -21.00, 
                 4.80, 
                 10, 
                 73,
+            ),
+            vus_l: Scale::init(
+                -45.27,
+                45.27,
+                -21.0,
+                5.0,
+                8,
+                48,
+            ),
+            vus_r: Scale::init(
+                -45.27,
+                45.27,
+                -21.0,
+                5.0,
+                8,
+                48,
             ),
 
             last_tick: Instant::now(),
@@ -204,6 +228,9 @@ impl LastVizState {
 
         // [re]init the state but not the svg
         self.init = true;
+
+        self.last_artist = String::new();
+        self.last_title = String::new();
 
         self.last_peak_m = u8::MIN;
         self.last_peak_l = u8::MIN;
@@ -268,7 +295,7 @@ pub fn ensure_band_state(
         state.svg_file = get_visualizer_panel(vk, state.wide);
         let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
         state.init_svg = false;
-        state.vu_test = Scale::init(
+        state.vus_m = Scale::init(
             sweep_min,
             sweep_max,
             scale_min,
@@ -276,6 +303,8 @@ pub fn ensure_band_state(
             top_scale,
             bottom_scale, 
         );
+        state.vus_l = state.vus_m.clone();
+        state.vus_r = state.vus_m.clone();
 
     } // init svg
 

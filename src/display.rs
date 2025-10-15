@@ -57,7 +57,7 @@ use ssd1306::{
 };
 
 use log::{debug, info, error};
-use std::time::{Duration, Instant};
+use std::{fmt::Debug, time::{Duration, Instant}};
 use std::error::Error; // Import the Error trait
 use std::fmt; // Import fmt for Display trait
 use std::thread::sleep;
@@ -1292,7 +1292,7 @@ impl OledDisplay {
             self.last_second_drawn = current_second_fidelity;
         }
 
-        let current_date_string = chrono::Local::now().format("%a %b %d").to_string(); // e.g., "Mon Jun 09"
+        let current_date_string = chrono::Local::now().format("%a %b %d").to_string();
         if current_date_string != self.last_date_drawn {
             self.draw(|fb| {
                 draw_text_region_align(
@@ -1344,8 +1344,7 @@ impl OledDisplay {
     fn draw_vu_pair<D>(
         display: &mut D, 
         l_db: f32, 
-        r_db: f32, 
-        h: bool,
+        r_db: f32,
         vk: Visualization,
         state: &mut LastVizState
     ) -> Result<bool, D::Error>
@@ -1356,7 +1355,20 @@ impl OledDisplay {
         let mut need_flush = false;
     
         // resize state buffers if band count changed
-        ensure_band_state(state, 0, 0, 0, vk, true, -48.0, 48.0, -22.0, 5.0, 20, 60); 
+        ensure_band_state(
+            state, 
+            0,
+            0,
+            0,
+            vk,
+            true,
+            -45.27,
+            45.27,
+            -21.0,
+            5.0,
+            8,
+            48
+        ); 
 
         if state.init {
             // blit to target
@@ -1383,11 +1395,6 @@ impl OledDisplay {
 
         changed |= state.last_disp_l != _disp_l ||
             state.last_disp_r != _disp_r;
-
-        let save_last_disp_l = state.last_disp_l;
-        let save_last_disp_r = state.last_disp_r;
-        state.last_disp_l = _disp_l;
-        state.last_disp_r = _disp_r;
  
         // if nothing would change on screen, skip work (non-blocking) early doors
         if !changed && !state.init {
@@ -1404,50 +1411,66 @@ impl OledDisplay {
         let my = 6;
         let title_base = 10;
         let gap = 2;
-        let inner_w = w - 2 * mx;
+        let inner_w = w/2 - 2 * mx;
         let inner_h = h - my - title_base - 1;
-        let pane_w = (inner_w - gap) / 2;
+        let over_y = my + 6;
 
-        let _ = state.vu_test.draw_vu_needle (
-            display, 
-            Rectangle::new(
-                Point::new(mx,my), 
-                Size::new(inner_w as u32, inner_h as u32)),
-            state.last_disp_l,
-            BinaryColor::On,
-            BinaryColor::Off,
-        )
-        .map_err(|e| D::Error::from(e))?;
-        let _ = state.vu_test.draw_vu_needle (
-            display, 
-            Rectangle::new(
-                Point::new(mx + pane_w + gap, my),
-                Size::new(pane_w as u32, inner_h as u32)),
-            state.last_disp_r,
-            BinaryColor::On,
-            BinaryColor::Off,
-        )
-        .map_err(|e| D::Error::from(e))?;
-        let led_fill = if over_l { BinaryColor::On} else {BinaryColor::Off}; 
-        draw_circle(
-            display,
-            Point::new(mx + inner_w as i32 - 6, my + 23), 
-            5, 
-            BinaryColor::On, 
-            1, 
-            led_fill
-        )
-        .map_err(|e| D::Error::from(e))?;
-        let led_fill = if over_r { BinaryColor::On} else {BinaryColor::Off}; 
-        draw_circle(
-            display,
-            Point::new(mx + pane_w + gap + inner_w as i32 - 6, my + 23), 
-            5, 
-            BinaryColor::On, 
-            1, 
-            led_fill
-        )
-        .map_err(|e| D::Error::from(e))?;
+        if state.last_disp_l != _disp_l {
+            state.last_disp_l = _disp_l;
+            let _ = state.vus_l.draw_vu_needle (
+                display, 
+                Rectangle::new(
+                    Point::new(mx,my), 
+                    Size::new(inner_w as u32, inner_h as u32)),
+                state.last_disp_l,
+                1,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+        if state.last_disp_r != _disp_r {
+            state.last_disp_r = _disp_r;
+            let _ = state.vus_r.draw_vu_needle (
+                display, 
+                Rectangle::new(
+                    Point::new(3*mx + inner_w + gap, my),
+                    Size::new(inner_w as u32, inner_h as u32)),
+                state.last_disp_r,
+                1,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+        
+        // this assumes we have drawn the off led in the SVG
+        if over_l {
+            draw_circle(
+                display,
+                Point::new(mx + inner_w as i32 - 9, over_y), 
+                10, 
+                BinaryColor::On, 
+                0, 
+                BinaryColor::On
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+        if over_r { 
+            draw_circle(
+                display,
+                Point::new(2*(mx + inner_w as i32) + gap - 9, over_y), 
+                10, 
+                BinaryColor::On, 
+                0, 
+                BinaryColor::On
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
 
         Ok(need_flush)
 
@@ -1465,8 +1488,166 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-        let ret = Self::draw_vu_pair(display, l_db, r_db, false, vk, state)?;
-        Ok(ret)
+
+        let mut need_flush = false;
+    
+        // resize state buffers if band count changed
+        ensure_band_state(
+            state, 
+            0, 
+            0, 
+            0, 
+            vk, 
+            true, 
+            -33.69, 
+            33.69, 
+            -21.0, 
+            4.8, 
+            16, 
+            40
+        );
+
+        if state.init {
+            // Blit to target
+            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
+            let _ = Image::new(&raw, Point::new(0, 0))
+                .draw(display)
+                .map_err(|e|D::Error::from(e));
+            need_flush = true;
+        }
+        let mut changed = 
+            state.last_db_l != l_db ||
+            state.last_db_r != r_db;
+
+        // last metric is not taking into account time based decay
+        // need to review before adding early doors
+
+        // save the latest inputs
+        state.last_db_l = l_db;
+        state.last_db_r = r_db;
+
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+
+        changed |= state.last_disp_l != _disp_l ||
+            state.last_disp_r != _disp_r;
+
+        changed |= state.last_peak_m != peak_level ||
+            state.last_hold_m != peak_hold;
+ 
+        // if nothing would change on screen, skip work (non-blocking) early doors
+        if !changed && !state.init {
+            return Ok(need_flush);
+        }
+        state.init = false;
+
+        // layout horizontal (h=true)
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        if w <= 6 || h <= 4 { return Ok(false); }
+
+        let mx = 10;
+        let my = 8;
+        let title_base = 24;
+        let gap = 6;
+        let inner_w = w/2 - 2 * mx - gap/2;
+        let inner_h = h - my - title_base - 1;
+        let over_y = 51;
+
+        if state.last_peak_m != peak_level || state.last_hold_m != peak_hold
+        {
+            let level_brackets: [i16; 19] = [
+                -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
+                -4,  -3,  -2,  -1,  0,   2,   3,  5,  8];
+            state.last_peak_m = peak_level;
+            state.last_hold_m = peak_hold;
+            // draw peak meter
+            let top_meter = my + 1;
+            let bottom_meter = h - 2*my - 1;
+
+            let nodeh = (bottom_meter as u32 - top_meter as u32)/(level_brackets.len() as u32 + 1);
+            let nodew = 2 * gap as u32;
+            let xpos = w/2 - gap;
+            let mut ypos = bottom_meter + nodeh as i32;
+
+            for l in level_brackets {
+                let mv = level_brackets[0] + state.last_peak_m as i16;
+                let color = if mv >= l {
+                    BinaryColor::On
+                } else {
+                    BinaryColor::Off
+                };
+                draw_rectangle(
+                    display,
+                    Point::new(xpos, ypos),
+                    nodew, nodeh,
+                    color,
+                    Some(0), Some(BinaryColor::Off)
+                )
+                .map_err(|e| D::Error::from(e))?;
+                ypos -= nodeh as i32;
+            }
+            need_flush = true;
+        }
+
+        if state.last_disp_l != _disp_l {
+            state.last_disp_l = _disp_l;
+            let _ = state.vus_l.draw_vu_needle (
+                display, 
+                Rectangle::new(
+                    Point::new(mx,my), 
+                    Size::new(inner_w as u32, inner_h as u32)),
+                l_db, // state.last_disp_l,
+                1,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+        if state.last_disp_r != _disp_r {
+            state.last_disp_r = _disp_r;
+            let _ = state.vus_r.draw_vu_needle (
+                display, 
+                Rectangle::new(
+                    Point::new(3*mx + inner_w + gap, my),
+                    Size::new(inner_w as u32, inner_h as u32)),
+                r_db, // state.last_disp_r,
+                1,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+        // this assumes we have drawn the off led in the SVG
+        if over_l {
+            draw_circle(
+                display,
+                Point::new(mx + mx + inner_w as i32 - 6, over_y), 
+                10, 
+                BinaryColor::On, 
+                0, 
+                BinaryColor::On
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+        if over_r { 
+            draw_circle(
+                display,
+                Point::new(2*(mx + inner_w as i32) + gap - 6, over_y), 
+                10, 
+                BinaryColor::On, 
+                0, 
+                BinaryColor::On
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+
+        Ok(need_flush)
+
     }
 
     fn draw_vu_mono<D>(
@@ -1476,12 +1657,10 @@ impl OledDisplay {
         state: &mut LastVizState
     ) -> Result<bool, D::Error> 
     where
-        D: DrawTarget<Color = BinaryColor> + OriginDimensions  + 'static,
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
 
-        //info!("{:>6.2} dB", db);
         let mut need_flush = false;
-        //return Ok(need_flush);
     
         // resize state buffers if band count changed
         ensure_band_state(
@@ -1516,7 +1695,6 @@ impl OledDisplay {
         let (_disp, over) = state.vu_m.update_drive(db);
 
         changed |= state.last_disp_m != _disp;
-        let save_last_disp = state.last_disp_m;
         state.last_disp_m = _disp;
  
         // if nothing would change on screen, skip work (non-blocking) early doors
@@ -1536,12 +1714,13 @@ impl OledDisplay {
         let inner_w = w - 2 * mx;
         let inner_h = h - my - title_base - 1;
 
-        let _ = state.vu_test.draw_vu_needle (
+        let _ = state.vus_m.draw_vu_needle (
             display, 
             Rectangle::new(
                 Point::new(mx,my), 
                 Size::new(inner_w as u32, inner_h as u32)),
             db, //state.last_disp_m,
+            2,
             BinaryColor::On,
             BinaryColor::Off,
         )
@@ -1566,17 +1745,32 @@ impl OledDisplay {
     fn draw_aio_vu<D>(
         display: &mut D, 
         db: f32,
+        track: String,
         vk: Visualization,
         state: &mut LastVizState
     ) -> Result<bool, D::Error> 
     where
-        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-        // resize state buffers if band count changed
-        ensure_band_state(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
-        let mut need_flush = false;
 
-        // we implement draw and erase, only initialize on first call
+        let mut need_flush = false;
+    
+        // resize state buffers if band count changed
+        ensure_band_state(
+            state, 
+            0, 
+            0, 
+            0, 
+            vk, 
+            true, 
+            -45.27,
+            45.27,
+            -21.0,
+            5.0,
+            8,
+            48
+        );
+
         if state.init {
             // Blit to target
             let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
@@ -1585,9 +1779,93 @@ impl OledDisplay {
                 .map_err(|e|D::Error::from(e));
             need_flush = true;
         }
-        println!("{:>6.2}dB", db);
-        // all-in-one VU logic
-        // 
+
+        let mut changed = 
+            state.last_db_m != db;
+
+        // save the latest inputs
+        state.last_db_m = db;
+
+        let (_disp, over) = state.vu_m.update_drive(db);
+
+        changed |= state.last_disp_m != _disp;
+        changed |= state.last_over_m != over;
+        changed |= state.last_artist != track.clone();
+
+        println!("{}", track.clone());
+
+        // if nothing would change on screen, skip work (non-blocking) early doors
+        if !changed && !state.init {
+            return Ok(need_flush);
+        }
+        state.init = false;
+
+        if state.last_artist != track.clone() 
+        {
+            state.last_artist = track.clone();
+            let atext: &str = &state.last_artist.clone();
+
+            let character_style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
+            let textbox_style = TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Left)
+                .vertical_alignment(VerticalAlignment::Top)
+                .build();
+
+            let arect = Rectangle::new(Point::new(5,3), Size::new(64,58));
+            let text_box = TextBox::with_textbox_style(
+                atext, 
+                arect, 
+                character_style, 
+                textbox_style
+            );
+            let _ = text_box.draw(display)
+            .map_err(|e| D::Error::from(e))?;
+
+            need_flush = true;
+        }
+
+        // layout
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        let mx = 3;
+        let my = 6;
+        let gap = 2;
+        let inner_w = w/2 - 2 * mx;
+
+        if state.last_disp_m != _disp {
+            state.last_disp_m = _disp;
+            let title_base = 10;
+            let inner_h = h - my - title_base - 1;
+            let _ = state.vus_m.draw_vu_needle (
+                display, 
+                Rectangle::new(
+                    Point::new(3*mx + inner_w + gap, my),
+                    Size::new(inner_w as u32, inner_h as u32)),
+                state.last_disp_m,
+                2,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+
+        if state.last_over_m != over {
+            state.last_over_m = over;
+            let over_y = my + 6;           
+            let led_fill = if over { BinaryColor::On} else {BinaryColor::Off}; 
+            draw_circle(
+                display,
+                Point::new(2*(mx + inner_w as i32) + gap - 9, over_y), 
+                8, 
+                BinaryColor::On, 
+                1, 
+                led_fill
+            )
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+
         Ok(need_flush)
 
     }
@@ -1617,7 +1895,6 @@ impl OledDisplay {
             need_flush = true;
         }
 
-        // 0..PEAK_METER_LEVELS_MAX
         let level_brackets: [i16; 19] = [
             -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
             -4,  -3,  -2,  -1,  0,   2,   3,  5,  8];
@@ -1739,7 +2016,20 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(
+            state, 
+            bands_l.len(), 
+            bands_r.len(), 
+            0, 
+            vk, 
+            false,
+            0.0, 
+            0.0,
+            0.0, 
+            0.0,
+            0, 
+            0
+        );
 
         // store latest inputs
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -1962,13 +2252,118 @@ impl OledDisplay {
     fn draw_aio_hist<D>(
         display: &mut D, 
         bands: Vec<u8>,
+        track: String,
         vk: Visualization,
         state: &mut LastVizState
     ) -> Result<bool, D::Error> 
     where
-        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions + Debug + 'static,
     {
-        Ok(false)
+        let mut need_flush = false;
+
+        // resize state buffers if band count changed
+        ensure_band_state(
+            state, 
+            0, 
+            0, 
+            bands.len(), 
+            vk, 
+            false,
+            0.0, 
+            0.0,
+            0.0, 
+            0.0,
+            0, 
+            0
+        );
+
+        if state.init {
+            // Blit to target
+            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
+            let _ = Image::new(&raw, Point::new(0, 0))
+                .draw(display)
+                .map_err(|e|D::Error::from(e));
+            need_flush = true;
+        }
+
+        // store latest inputs
+        state.last_bands_m.copy_from_slice(&bands);
+
+        // compute body decay (rise fast, fall slow)
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(state.last_tick);
+        state.last_tick = now;
+
+        let mut changed = false;
+        changed |= update_body_decay(&mut state.draw_bands_m, &state.last_bands_m, elapsed);
+
+        // update peak caps (time-based hold then decay)
+        changed |= update_caps(
+            &mut state.cap_m,
+            &mut state.cap_hold_until_m,
+            &mut state.cap_last_update_m,
+            &state.draw_bands_m,
+            now,
+        );
+
+        changed |= state.last_artist != track.clone();
+println!("{}", track.clone());
+
+        // if nothing would change on screen, skip work (non-blocking) early doors
+        if !changed && !state.init {
+            return Ok(need_flush);
+        }
+        state.init = false;
+
+        if state.last_artist != track.clone() 
+        {
+            state.last_artist = track.clone();
+            let atext: &str = &state.last_artist.clone();
+
+            let character_style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
+            let textbox_style = TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Left)
+                .vertical_alignment(VerticalAlignment::Top)
+                .build();
+
+            let arect = Rectangle::new(Point::new(5,3), Size::new(64,58));
+            let text_box = TextBox::with_textbox_style(
+                atext, 
+                arect, 
+                character_style, 
+                textbox_style
+            );
+            text_box.draw(display)
+            .map_err(|e| D::Error::from(e))?;
+            need_flush = true;
+        }
+
+        // layout
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+
+        let mx = 3;
+        let my = 6;
+        let title_base = 10;
+        let gap = 2;
+        let inner_w = w - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+        let title_pos = h - title_base;
+        let pane_w = (inner_w - gap) / 2;
+
+        // right histogram downmix panel
+        draw_hist_panel_with_caps(
+            display,
+            "Downmix", title_base as u32, title_pos,
+            Point::new(mx + pane_w + gap, my),
+            Size::new(pane_w as u32, inner_h as u32),
+            &state.draw_bands_r,
+            &state.cap_r,
+        ).map_err(|e| D::Error::from(e))?;
+        need_flush = true;
+
+        Ok(need_flush)
+
     }
 
     pub async fn drain_frame_queue(
@@ -2003,9 +2398,10 @@ impl OledDisplay {
             self.clear_region(); // note no auto-flush here
             self.viz_init_clear = false;
         }
-        //info!(">>> update_and_draw_visualizer");
+
+        let track = format!("{}\n{}",self.artist.clone(),self.title.clone());
         let frame = self.drain_frame_queue().await.unwrap();
-        //info!(">>> have frame {:#?}", frame);
+
         // draw the active meter/visualization
         let mut need_flush = false;
         if !frame.is_none() {
@@ -2014,7 +2410,7 @@ impl OledDisplay {
             match frame.payload {
                 VizPayload::VuStereo { l_db, r_db } => 
                     self.draw(|fb| {
-                        need_flush = Self::draw_vu_pair(fb, l_db, r_db, true, frame.kind, &mut state).unwrap()
+                        need_flush = Self::draw_vu_pair(fb, l_db, r_db, frame.kind, &mut state).unwrap()
                     }),
                 VizPayload::VuStereoWithCenterPeak { l_db, r_db, peak_level, peak_hold } => 
                     self.draw(|fb| {
@@ -2026,7 +2422,7 @@ impl OledDisplay {
                     }),
                 VizPayload::AioVuMono { db } => 
                     self.draw(|fb| {
-                        need_flush = Self::draw_aio_vu(fb, db, frame.kind, &mut state).unwrap()                        
+                        need_flush = Self::draw_aio_vu(fb,  db, track.clone(), frame.kind, &mut state).unwrap()                        
                     }),
                 VizPayload::PeakStereo { l_level, r_level, l_hold, r_hold } => 
                     self.draw(|fb| {
@@ -2047,25 +2443,22 @@ impl OledDisplay {
                     }),
                 VizPayload::AioHistMono { bands } => 
                     self.draw(|fb| {
-                        need_flush = Self::draw_aio_hist(fb, bands.clone(), frame.kind, &mut state).unwrap()                        
+                        need_flush = Self::draw_aio_hist(fb, bands.clone(), track.clone(), frame.kind, &mut state).unwrap()                        
                     }),
                 _ => {}
             }
 
-            //info!(">>> state");
             self.last_viz_state = state;
 
             // time limited flush so we don't overlaod the display
-            let can_flush = self.pacer.should_flush();
+            //let can_flush = self.pacer.should_flush();
             let can_flush = true;
             if need_flush && can_flush {
-                let t0 = std::time::Instant::now();
+                //let t0 = std::time::Instant::now();
                 self.flush_region(Rectangle::new(Point::zero(), self.display.size())).unwrap();
-                let dt = t0.elapsed();
-                self.pacer.record_flush_ms(dt.as_secs_f32() * 1000.0);
+                //let dt = t0.elapsed();
+                //self.pacer.record_flush_ms(dt.as_secs_f32() * 1000.0);
             }
-            //info!(">>> flushable: {}, repeat...", can_flush);
-
         }
         Ok(())
 
@@ -2280,7 +2673,8 @@ impl OledDisplay {
             pct as f64,
             if show_remaining { remaining_time_secs } else { current_track_time_secs },
             tl.x,
-            tl.y)
+            tl.y
+        )
         .await?;
         // hand the text output here
         self.display.flush().unwrap();
