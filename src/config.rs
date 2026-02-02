@@ -38,6 +38,7 @@ pub struct DisplayConfig {
     pub brightness: Option<u8>,     // 0-255
     pub driver: Option<DriverKind>, // <- strongly-typed driver selection
     pub bus: Option<BusConfig>,     // <- i2c or spi wiring
+    pub emulated: Option<bool>,     // <- enable emulation mode (desktop window)
 }
 
 /// CLI overrides. All fields are Options so we can layer them over YAML.

@@ -222,6 +222,14 @@ impl Ssd1306Driver {
 }
 
 impl DisplayDriver for Ssd1306Driver {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn capabilities(&self) -> &DisplayCapabilities {
         &self.capabilities
     }

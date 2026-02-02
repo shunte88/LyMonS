@@ -1,0 +1,24 @@
+[package]
+name = "lymons-driver-sh1106"
+version = "1.0.0"
+edition = "2021"
+authors = ["Stuart Hunter"]
+description = "LyMonS SH1106 OLED display driver plugin"
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Display driver
+sh1106 = "0.5.0"
+
+# Embedded HAL
+embedded-hal = "1.0.0"
+linux-embedded-hal = "0.4.0"
+
+# Graphics
+embedded-graphics = "0.8.1"
+
+[features]
+default = []

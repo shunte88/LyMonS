@@ -95,6 +95,50 @@ impl FrameBuffer {
         }
     }
 
+    /// Convert framebuffer to packed byte array for write_buffer()
+    ///
+    /// Returns a Vec<u8> with pixels packed according to color depth:
+    /// - Monochrome: 8 pixels per byte (LSB first)
+    /// - Gray4: 2 pixels per byte (high nibble first)
+    pub fn to_packed_bytes(&self) -> Vec<u8> {
+        match self {
+            FrameBuffer::Mono(fb) => {
+                let pixels = fb.as_slice();
+                let num_bytes = (pixels.len() + 7) / 8;  // Round up
+                let mut bytes = vec![0u8; num_bytes];
+
+                for (i, &pixel) in pixels.iter().enumerate() {
+                    let byte_idx = i / 8;
+                    let bit_idx = i % 8;
+                    if pixel.is_on() {
+                        bytes[byte_idx] |= 1 << bit_idx;
+                    }
+                }
+
+                bytes
+            }
+            FrameBuffer::Gray4(fb) => {
+                let pixels = fb.as_slice();
+                let num_bytes = (pixels.len() + 1) / 2;  // Round up
+                let mut bytes = vec![0u8; num_bytes];
+
+                for (i, &pixel) in pixels.iter().enumerate() {
+                    let byte_idx = i / 2;
+                    let value = pixel.luma();
+                    if i % 2 == 0 {
+                        // High nibble
+                        bytes[byte_idx] |= (value & 0x0F) << 4;
+                    } else {
+                        // Low nibble
+                        bytes[byte_idx] |= value & 0x0F;
+                    }
+                }
+
+                bytes
+            }
+        }
+    }
+
     /// Get mutable reference to grayscale framebuffer
     ///
     /// Panics if the framebuffer is not grayscale. Use this only when

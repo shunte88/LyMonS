@@ -24,6 +24,7 @@
 use crate::config::{DisplayConfig, DriverKind, BusConfig};
 use crate::display::error::DisplayFactoryError;
 use crate::display::traits::DisplayDriver;
+use log::{info, debug};
 
 #[cfg(feature = "driver-ssd1306")]
 use crate::display::drivers::ssd1306::Ssd1306Driver;
@@ -36,6 +37,9 @@ use crate::display::drivers::ssd1322::Ssd1322Driver;
 
 #[cfg(feature = "driver-sh1106")]
 use crate::display::drivers::sh1106::Sh1106Driver;
+
+#[cfg(feature = "plugin-system")]
+use crate::display::plugin::{PluginLoader, PluginDriverAdapter};
 
 /// Type alias for boxed display driver trait objects
 pub type BoxedDriver = Box<dyn DisplayDriver>;
@@ -79,9 +83,27 @@ impl DisplayDriverFactory {
         let driver_kind = config.driver.as_ref()
             .ok_or(DisplayFactoryError::NoDriverSpecified)?;
 
+        // Check if emulation mode is requested
+        #[cfg(feature = "emulator")]
+        if config.emulated.unwrap_or(false) {
+            info!("Emulation mode enabled - creating emulator driver");
+            return Self::create_emulator_driver(config, driver_kind);
+        }
+
         let bus_config = config.bus.as_ref()
             .ok_or(DisplayFactoryError::NoBusConfiguration)?;
 
+        // Try plugin loading first if plugin system is enabled
+        #[cfg(feature = "plugin-system")]
+        {
+            if let Some(plugin_driver) = Self::try_load_plugin(config, driver_kind) {
+                info!("Using plugin driver for {:?}", driver_kind);
+                return Ok(plugin_driver);
+            }
+            debug!("Plugin not found, falling back to built-in driver");
+        }
+
+        // Fall back to built-in static drivers
         match (driver_kind, bus_config) {
             #[cfg(feature = "driver-ssd1306")]
             (DriverKind::Ssd1306, BusConfig::I2c { bus, address, .. }) => {
@@ -143,6 +165,90 @@ impl DisplayDriverFactory {
                 Err(DisplayFactoryError::UnsupportedCombination)
             }
         }
+    }
+
+    /// Try to load a plugin for the specified driver kind
+    ///
+    /// Returns Some(driver) if a plugin was successfully loaded,
+    /// or None if no plugin was found or loading failed.
+    #[cfg(feature = "plugin-system")]
+    fn try_load_plugin(
+        config: &DisplayConfig,
+        driver_kind: &DriverKind
+    ) -> Option<BoxedDriver> {
+        // Map DriverKind to plugin name
+        let plugin_name = match driver_kind {
+            DriverKind::Ssd1306 => "ssd1306",
+            DriverKind::Ssd1309 => "ssd1309",
+            DriverKind::Ssd1322 => "ssd1322",
+            DriverKind::Sh1106 => "sh1106",
+            DriverKind::SharpMemory => "sharpmemory",
+        };
+
+        debug!("Searching for plugin: {}", plugin_name);
+
+        // Try to load the plugin
+        match PluginLoader::load_by_driver_type(plugin_name) {
+            Ok(plugin) => {
+                info!("Loaded plugin: {} v{}",
+                    plugin.metadata().name,
+                    plugin.metadata().version
+                );
+
+                // Create the adapter
+                match PluginDriverAdapter::new(plugin, config) {
+                    Ok(adapter) => {
+                        info!("Successfully created plugin driver adapter");
+                        Some(Box::new(adapter))
+                    }
+                    Err(e) => {
+                        info!("Failed to create plugin driver: {:?}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("Failed to load plugin: {}", e);
+                None
+            }
+        }
+    }
+
+    /// Create an emulator driver based on display kind
+    ///
+    /// This creates a desktop window emulator instead of trying to access hardware.
+    #[cfg(feature = "emulator")]
+    fn create_emulator_driver(
+        config: &DisplayConfig,
+        driver_kind: &DriverKind,
+    ) -> Result<BoxedDriver, DisplayFactoryError> {
+        use crate::display::drivers::emulator::EmulatorDriver;
+
+        // Determine dimensions and color depth based on driver kind
+        let (width, height, is_grayscale, name) = match driver_kind {
+            DriverKind::Ssd1306 => (128, 64, false, "SSD1306"),
+            DriverKind::Ssd1309 => (128, 64, false, "SSD1309"),
+            DriverKind::Sh1106 => (132, 64, false, "SH1106"),
+            DriverKind::Ssd1322 => (256, 64, true, "SSD1322"),
+            DriverKind::SharpMemory => (400, 240, false, "SharpMemory"),
+        };
+
+        // Override with config if specified
+        let final_width = config.width.unwrap_or(width);
+        let final_height = config.height.unwrap_or(height);
+
+        info!("Creating emulator driver: {} ({}x{}, {})",
+            name, final_width, final_height,
+            if is_grayscale { "grayscale" } else { "monochrome" }
+        );
+
+        let driver = if is_grayscale {
+            EmulatorDriver::new_grayscale(final_width, final_height, name)?
+        } else {
+            EmulatorDriver::new_monochrome(final_width, final_height, name)?
+        };
+
+        Ok(Box::new(driver))
     }
 
     /// Validate a configuration without creating a driver

@@ -515,20 +515,37 @@ impl OledDisplay {
     /// Initializes the OLED display over I2C.
     ///
     /// `i2c_bus_path` is typically "/dev/i2c-X" where X is the bus number (e.g., "/dev/i2c-1").
-    /// NEED  support for i2c and spi, argument should drive the logic for the 
+    /// NEED  support for i2c and spi, argument should drive the logic for the
     /// interface to be instantiated
     pub fn new(
-        i2c_bus_path: &str, 
-        scroll_mode: &str, 
-        clock_font: &str, 
+        i2c_bus_path: &str,
+        scroll_mode: &str,
+        clock_font: &str,
         show_metrics: bool,
-        egg_name: &str) -> Result<Self, DisplayDrawingError> 
+        egg_name: &str,
+        emulated: bool) -> Result<Self, DisplayDrawingError>
     {
+
+        if emulated {
+            error!("Emulation mode requested but not yet implemented in legacy display system.");
+            error!("To use emulation mode, you need to:");
+            error!("  1. Build with: cargo build --release --features emulator");
+            error!("  2. Use a config file with 'emulated: true' in the display section");
+            error!("  3. The new display system (currently under development) will handle emulation");
+            return Err(DisplayDrawingError::InterfaceI2CError(
+                "Emulation mode not supported in legacy display system".to_string()
+            ));
+        }
 
         info!("Initializing Display on {}", i2c_bus_path);
 
         let i2c = I2cdev::new(i2c_bus_path)
-            .map_err(|e| DisplayDrawingError::InterfaceI2CError(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to open I2C device: {}", e);
+                error!("If you want to test without hardware, use --emulated flag");
+                error!("Note: Full emulation support requires the new display system");
+                DisplayDrawingError::InterfaceI2CError(e.to_string())
+            })?;
         let interface = I2CDisplayInterface::new(i2c);
 
         /*

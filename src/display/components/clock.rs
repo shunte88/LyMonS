@@ -63,15 +63,17 @@ pub struct ClockDisplay {
     state: ClockState,
     clock_font: ClockFontData<'static>,
     layout: LayoutConfig,
+    metrics: bool,
 }
 
 impl ClockDisplay {
     /// Create a new clock display component
-    pub fn new(layout: LayoutConfig, clock_font: ClockFontData<'static>) -> Self {
+    pub fn new(layout: LayoutConfig, clock_font: ClockFontData<'static>, metrics: bool) -> Self {
         Self {
             state: ClockState::default(),
             clock_font,
             layout,
+            metrics,
         }
     }
 
@@ -95,12 +97,100 @@ impl ClockDisplay {
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        // TODO: Implement actual clock rendering
-        // This would draw:
-        // - Large time digits using clock_font
-        // - Blinking colon
-        // - Date string
-        // - Progress bar (if showing track progress)
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
+        use chrono::Local;
+
+        let current_time = Local::now();
+
+        // Get display dimensions from layout
+        let w = self.layout.width;
+        let h = self.layout.height;
+
+        // Format time into HH:MM string
+        let hours_str = format!("{:02}", current_time.format("%H"));
+        let minutes_str = format!("{:02}", current_time.format("%M"));
+
+        // Determine colon state for blinking
+        let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
+        let colon_on = current_second % 2 == 0;
+
+        let time_chars: [char; 5] = [
+            hours_str.chars().nth(0).unwrap_or('0'),
+            hours_str.chars().nth(1).unwrap_or('0'),
+            if colon_on { ':' } else { ' ' },
+            minutes_str.chars().nth(0).unwrap_or('0'),
+            minutes_str.chars().nth(1).unwrap_or('0'),
+        ];
+
+        let digit_width = self.clock_font.digit_width as i32;
+        let digit_height = self.clock_font.digit_height as i32;
+
+        // Constants for spacing (from original code)
+        const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
+        const CLOCK_COLON_MINUTE_GAP: i32 = 1;
+
+        // Calculate total width of clock digits
+        let mut total_clock_visual_width: i32 = (digit_width * 5) +
+                                             CLOCK_DIGIT_GAP_HORIZONTAL * 2 + // H-H and H-Colon gaps
+                                             CLOCK_COLON_MINUTE_GAP +          // Colon-M1 gap
+                                             CLOCK_DIGIT_GAP_HORIZONTAL;       // M1-M2 gap
+
+        if total_clock_visual_width > w as i32{
+            total_clock_visual_width = w as i32;
+        }
+                                             // Calculate Y position to center the clock vertically
+        // this should be coming from field definition
+        let clock_y_start = ((h as i32 - (digit_height+2)) / 2).max(0);
+
+        // Calculate X positions for horizontal centering
+        let clock_x_start: i32 = (w as i32 - total_clock_visual_width) / 2;
+
+        let x_positions: [i32; 5] = [
+            clock_x_start, // H1
+            clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL, // H2
+            clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2), // Colon
+            clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP, // M1
+            clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP, // M2
+        ];
+
+        // Draw each digit
+        for i in 0..5 {
+            let current_char = time_chars[i];
+            let x_offset = x_positions[i];
+            let y_offset = clock_y_start;
+
+            // Clear the digit area
+            EgRectangle::new(
+                Point::new(x_offset, y_offset),
+                Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
+            )
+            .into_styled(PrimitiveStyleBuilder::new()
+                .fill_color(BinaryColor::Off)
+                .build())
+            .draw(target)?;
+
+            // Draw the clock character using the font bitmap
+            self.draw_clock_char(target, current_char, x_offset, y_offset)?;
+        }
+
+        Ok(())
+    }
+
+    /// Draw a single clock character at the specified position
+    fn draw_clock_char<D>(&self, target: &mut D, c: char, x: i32, y: i32) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor>,
+    {
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::image::Image;
+
+        // Get the image for this character from the clock font
+        if let Some(image_raw) = self.clock_font.get_char_image_raw(c) {
+            // Draw the image at the specified position
+            Image::new(image_raw, Point::new(x, y))
+                .draw(target)?;
+        }
 
         Ok(())
     }

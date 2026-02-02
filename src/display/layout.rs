@@ -295,7 +295,7 @@ impl LayoutConfig {
                 digit_height: 44,
                 digit_spacing: 2,
                 date_font_size: FontSize::Small,
-                clock_y: 10,
+                clock_y: 2,
                 date_y: 55,
             },
             weather: WeatherLayout {

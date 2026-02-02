@@ -1,7 +1,16 @@
 [package]
 name = "LyMonS"
-version = "0.1.47"
+version = "0.2.3"
 edition = "2024"
+
+[workspace]
+members = [
+    ".",
+    "drivers/lymons-driver-ssd1306",
+    "drivers/lymons-driver-ssd1309",
+    "drivers/lymons-driver-sh1106",
+    "drivers/lymons-driver-ssd1322",
+]
 
 [build-dependencies]
 chrono = "0.4.41"
@@ -38,6 +47,9 @@ rand = "0.9.2"
 mac_address = "1.1.8"
 arrayvec = "0.7.6"  # For stack-allocated strings in hot paths
 
+# Plugin system for dynamic driver loading
+libloading = { version = "0.8", optional = true }
+
 # Display Emulator (optional for desktop testing)
 pixels = { version = "0.13", optional = true }
 winit = { version = "0.28", optional = true }
@@ -67,7 +79,8 @@ strip = "debuginfo"   # requires Rust 1.70+, automatically strips symbols
 #strip = "metadata"    # requires Rust 1.70+, automatically strips symbols
 
 [features]
-default = ["driver-ssd1306"]
+# Default: All drivers + plugin system (hybrid mode)
+default = ["all-drivers", "plugin-system"]
 
 # Individual driver features
 driver-ssd1306 = ["dep:ssd1306"]
@@ -77,6 +90,17 @@ driver-sh1106 = ["dep:sh1106"]
 
 # Convenience features
 all-drivers = ["driver-ssd1306", "driver-ssd1309", "driver-ssd1322", "driver-sh1106"]
+
+# Plugin system for dynamic driver loading
+plugin-system = ["dep:libloading"]
+
+# Plugin-only mode (minimal binary, requires plugins)
+plugin-only = ["plugin-system"]
+
+# Minimal embedded build (use with --no-default-features)
+embedded = ["driver-ssd1306"]
+embedded-ssd1322 = ["driver-ssd1322"]
+embedded-sh1106 = ["driver-sh1106"]
 
 # Display emulator for desktop testing
 emulator = ["dep:pixels", "dep:winit", "dep:winit_input_helper"]

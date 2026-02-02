@@ -26,6 +26,7 @@ pub mod traits;
 pub mod error;
 pub mod framebuffer;
 pub mod factory;
+pub mod color;
 
 // Display drivers (conditionally compiled based on features)
 #[cfg(any(
@@ -36,6 +37,10 @@ pub mod factory;
 ))]
 pub mod drivers;
 
+// Plugin system (conditionally compiled with plugin-system feature)
+#[cfg(feature = "plugin-system")]
+pub mod plugin;
+
 // Layout system for adaptive UI
 pub mod layout;
 
@@ -45,9 +50,21 @@ pub mod manager;
 // UI components
 pub mod components;
 
+// Field-based layout system
+pub mod field;
+pub mod page;
+pub mod layout_manager;
+
+// Display mode controller
+pub mod mode_controller;
+
 // Emulator window (only with emulator feature)
 #[cfg(feature = "emulator")]
 pub mod emulator_window;
+
+// Emulator display controller (only with emulator feature)
+#[cfg(feature = "emulator")]
+pub mod emulator_controller;
 
 // Re-exports for convenience
 pub use traits::{DisplayDriver, DrawableDisplay, DisplayCapabilities, ColorDepth};
@@ -56,6 +73,11 @@ pub use framebuffer::FrameBuffer;
 pub use factory::{DisplayDriverFactory, BoxedDriver};
 pub use layout::{LayoutConfig, LayoutCategory, AssetType, FontSize};
 pub use manager::DisplayManager;
+pub use field::{Field, FieldType, Alignment};
+pub use page::PageLayout;
+pub use layout_manager::LayoutManager;
+pub use color::{Color, ColorValue};
+pub use mode_controller::{DisplayModeController, ModeControllerConfig};
 
 /// Display mode enum - controls what content is shown on the display
 #[derive(Debug, PartialEq, Clone, Copy)]

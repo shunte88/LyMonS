@@ -137,10 +137,15 @@ impl EmulatorWindow {
         let window_width = width * self.config.scale;
         let window_height = height * self.config.scale;
 
+        // Use PhysicalSize to avoid Wayland DPI scaling issues
+        use winit::dpi::PhysicalSize;
         let window = WindowBuilder::new()
             .with_title(format!("LyMonS Emulator - {}", display_type))
-            .with_inner_size(LogicalSize::new(window_width, window_height))
+            .with_inner_size(PhysicalSize::new(window_width, window_height))
             .with_resizable(false)
+            .with_decorations(false)  // Disable decorations for Wayland compatibility
+            // Note: with_always_on_top not available in winit 0.28
+            // User can set always-on-top via window manager if needed
             .build(&event_loop)?;
 
         let window_size = window.inner_size();
@@ -245,10 +250,11 @@ impl EmulatorWindow {
                     state.inverted = !state.inverted;
                     println!("Inverted: {}", state.inverted);
                 }
-
-                // Request redraw
-                window.request_redraw();
             }
+
+            // Request redraw on every loop iteration (not just on input)
+            // This ensures the display updates continuously as frames are rendered
+            window.request_redraw();
         });
     }
 

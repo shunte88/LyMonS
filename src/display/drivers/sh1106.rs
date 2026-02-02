@@ -107,6 +107,14 @@ impl Sh1106Driver {
 }
 
 impl DisplayDriver for Sh1106Driver {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn capabilities(&self) -> &DisplayCapabilities {
         &self.capabilities
     }

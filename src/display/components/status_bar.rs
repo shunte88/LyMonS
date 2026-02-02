@@ -24,6 +24,7 @@
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
 use crate::display::layout::LayoutConfig;
+use crate::display::field::Field;
 use arrayvec::ArrayString;
 use core::fmt::Write;
 
@@ -123,12 +124,156 @@ impl StatusBar {
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        // TODO: Implement actual rendering
-        // This is a placeholder that would draw:
-        // - Volume indicator (muted if applicable)
-        // - Repeat mode icon
-        // - Shuffle mode icon
-        // - Bitrate text
+        use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
+        use embedded_graphics::text::Text;
+        use embedded_graphics::geometry::Point;
+
+        let text_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+
+        // Format status line: "V:43 24/48k R S"
+        let status_text = {
+            let mut s = String::new();
+
+            // Volume (V for volume, M for muted)
+            if self.state.is_muted {
+                s.push_str("V:M ");
+            } else {
+                use std::fmt::Write;
+                let _ = write!(&mut s, "V:{} ", self.state.volume_percent);
+            }
+
+            // Bitrate - handle DSD/DSF specially
+            if !self.state.samplesize.is_empty() && !self.state.samplerate.is_empty() {
+                use std::fmt::Write;
+
+                // Check for DSD/DSF (1-bit formats)
+                if self.state.samplesize.as_str() == "1" || self.state.samplesize.as_str().starts_with("DSD") {
+                    // Parse DSD rate: 2822400 -> DSD64, 5644800 -> DSD128, etc.
+                    if let Ok(rate) = self.state.samplerate.parse::<u32>() {
+                        let dsd_multiple = rate / 44100;  // Base DSD rate is 64x CD (44.1kHz)
+                        let _ = write!(&mut s, "DSD{} ", dsd_multiple);
+                    } else {
+                        let _ = write!(&mut s, "DSD ");
+                    }
+                } else {
+                    // Regular PCM: convert sample rate to kHz (e.g., 48000 -> 48kHz)
+                    let rate_str = if let Ok(rate) = self.state.samplerate.parse::<u32>() {
+                        if rate >= 1000 {
+                            format!("{}k", rate / 1000)
+                        } else {
+                            rate.to_string()
+                        }
+                    } else {
+                        self.state.samplerate.to_string()
+                    };
+                    let _ = write!(&mut s, "{}/{} ", self.state.samplesize, rate_str);
+                }
+            }
+
+            // Repeat mode (R for repeat)
+            match self.state.repeat_mode {
+                RepeatMode::Off => {},
+                RepeatMode::All => { s.push_str("R "); },
+                RepeatMode::One => { s.push_str("R1 "); },
+            }
+
+            // Shuffle mode (S for shuffle)
+            match self.state.shuffle_mode {
+                ShuffleMode::Off => {},
+                ShuffleMode::ByTracks => { s.push_str("S"); },
+                ShuffleMode::ByAlbums => { s.push_str("SA"); },
+            }
+
+            s
+        };
+
+        // Draw at top of screen (y=0)
+        Text::new(&status_text, Point::new(0, 8), text_style).draw(target)?;
+
+        Ok(())
+    }
+
+    /// Render to a specific field
+    pub fn render_field<D>(&self, field: &Field, target: &mut D) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor>,
+    {
+        use embedded_graphics::mono_font::MonoTextStyle;
+        use embedded_graphics::text::Text;
+        use embedded_graphics::geometry::Point;
+
+        // Only render if this is a status_bar field
+        if field.name != "status_bar" {
+            return Ok(());
+        }
+
+        // Use field's font and colors (convert to appropriate color depth)
+        let font = field.font.unwrap_or(&embedded_graphics::mono_font::ascii::FONT_6X10);
+        let text_style = MonoTextStyle::new(font, field.fg_binary());
+
+        // Format status line: "V:43 24/48k R S"
+        let status_text = {
+            let mut s = String::new();
+
+            // Volume (V for volume, M for muted)
+            if self.state.is_muted {
+                s.push_str("V:M ");
+            } else {
+                use std::fmt::Write;
+                let _ = write!(&mut s, "V:{} ", self.state.volume_percent);
+            }
+
+            // Bitrate - handle DSD/DSF specially
+            if !self.state.samplesize.is_empty() && !self.state.samplerate.is_empty() {
+                use std::fmt::Write;
+
+                // Check for DSD/DSF (1-bit formats)
+                if self.state.samplesize.as_str() == "1" || self.state.samplesize.as_str().starts_with("DSD") {
+                    // Parse DSD rate: 2822400 -> DSD64, 5644800 -> DSD128, etc.
+                    if let Ok(rate) = self.state.samplerate.parse::<u32>() {
+                        let dsd_multiple = rate / 44100;  // Base DSD rate is 64x CD (44.1kHz)
+                        let _ = write!(&mut s, "DSD{} ", dsd_multiple);
+                    } else {
+                        let _ = write!(&mut s, "DSD ");
+                    }
+                } else {
+                    // Regular PCM: convert sample rate to kHz (e.g., 48000 -> 48kHz)
+                    let rate_str = if let Ok(rate) = self.state.samplerate.parse::<u32>() {
+                        if rate >= 1000 {
+                            format!("{}k", rate / 1000)
+                        } else {
+                            rate.to_string()
+                        }
+                    } else {
+                        self.state.samplerate.to_string()
+                    };
+                    let _ = write!(&mut s, "{}/{} ", self.state.samplesize, rate_str);
+                }
+            }
+
+            // Repeat mode (R for repeat)
+            match self.state.repeat_mode {
+                RepeatMode::Off => {},
+                RepeatMode::All => { s.push_str("R "); },
+                RepeatMode::One => { s.push_str("R1 "); },
+            }
+
+            // Shuffle mode (S for shuffle)
+            match self.state.shuffle_mode {
+                ShuffleMode::Off => {},
+                ShuffleMode::ByTracks => { s.push_str("S"); },
+                ShuffleMode::ByAlbums => { s.push_str("SA"); },
+            }
+
+            s
+        };
+
+        // Get field position (baseline is at bottom of field)
+        let field_pos = field.position();
+        let baseline_y = field_pos.y + field.height() as i32;
+
+        // Draw text at field position
+        Text::new(&status_text, Point::new(field_pos.x, baseline_y), text_style).draw(target)?;
 
         Ok(())
     }

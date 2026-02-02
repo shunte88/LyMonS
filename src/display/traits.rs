@@ -66,7 +66,16 @@ pub struct DisplayCapabilities {
 /// This trait defines the core operations that every display driver must support,
 /// regardless of the specific hardware implementation. It focuses on the essential
 /// operations needed to initialize, configure, and update the display.
-pub trait DisplayDriver: Send {
+pub trait DisplayDriver: Send + Sync {
+    /// Downcast support for accessing concrete driver types
+    ///
+    /// This allows runtime type inspection and downcasting to concrete types.
+    /// Useful for extracting emulator state or other driver-specific features.
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Mutable downcast support
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+
     /// Returns the capabilities of this display
     fn capabilities(&self) -> &DisplayCapabilities;
 
