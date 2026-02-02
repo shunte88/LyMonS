@@ -1,10 +1,11 @@
 /*
  *  visualization.rs
- * 
+ *
  *  LyMonS - worth the squeeze
  *	(c) 2020-25 Stuart Hunter
  *
- *	TODO:
+ *  Visualization selection and asset path management
+ *  Updated to use the adaptive layout system
  *
  *	This program is free software: you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -20,6 +21,8 @@
  *	Public License.
  *
  */
+
+use crate::display::layout::LayoutConfig;
 
 /// Which visualization to produce.
 #[derive(Debug, Clone, Copy)]
@@ -52,7 +55,32 @@ pub fn transpose_kind(kind: &str) -> Visualization {
     }
 }
 
-pub fn get_visualizer_panel(kind: Visualization, wide:bool) -> String {
+/// Get visualizer panel path using layout configuration (preferred)
+///
+/// This function uses the layout system to select the appropriate
+/// asset path based on display resolution and capabilities.
+pub fn get_visualizer_panel_with_layout(kind: Visualization, layout: &LayoutConfig) -> String {
+    let folder = &layout.asset_path;
+    let panel = match kind {
+        Visualization::VuStereo => format!("{}vu2up.svg", folder),
+        Visualization::VuMono  => format!("{}vudownmix.svg", folder),
+        Visualization::VuStereoWithCenterPeak => format!("{}vucombi.svg", folder),
+        Visualization::AioVuMono => format!("{}vuaio.svg", folder),
+        Visualization::PeakStereo => format!("{}peak.svg", folder),
+        Visualization::PeakMono  => format!("{}peakmono.svg", folder),
+        Visualization::AioHistMono => format!("{}histaio.svg", folder),
+        Visualization::HistStereo |
+        Visualization::HistMono |
+        Visualization::NoVisualization => "".to_string(),
+    };
+    panel
+}
+
+/// Get visualizer panel path (legacy function for backwards compatibility)
+///
+/// This function maintains backwards compatibility with existing code.
+/// New code should use `get_visualizer_panel_with_layout` instead.
+pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
     let folder = if wide {"./assets/ssd1322/"}else{"./assets/ssd1309/"};
     let panel = match kind {
         Visualization::VuStereo => format!("{folder}vu2up.svg"),
@@ -62,7 +90,7 @@ pub fn get_visualizer_panel(kind: Visualization, wide:bool) -> String {
         Visualization::PeakStereo => format!("{folder}peak.svg"),
         Visualization::PeakMono  => format!("{folder}peakmono.svg"),
         Visualization::AioHistMono => format!("{folder}histaio.svg"),
-        Visualization::HistStereo | 
+        Visualization::HistStereo |
         Visualization::HistMono |
         Visualization::NoVisualization => "".to_string(),
     };

@@ -1,6 +1,6 @@
 [package]
 name = "LyMonS"
-version = "0.1.46"
+version = "0.1.47"
 edition = "2024"
 
 [build-dependencies]
@@ -8,7 +8,7 @@ chrono = "0.4.41"
 
 [dependencies]
 chrono = { version = "0.4.41", features = ["serde"] }
-clap = "4.5.39"
+clap = { version = "4.5.39", features = ["derive"] }
 display-interface = "0.5.0"
 embedded-graphics = "0.8.1"
 embedded-graphics-framebuf = "0.5.0"
@@ -21,9 +21,12 @@ log = "0.4.27"
 reqwest = { version = "0.12.23", features = ["json", "rustls-tls", "stream"] }
 serde = { version = "1.0.225", features = ["derive"] }
 serde_json = "1.0.145"
-ssd1306 = "0.10.0"
-ssd1309 = "0.4.0"
-ssd1322 = "0.3.0"
+serde_yaml = "0.9"
+dirs-next = "2.0"
+ssd1306 = { version = "0.10.0", optional = true }
+ssd1309 = { version = "0.4.0", optional = true }
+ssd1322 = { version = "0.3.0", optional = true }
+sh1106 = { version = "0.5.0", optional = true }
 thiserror = "2.0.12"
 anyhow = "1.0.98"
 translators = { version = "0.1.5", features = ["google", "tokio-async"] }
@@ -33,6 +36,12 @@ async-compression = { version = "0.4.25", features = ["gzip", "futures-io"] }
 flate2 = "1.1.2"
 rand = "0.9.2"
 mac_address = "1.1.8"
+arrayvec = "0.7.6"  # For stack-allocated strings in hot paths
+
+# Display Emulator (optional for desktop testing)
+pixels = { version = "0.13", optional = true }
+winit = { version = "0.28", optional = true }
+winit_input_helper = { version = "0.14", optional = true }
 
 # SVG Rendering (optimized features)
 tiny-skia = { version = "0.11.4", default-features = false, features = ["std"] } # Explicitly control tiny-skia features
@@ -42,7 +51,7 @@ usvg = { version = "0.45.1" }
 # Real hardware dependency (only compiled if `emulated-hardware` feature is OFF)
 rppal = { version = "0.14", optional = true }
 # Emulated hardware dependency (only compiled if `emulated-hardware` feature is ON)
-rpi-hal-emulated = { path = "../rpi-hal-emulated", optional = true }
+# rpi-hal-emulated = { path = "../rpi-hal-emulated", optional = true }  # Disabled - path not available
 libc = "0.2.174"
 rustfft = "6.4.0"
 local-ip-address = "0.6.5"
@@ -53,8 +62,24 @@ opt-level = "s"       # "z" we prioritize size over speed, "s" is balanced
 lto = true            # enable link-time optimization
 codegen-units = 1     # fewer parallel codegen units, better optimization
 panic = "abort"       # strip panic backtrace machinery
+#strip = "symbols"     # requires Rust 1.70+, automatically strips symbols
 strip = "debuginfo"   # requires Rust 1.70+, automatically strips symbols
+#strip = "metadata"    # requires Rust 1.70+, automatically strips symbols
 
 [features]
-default = ["rppal"]   # Default feature: use real hardware
-emulated-hardware = ["rpi-hal-emulated"] # Feature to enable emulation
+default = ["driver-ssd1306"]
+
+# Individual driver features
+driver-ssd1306 = ["dep:ssd1306"]
+driver-ssd1309 = ["dep:ssd1309"]
+driver-ssd1322 = ["dep:ssd1322"]
+driver-sh1106 = ["dep:sh1106"]
+
+# Convenience features
+all-drivers = ["driver-ssd1306", "driver-ssd1309", "driver-ssd1322", "driver-sh1106"]
+
+# Display emulator for desktop testing
+emulator = ["dep:pixels", "dep:winit", "dep:winit_input_helper"]
+
+# For development/migration - allows both old and new display systems to coexist
+new-display-system = []

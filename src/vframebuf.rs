@@ -28,6 +28,7 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::Rectangle;
 
 /// A runtime-sized framebuffer for embedded-graphics.
+#[derive(Debug, Clone)]
 pub struct VarFrameBuf<C: PixelColor> {
     buf: Vec<C>,
     w: usize,

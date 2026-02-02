@@ -2,7 +2,7 @@
  *  weather.rs
  * 
  *  LyMonS - worth the squeeze
- *	(c) 2020-25 Stuart Hunter
+ *	(c) 2020-26 Stuart Hunter
  *
  *	TODO:
  *
@@ -24,12 +24,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, Error as JsonError};
 use reqwest::{Client, header};
 use std::fmt::{self, Display};
-use std::time::{Duration, Instant}; // Added Instant for tracking last update
+use std::time::{Duration, Instant};
 use log::{info, error};
-use tokio::sync::{mpsc, Mutex as TokMutex};
+use tokio::sync::{mpsc, watch, Mutex as TokMutex};
 use tokio::task::JoinHandle;
 use std::sync::Arc;
-use chrono::{DateTime, Local}; // Import Duration for adding to DateTime
+use chrono::{DateTime, Local, FixedOffset, Utc};
 
 use flate2::read::GzDecoder;
 use std::io::Read;
@@ -38,7 +38,8 @@ use std::thread;
 use crate::geoloc::{fetch_location};
 use crate::translate::Translation;
 
-use embedded_graphics::prelude::*;
+//use embedded_graphics::prelude::*;
+use crate::sun;
 
 /// Represents the audio bitrate mode for displaying the correct glyph.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -59,6 +60,7 @@ pub enum WeatherCondition {
 pub struct WeatherDisplay{
     pub temp_units: String,
     pub wind_speed_units: String,
+    pub sun: sun::SunTimes,
     pub current: WeatherData,
     pub forecasts: Vec<WeatherData>,
     pub svg: String,
@@ -154,6 +156,8 @@ pub struct WeatherConditions {
     pub base_folder: String,
     pub temperature_units: String, // "C" or "F"
     pub windspeed_units: String, // "km/h" or "mph"
+    pub lat: f64,
+    pub lng: f64,
     pub current: WeatherData,
     pub forecast: Vec<WeatherData>,
     pub last_updated: DateTime<Local>,
@@ -171,19 +175,22 @@ pub struct Weather {
     translate: String,
     client: Client,
     icons: i32,
-    pub weather_data: WeatherConditions, // Public so OledDisplay can read it
+    pub weather_data: WeatherConditions,
+    weather_tx: Option<watch::Sender<WeatherConditions>>,
     stop_sender: Option<mpsc::Sender<()>>,
     poll_handle: Option<JoinHandle<()>>,
-    pub last_fetch_time: Option<Instant>, // To track when data was last fetched
+    pub last_fetch_time: Option<Instant>, // track last fetched
 }
 
 impl WeatherConditions {
-    pub fn new(location_name: String, units: String, base_folder: String) -> Self {
+    pub fn new(location_name: String, units: String, base_folder: String, lat: f64, lng: f64) -> Self {
         Self {
             location_name,
             base_folder,
             temperature_units: if units == "imperial" { "F" } else { "C" }.to_string(),
             windspeed_units: if units == "imperial" { "mph" } else { "km/h" }.to_string(),
+            lat,
+            lng,
             current: WeatherData::default(),
             forecast: vec![WeatherData::default(); 3],
             last_updated: Local::now(),
@@ -222,9 +229,11 @@ impl WeatherConditions {
             };
             fsvg.push(self.get_svg_path(wc).clone());
         }
+        let sun = sun::sun_times_today(self.lat, self.lng);
         WeatherDisplay {
             temp_units,
             wind_speed_units,
+            sun,
             current,
             forecasts,
             svg,
@@ -325,7 +334,8 @@ impl Weather {
             client,
             icons,
             //base_folder,
-            weather_data: WeatherConditions::new(location_name, conditions_units, base_folder),
+            weather_data: WeatherConditions::new(location_name, conditions_units, base_folder, final_lat, final_lng),
+            weather_tx: None,
             stop_sender: None,
             poll_handle: None,
             last_fetch_time: None,
@@ -544,11 +554,20 @@ impl Weather {
         info!("Weather data fetched successfully.");
         self.last_fetch_time = Some(Instant::now()); // Record fetch time
         self.active = true;
+
+        // Send update via watch channel if available (no lock!)
+        if let Some(tx) = &self.weather_tx {
+            let _ = tx.send(self.weather_data.clone());
+        }
+
         Ok(())
 
     }
 
-    /// Starts a background polling task to fetch weather data periodically.
+    /// Starts a background polling task to fetch weather data periodically (legacy API).
+    ///
+    /// This is the legacy Arc<Mutex<Weather>> version for backwards compatibility.
+    /// New code should use start_polling_with_watch() instead for lock-free updates.
     pub async fn start_polling(instance: Arc<TokMutex<Self>>) -> Result<(), WeatherApiError> {
         let (tx, rx) = mpsc::channel(1);
         {
@@ -559,16 +578,14 @@ impl Weather {
             locked_instance.stop_sender = Some(tx);
         }
 
-        // Clone `instance` here to move a copy into the spawned task,
-        // leaving the original `instance` available in `start_polling`'s scope.
         let instance_for_poll_task = Arc::clone(&instance);
 
         let poll_handle = tokio::spawn(async move {
             let mut rx = rx;
             loop {
                 tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(35 * 60)) => { // Poll every 35 minutes
-                        let mut locked_self = instance_for_poll_task.lock().await; // Use the cloned instance
+                    _ = tokio::time::sleep(Duration::from_secs(35 * 60)) => {
+                        let mut locked_self = instance_for_poll_task.lock().await;
                         match locked_self.fetch_weather_data().await {
                             Ok(_) => info!("Weather polling successful."),
                             Err(e) => error!("Weather polling failed: {}", e),
@@ -582,9 +599,45 @@ impl Weather {
             }
         });
 
-        // The original `instance` is still valid here.
         instance.lock().await.poll_handle = Some(poll_handle);
         Ok(())
+    }
+
+    /// Starts a background polling task with lock-free updates via watch channel (new API).
+    ///
+    /// This takes ownership of the Weather instance and returns a watch::Receiver
+    /// for lock-free access to weather updates. Preferred for new code.
+    pub async fn start_polling_with_watch(mut self) -> Result<(JoinHandle<()>, watch::Receiver<WeatherConditions>), WeatherApiError> {
+        if self.poll_handle.is_some() {
+            return Err(WeatherApiError::PollingError("Polling already running".to_string()));
+        }
+
+        // Create watch channel for weather updates (lock-free!)
+        let (weather_tx, weather_rx) = watch::channel(self.weather_data.clone());
+        self.weather_tx = Some(weather_tx);
+
+        // Create stop channel
+        let (stop_tx, mut stop_rx) = mpsc::channel(1);
+        self.stop_sender = Some(stop_tx);
+
+        let poll_handle = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(35 * 60)) => { // Poll every 35 minutes
+                        match self.fetch_weather_data().await {
+                            Ok(_) => info!("Weather polling successful."),
+                            Err(e) => error!("Weather polling failed: {}", e),
+                        }
+                    }
+                    _ = stop_rx.recv() => {
+                        info!("Weather polling thread received stop signal. Exiting.");
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok((poll_handle, weather_rx))
     }
 
 

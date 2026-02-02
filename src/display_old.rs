@@ -1,10 +1,11 @@
 /*
- *  display.rs
- * 
+ *  display_old.rs (formerly display.rs)
+ *
  *  LyMonS - worth the squeeze
  *	(c) 2020-25 Stuart Hunter
  *
- *	TODO:
+ *  This module contains the legacy display implementation using SSD1306.
+ *  It requires the driver-ssd1306 feature to be enabled.
  *
  *	This program is free software: you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -20,6 +21,9 @@
  *	Public License.
  *
  */
+
+// This legacy module requires SSD1306 driver
+#![cfg(feature = "driver-ssd1306")]
 
 #[allow(unused_imports)]
 #[allow(dead_code)]
@@ -68,7 +72,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 use display_interface::DisplayError;
 
 use crate::vframebuf::VarFrameBuf;
-use crate::pacer::{AutoPacer};
+//use crate::pacer::{AutoPacer};
 
 use crate::constants; // constants
 use crate::clock_font::{ClockFontData, set_clock_font}; // ClockFontData struct
@@ -443,18 +447,8 @@ fn map_shuffle_mode(mode: u8) -> ShuffleMode {
     }
 }
 
-/// NEW: Enum to define the current display mode (Scrolling text or Clock).
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[allow(dead_code)]
-pub enum DisplayMode {
-    #[allow(dead_code)]
-    Visualizer,      // WIP  - visualizations - meters, meters, meters
-    EasterEggs,      // Easter Eggs
-    Scrolling,       // Now Playing mode
-    Clock,           // Clock mode
-    WeatherCurrent,  // Current Weather mode
-    WeatherForecast, // Weather Forecast mode
-}
+// Use DisplayMode from parent display module
+pub use super::display::DisplayMode;
 
 #[allow(dead_code)]
 pub struct OledDisplay{
@@ -506,7 +500,7 @@ pub struct OledDisplay{
     level: u8,
     pct: f64,
     // flush pacer for visualization - should make Option<AutoPacer>
-    pacer: AutoPacer,
+    //pacer: AutoPacer,
     viz: Option<Visualizer>,
     easter_egg: Eggs,
     show_metrics: bool,
@@ -572,7 +566,7 @@ impl OledDisplay {
         display.flush().map_err(|e| DisplayDrawingError::DrawingFailed(e))?;
 
         // pacer depends on the display interface
-        let pacer = AutoPacer::new(/*initial I²C*/ 20, /*max*/ 30, /*min*/ 10);
+        //let pacer = AutoPacer::new(/*initial I²C*/ 20, /*max*/ 30, /*min*/ 10);
         //let pacer = AutoPacer::new(/*initial SPI*/ 60, /*max*/ 60, /*min*/ 20);
 
         info!("Display initialized successfully.");
@@ -637,7 +631,7 @@ impl OledDisplay {
             title: String::new(),
             level: 1,
             pct: 0.00,
-            pacer,
+            //pacer,
             viz: None,
             easter_egg: set_easter_egg(egg_name),
             show_metrics,

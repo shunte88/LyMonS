@@ -1,6 +1,6 @@
 /*
  *  main.rs
- * 
+ *
  *  LyMonS - worth the squeeze
  *	(c) 2020-25 Stuart Hunter
  *
@@ -21,12 +21,15 @@
  *
  */
 
+// Currently requires driver-ssd1306 until DisplayManager is implemented (Phase 5)
+#[cfg(not(feature = "driver-ssd1306"))]
+compile_error!("LyMonS currently requires the 'driver-ssd1306' feature. Use --features driver-ssd1306");
+
 #[allow(dead_code)]
 #[allow(unused_imports)]
 use std::{time::Duration};
 use log::{info, error};
 use env_logger::Env;
-//use clap::Parser;
 use clap::{Arg, ArgAction, Command};
 use chrono::{Timelike, Local};
 use local_ip_address::{local_ip};
@@ -36,11 +39,17 @@ use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
 
 // move these to mod.rs
 //mod singles;
+mod config;
 mod trig;
-mod pacer;
+//mod pacer;
 mod dbfs;
 mod draw;
 mod drawsvg;
+// Legacy display module (requires driver-ssd1306 feature)
+#[cfg(feature = "driver-ssd1306")]
+#[path = "display_old.rs"]
+mod display_old;
+// New modular display system
 mod display;
 mod mac_addr;
 mod metrics;
@@ -67,6 +76,7 @@ mod vuphysics;
 mod svgimage;
 mod shm_path;
 mod func_timer;
+mod sun;
 
 use sliminfo::LMSServer;
 use mac_addr::{get_mac_addr,get_mac_addr_for};
