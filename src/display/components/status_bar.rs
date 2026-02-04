@@ -27,6 +27,7 @@ use crate::display::layout::LayoutConfig;
 use crate::display::field::Field;
 use arrayvec::ArrayString;
 use core::fmt::Write;
+use crate::glyphs;
 
 /// Repeat mode for playback
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,6 +110,30 @@ impl StatusBar {
         }
     }
 
+    /// Helper to draw a monochrome glyph (8x8) on any color target
+    /// Converts BinaryColor pixels to target color type
+    fn draw_glyph<D, C>(&self, target: &mut D, glyph_data: &[u8; 8], x: i32, y: i32, color: C) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = C>,
+        C: PixelColor,
+    {
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::Pixel;
+
+        // Iterate over 8x8 glyph bitmap
+        for row in 0..8 {
+            let byte = glyph_data[row];
+            for col in 0..8 {
+                // Check if bit is set (MSB first)
+                if (byte & (1 << (7 - col))) != 0 {
+                    let pixel = Pixel(Point::new(x + col, y + row as i32), color);
+                    target.draw_iter(core::iter::once(pixel))?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Update status bar state
     pub fn update(&mut self, state: StatusBarState) {
         self.state = state;
@@ -124,7 +149,7 @@ impl StatusBar {
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
+        use embedded_graphics::mono_font::{iso_8859_13::FONT_6X10, MonoTextStyle};
         use embedded_graphics::text::Text;
         use embedded_graphics::geometry::Point;
 
@@ -193,12 +218,14 @@ impl StatusBar {
         Ok(())
     }
 
-    /// Render to a specific field
-    pub fn render_field<D>(&self, field: &Field, target: &mut D) -> Result<(), D::Error>
+    /// Render to a specific field with glyphs
+    pub fn render_field<D, C>(&self, field: &Field, target: &mut D) -> Result<(), D::Error>
     where
-        D: DrawTarget<Color = BinaryColor>,
+        D: DrawTarget<Color = C>,
+        C: PixelColor,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<C>,
     {
-        use embedded_graphics::mono_font::MonoTextStyle;
+        use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
         use embedded_graphics::text::Text;
         use embedded_graphics::geometry::Point;
 
@@ -207,73 +234,90 @@ impl StatusBar {
             return Ok(());
         }
 
-        // Use field's font and colors (convert to appropriate color depth)
-        let font = field.font.unwrap_or(&embedded_graphics::mono_font::ascii::FONT_6X10);
-        let text_style = MonoTextStyle::new(font, field.fg_binary());
+        use crate::display::color_proxy::ConvertColor;
+        let text_color = field.fg_color.to_color();
+        let text_style = MonoTextStyle::new(&FONT_5X8, text_color);
 
-        // Format status line: "V:43 24/48k R S"
-        let status_text = {
-            let mut s = String::new();
+        let field_pos = field.position();
+        let field_width = field.width() as i32;
+        let glyph_y = field_pos.y;  // Top of field for glyphs
+        let text_y = glyph_y + 7;   // Baseline for text (7 = glyph height - 1px)
 
-            // Volume (V for volume, M for muted)
-            if self.state.is_muted {
-                s.push_str("V:M ");
+        // LEFT: Volume glyph + text
+        let mut current_x = field_pos.x;
+
+        // Draw volume glyph
+        let vol_glyph = if self.state.is_muted || self.state.volume_percent == 0 {
+            &glyphs::GLYPH_VOLUME_OFF
+        } else {
+            &glyphs::GLYPH_VOLUME_ON
+        };
+        self.draw_glyph(target, vol_glyph, current_x, glyph_y, text_color)?;
+        current_x += 8; // Move past glyph
+
+        // Draw volume text
+        let vol_text = if self.state.is_muted || self.state.volume_percent == 0 {
+            current_x += 3;
+            "mute".to_string()
+        } else {
+            format!("{:>3}%", self.state.volume_percent)
+        };
+        Text::new(&vol_text, Point::new(current_x, text_y), text_style).draw(target)?;
+
+        // CENTER: Bitrate text (centered)
+        let bitrate_text = if !self.state.samplesize.is_empty() && !self.state.samplerate.is_empty() {
+            // Check for DSD/DSF (1-bit formats)
+            if self.state.samplesize.as_str() == "1" || self.state.samplesize.as_str().starts_with("DSD") {
+                if let Ok(rate) = self.state.samplerate.parse::<u32>() {
+                    let dsd_multiple = rate / 44100;
+                    format!("DSD{}", dsd_multiple)
+                } else {
+                    "DSD".to_string()
+                }
             } else {
-                use std::fmt::Write;
-                let _ = write!(&mut s, "V:{} ", self.state.volume_percent);
-            }
-
-            // Bitrate - handle DSD/DSF specially
-            if !self.state.samplesize.is_empty() && !self.state.samplerate.is_empty() {
-                use std::fmt::Write;
-
-                // Check for DSD/DSF (1-bit formats)
-                if self.state.samplesize.as_str() == "1" || self.state.samplesize.as_str().starts_with("DSD") {
-                    // Parse DSD rate: 2822400 -> DSD64, 5644800 -> DSD128, etc.
-                    if let Ok(rate) = self.state.samplerate.parse::<u32>() {
-                        let dsd_multiple = rate / 44100;  // Base DSD rate is 64x CD (44.1kHz)
-                        let _ = write!(&mut s, "DSD{} ", dsd_multiple);
+                // Regular PCM: convert sample rate to kHz
+                let rate_str = if let Ok(rate) = self.state.samplerate.parse::<u32>() {
+                    if rate >= 1000 {
+                        format!("{}k", rate / 1000)
                     } else {
-                        let _ = write!(&mut s, "DSD ");
+                        rate.to_string()
                     }
                 } else {
-                    // Regular PCM: convert sample rate to kHz (e.g., 48000 -> 48kHz)
-                    let rate_str = if let Ok(rate) = self.state.samplerate.parse::<u32>() {
-                        if rate >= 1000 {
-                            format!("{}k", rate / 1000)
-                        } else {
-                            rate.to_string()
-                        }
-                    } else {
-                        self.state.samplerate.to_string()
-                    };
-                    let _ = write!(&mut s, "{}/{} ", self.state.samplesize, rate_str);
-                }
+                    self.state.samplerate.to_string()
+                };
+                format!("{}/{}", self.state.samplesize, rate_str)
             }
-
-            // Repeat mode (R for repeat)
-            match self.state.repeat_mode {
-                RepeatMode::Off => {},
-                RepeatMode::All => { s.push_str("R "); },
-                RepeatMode::One => { s.push_str("R1 "); },
-            }
-
-            // Shuffle mode (S for shuffle)
-            match self.state.shuffle_mode {
-                ShuffleMode::Off => {},
-                ShuffleMode::ByTracks => { s.push_str("S"); },
-                ShuffleMode::ByAlbums => { s.push_str("SA"); },
-            }
-
-            s
+        } else {
+            String::new()
         };
 
-        // Get field position (baseline is at bottom of field)
-        let field_pos = field.position();
-        let baseline_y = field_pos.y + field.height() as i32;
+        if !bitrate_text.is_empty() {
+            let text_width = bitrate_text.len() * 5; // Approximate width for FONT_5X8
+            let center_x = field_pos.x + (field_width - text_width as i32) / 2;
+            Text::new(&bitrate_text, Point::new(center_x, text_y), text_style).draw(target)?;
+        }
 
-        // Draw text at field position
-        Text::new(&status_text, Point::new(field_pos.x, baseline_y), text_style).draw(target)?;
+        // RIGHT: Repeat + Shuffle glyphs (right-justified)
+        let glyph_width = 8;
+        let glyph_gap = 2;
+
+        // Shuffle glyph (rightmost)
+        let shuffle_glyph = match self.state.shuffle_mode {
+            ShuffleMode::ByTracks => &glyphs::GLYPH_SHUFFLE_TRACKS,
+            ShuffleMode::ByAlbums => &glyphs::GLYPH_SHUFFLE_ALBUMS,
+            ShuffleMode::Off => &glyphs::GLYPH_NONE,
+        };
+        let shuffle_x = field_pos.x + field_width - glyph_width;
+        self.draw_glyph(target, shuffle_glyph, shuffle_x, glyph_y, text_color)?;
+
+        // Repeat glyph (to the left of shuffle)
+        let repeat_glyph = match self.state.repeat_mode {
+            RepeatMode::One => &glyphs::GLYPH_REPEAT_ONE,
+            RepeatMode::All => &glyphs::GLYPH_REPEAT_ALL,
+            RepeatMode::Off => &glyphs::GLYPH_NONE,
+        };
+        let repeat_x = shuffle_x - glyph_width - glyph_gap;
+        self.draw_glyph(target, repeat_glyph, repeat_x, glyph_y, text_color)?;
 
         Ok(())
     }

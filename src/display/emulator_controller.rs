@@ -438,7 +438,7 @@ impl EmulatorDisplayController {
         let time_str = format!("{:02}:{:02}", now.time().hour(), now.time().minute());
 
         // Use embedded_graphics Text for now (clock font rendering is complex)
-        let style = MonoTextStyle::new(&embedded_graphics::mono_font::ascii::FONT_9X18_BOLD, BinaryColor::On);
+        let style = MonoTextStyle::new(&embedded_graphics::mono_font::iso_8859_13::FONT_9X18_BOLD, BinaryColor::On);
         Text::new(&time_str, Point::new(30, 35), style)
             .draw(&mut self.driver)?;
 

@@ -58,7 +58,7 @@ impl ScrollState {
     }
 
     fn update(&mut self, display_width: u32, scroll_mode: ScrollMode) {
-        use embedded_graphics::mono_font::ascii::FONT_6X10;
+        use embedded_graphics::mono_font::iso_8859_13::FONT_6X10;
         use embedded_graphics::mono_font::MonoTextStyle;
         use embedded_graphics::text::Text;
         use embedded_graphics::geometry::Point;
@@ -190,7 +190,7 @@ impl ScrollingText {
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
+        use embedded_graphics::mono_font::{iso_8859_13::FONT_6X10, MonoTextStyle};
         use embedded_graphics::text::Text;
         use embedded_graphics::geometry::Point;
 
@@ -237,9 +237,11 @@ impl ScrollingText {
     }
 
     /// Render to a specific field by name
-    pub fn render_field<D>(&self, field: &Field, target: &mut D) -> Result<(), D::Error>
+    pub fn render_field<D, C>(&self, field: &Field, target: &mut D) -> Result<(), D::Error>
     where
-        D: DrawTarget<Color = BinaryColor>,
+        D: DrawTarget<Color = C>,
+        C: PixelColor,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<C>,
     {
         use embedded_graphics::mono_font::MonoTextStyle;
         use embedded_graphics::text::Text;
@@ -259,8 +261,9 @@ impl ScrollingText {
         }
 
         // Use field's font and colors (convert to appropriate color depth)
-        let font = field.font.unwrap_or(&embedded_graphics::mono_font::ascii::FONT_6X10);
-        let text_style = MonoTextStyle::new(font, field.fg_binary());
+        let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
+        use crate::display::color_proxy::ConvertColor;
+        let text_style = MonoTextStyle::new(font, field.fg_color.to_color());
 
         // Get field position (baseline is at bottom of field)
         let field_pos = field.position();

@@ -116,15 +116,23 @@ async fn unified_display_loop(
 
     info!("LMS Server communication initialized");
 
+    // Setup weather if configured
+    if !weather_config.is_empty() {
+        info!("Setting up weather with config...");
+        let mut display_lock = display.lock().await;
+        display_lock.setup_weather(weather_config).await?;
+        drop(display_lock);
+        info!("Weather setup complete");
+    }
+
     // Setup visualizer if requested
-    // TODO: Fix visualizer receiver type mismatch
-    // if viz_type != "no_viz" {
-    //     let lms = lms_arc.lock().await;
-    //     let mut display_lock = display.lock().await;
-    //     display_lock.setup_visualizer(viz_type, lms.subscribe_playing()).await?;
-    //     drop(lms);
-    //     drop(display_lock);
-    // }
+    if viz_type != "no_viz" {
+        let lms = lms_arc.lock().await;
+        let mut display_lock = display.lock().await;
+        display_lock.setup_visualizer(viz_type, lms.subscribe_playing()).await?;
+        drop(lms);
+        drop(display_lock);
+    }
 
     info!("Setting up polling intervals and display mode");
 
@@ -164,11 +172,33 @@ async fn unified_display_loop(
 
         let mut lms_guard = lms_arc.lock().await;
 
-        // Determine and set display mode using controller
+        // Determine and set display mode
+        let mut mode = display_lock.display_mode();
         let is_playing = lms_guard.is_playing();
-        mode_controller.update_mode(is_playing);
-        let mode = mode_controller.current_mode();
+
+        // Check if manual mode override is active (keyboard locked)
+        let manual_override = display_lock.is_manual_mode_override();
+
+        if manual_override {
+            // Manual override active - check for mode requests but don't run controller
+            if let Some(requested_mode) = display_lock.check_emulator_mode_request() {
+                mode = requested_mode;
+                info!("Emulator mode locked: {:?}", mode);
+            }
+        } else {
+            // Automatic mode - run controller normally
+            mode_controller.update_mode(is_playing);
+            mode = mode_controller.current_mode();
+
+            // Check for emulator mode requests that enable manual override
+            if let Some(requested_mode) = display_lock.check_emulator_mode_request() {
+                mode = requested_mode;
+                info!("Emulator mode override: {:?} (manual lock enabled)", mode);
+            }
+        }
+
         display_lock.set_display_mode(mode);
+        display_lock.update_emulator_current_mode(mode);
 
         // Get mode name for logging
         let this_mode = match mode {
@@ -498,7 +528,7 @@ async fn emulator_render_loop(
             )?;
 
             let small_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
-            let tiny_style = MonoTextStyle::new(&embedded_graphics::mono_font::ascii::FONT_5X8, BinaryColor::On);
+            let tiny_style = MonoTextStyle::new(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8, BinaryColor::On);
 
             // Check if playing
             let is_playing = player_info.1 == "play" || player_info.1 == "pause";
@@ -677,7 +707,7 @@ async fn emulator_render_loop(
                 // === IDLE MODE - Show Clock ===
                 use chrono::Local;
                 let now = Local::now();
-                let bold_style = MonoTextStyle::new(&embedded_graphics::mono_font::ascii::FONT_9X18_BOLD, BinaryColor::On);
+                let bold_style = MonoTextStyle::new(&embedded_graphics::mono_font::iso_8859_13::FONT_9X18_BOLD, BinaryColor::On);
 
                 // Status bar (empty when stopped)
                 Text::new("\u{23F9}", Point::new(2, 7), tiny_style) // Stop glyph
@@ -757,7 +787,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .action(ArgAction::SetTrue)
         .short('r')
         .long("remain")
-        .help("Display Remaining Time rather than Totsl Time")
+        .help("Display Remaining Time rather than Total Time")
         .required(false))
         .arg(Arg::new("font")
         .short('F')
@@ -821,10 +851,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .help("I2C bus device path for OLED display (e.g., /dev/i2c-1)")
         .required(false))
         .arg(Arg::new("emulated")
-        .short('E')
         .long("emulated")
-        .help("Run in emulation mode (display window, no hardware)")
+        .help("[Internal] Emulation mode for development/testing")
         .action(ArgAction::SetTrue)
+        .hide(true)
         .required(false))
         .arg(Arg::new("viz")
         .short('a')
@@ -857,8 +887,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let show_metrics = matches.get_flag("metrics");
     let show_remaining = matches.get_flag("remain");
     let debug_enabled = matches.get_flag("debug");
-    let emulated = matches.get_flag("emulated");
+    let mut emulated = matches.get_flag("emulated");
     let _config_file = matches.get_one::<String>("config").unwrap();
+
+    // Also check config file for emulated setting
+    if !emulated {
+        if let Ok(config_content) = std::fs::read_to_string(_config_file) {
+            if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&config_content) {
+                if let Some(display) = config.get("display") {
+                    if let Some(emulated_setting) = display.get("emulated") {
+                        emulated = emulated_setting.as_bool().unwrap_or(false);
+                    }
+                }
+            }
+        }
+    }
     let scroll_mode = matches.get_one::<String>("scroll").unwrap();
     let weather_config = matches.get_one::<String>("weather").unwrap();
     let name_filter = matches.get_one::<String>("name").unwrap();
@@ -912,13 +955,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Creating emulator with DisplayManager (unified approach)");
 
         // Determine display specs from config (for emulation)
+        // TEMP: Testing VU meters on different displays
         let (width, height, is_grayscale, display_name) = match display_config.driver {
             Some(crate::config::DriverKind::Ssd1306) => (128, 64, false, "SSD1306"),
             Some(crate::config::DriverKind::Ssd1309) => (128, 64, false, "SSD1309"),
             Some(crate::config::DriverKind::Sh1106) => (132, 64, false, "SH1106"),
-            Some(crate::config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"),
+            Some(crate::config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"), // Grayscale (Gray4)
             Some(crate::config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
-            None => (128, 64, false, "SSD1306"),
+            None => (256, 64, true, "SSD1322"), // TEMP: Testing ssd1322 grayscale (Tests 3-4)
         };
 
         // Create EmulatorDriver (not the actual hardware driver!)
@@ -949,13 +993,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Emulator state extracted for window");
 
         // Create DisplayManager with the emulator driver
-        let display_manager = display::DisplayManager::new_with_driver(
+        let mut display_manager = display::DisplayManager::new_with_driver(
             emulator_driver,
             scroll_mode,
             clock_font,
             show_metrics,
             easter_egg,
         )?;
+
+        // Set emulator state for keyboard shortcuts
+        display_manager.set_emulator_state(emulator_state.clone());
 
         info!("DisplayManager created - using unified display loop");
 
@@ -1027,8 +1074,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let inet =  local_ip().unwrap();
     let mac_addr = get_mac_addr();
-    let eth0_mac_addr = get_mac_addr_for("eth0").unwrap();
-    let wlan0_mac_addr = get_mac_addr_for("wlan0").unwrap();
+    let eth0_mac_addr = get_mac_addr_for("eth0").unwrap_or_else(|_| "00:00:00:00:00:00".to_string());
+    let wlan0_mac_addr = get_mac_addr_for("wlan0").unwrap_or_else(|_| "00:00:00:00:00:00".to_string());
 
     display_manager.connections(
         inet.to_string().as_str(),

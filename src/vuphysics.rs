@@ -313,8 +313,8 @@ pub fn step_ms(sm: &mut NeedleMetrics, force: f32, x_min: f32, x_max: f32, milli
         sm.dispx   += sm.velocity * dt;
     }
 
-    // Overload pump (same threshold as C)
-    if sm.dispx > 0.7 { sm.over += 1; } else { sm.over = 0; }
+    // Overload pump - trigger at 0.3 VU
+    if sm.dispx > 0.3 { sm.over += 1; } else { sm.over = 0; }
 
     sm.dispx
 }

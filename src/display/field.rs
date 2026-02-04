@@ -61,6 +61,9 @@ pub struct Field {
     /// Bounding rectangle (x, y, width, height)
     pub bounds: Rectangle,
 
+    /// Border, >0 draw border of specified width
+    pub border: u8,
+
     /// Whether content should scroll if it exceeds bounds
     pub scrollable: bool,
 
@@ -88,6 +91,7 @@ impl Field {
             name: name.into(),
             field_type: FieldType::Text,
             bounds,
+            border: 0,
             scrollable: false,
             font: Some(font),
             fg_color: Color::White,
@@ -105,6 +109,7 @@ impl Field {
             name: name.into(),
             field_type: FieldType::Glyph,
             bounds,
+            border: 0,
             scrollable: false,
             font: None,
             fg_color: Color::White,
@@ -122,6 +127,7 @@ impl Field {
             name: name.into(),
             field_type: FieldType::Custom,
             bounds,
+            border: 0,
             scrollable: false,
             font: None,
             fg_color: Color::White,
@@ -133,6 +139,12 @@ impl Field {
     /// Builder: set scrollable
     pub fn scrollable(mut self, scrollable: bool) -> Self {
         self.scrollable = scrollable;
+        self
+    }
+
+    /// Builder: set border
+    pub fn border(mut self, border: u8) -> Self {
+        self.border = border;
         self
     }
 

@@ -294,4 +294,141 @@ impl SvgImageRenderer {
         Ok(())
     }
 
+    /// Renders the SVG to a mutable byte slice in Gray4 format (4-bit grayscale).
+    ///
+    /// The `buffer` must be large enough to hold `(target_width * target_height / 2)` bytes.
+    /// Each byte contains two 4-bit grayscale pixels (0-15), packed high nibble first.
+    /// The format is row-major.
+    pub fn render_to_buffer_gray4(&self, buffer: &mut [u8]) -> Result<(), SvgImageError> {
+        let buffer_len_needed = (self.target_height as usize * self.target_width as usize + 1) / 2;
+        if buffer.len() < buffer_len_needed {
+            error!(
+                "Buffer too small for Gray4. Needed: {} bytes, Got: {} bytes",
+                buffer_len_needed,
+                buffer.len()
+            );
+            return Err(SvgImageError::BufferTooSmall);
+        }
+
+        // Clear the buffer
+        buffer.fill(0);
+
+        // Create a Pixmap for rendering the SVG (RGBA format)
+        let mut pixmap = Pixmap::new(self.target_width, self.target_height)
+            .ok_or_else(|| SvgImageError::PixmapCreationError("Failed to create pixmap".to_string()))?;
+
+        // Scaling transform
+        let svg_size = self.tree.size();
+        let scale_x = self.target_width as f32 / svg_size.width();
+        let scale_y = self.target_height as f32 / svg_size.height();
+        let transform = Transform::from_scale(scale_x, scale_y);
+
+        // Render the SVG to the pixmap
+        render(&self.tree, transform, &mut pixmap.as_mut());
+
+        // Convert RGBA to 4-bit grayscale (0-15)
+        pixmap
+            .pixels()
+            .chunks(self.target_width as usize)
+            .take(self.target_height as usize)
+            .enumerate()
+            .for_each(|(y, row)| {
+                row.iter().enumerate().for_each(|(x, p)| {
+                    // Calculate luminance (0-255 range)
+                    let luminance = 0.299 * p.red() as f32 + 0.597 * p.green() as f32 + 0.114 * p.blue() as f32;
+
+                    // Apply alpha blending (assume black background)
+                    let alpha_factor = p.alpha() as f32 / 255.0;
+                    let final_luminance = (luminance * alpha_factor).clamp(0.0, 255.0);
+
+                    // Convert to 4-bit grayscale (0-15)
+                    let gray4_value = (final_luminance / 255.0 * 15.0).round() as u8;
+
+                    // Pack into buffer (2 pixels per byte, high nibble first)
+                    let pixel_idx = y * self.target_width as usize + x;
+                    let byte_idx = pixel_idx / 2;
+                    if pixel_idx % 2 == 0 {
+                        // High nibble (first pixel in byte)
+                        buffer[byte_idx] = (gray4_value << 4) | (buffer[byte_idx] & 0x0F);
+                    } else {
+                        // Low nibble (second pixel in byte)
+                        buffer[byte_idx] = (buffer[byte_idx] & 0xF0) | gray4_value;
+                    }
+                });
+            });
+
+        debug!("SVG rendered to Gray4 buffer successfully.");
+        Ok(())
+    }
+
+    /// Renders the SVG to a mutable byte slice in Gray4 format using simple binary thresholding.
+    ///
+    /// Uses pixel walk approach: RGB >= 128 = white (15), RGB < 128 = black (0).
+    /// The `buffer` must be large enough to hold `(target_width * target_height / 2)` bytes.
+    /// Each byte contains two 4-bit grayscale pixels, packed high nibble first.
+    /// The format is row-major.
+    pub fn render_to_buffer_gray4_binary(&self, buffer: &mut [u8]) -> Result<(), SvgImageError> {
+        let buffer_len_needed = (self.target_height as usize * self.target_width as usize + 1) / 2;
+        if buffer.len() < buffer_len_needed {
+            error!(
+                "Buffer too small for Gray4. Needed: {} bytes, Got: {} bytes",
+                buffer_len_needed,
+                buffer.len()
+            );
+            return Err(SvgImageError::BufferTooSmall);
+        }
+
+        // Clear the buffer
+        buffer.fill(0);
+
+        // Create a Pixmap for rendering the SVG (RGBA format)
+        let mut pixmap = Pixmap::new(self.target_width, self.target_height)
+            .ok_or_else(|| SvgImageError::PixmapCreationError("Failed to create pixmap".to_string()))?;
+
+        // Scaling transform
+        let svg_size = self.tree.size();
+        let scale_x = self.target_width as f32 / svg_size.width();
+        let scale_y = self.target_height as f32 / svg_size.height();
+        let transform = Transform::from_scale(scale_x, scale_y);
+
+        // Render the SVG to the pixmap
+        render(&self.tree, transform, &mut pixmap.as_mut());
+
+        let threshold = 128;
+
+        // Pixel walk with binary threshold
+        pixmap
+            .pixels()
+            .chunks(self.target_width as usize)
+            .take(self.target_height as usize)
+            .enumerate()
+            .for_each(|(y, row)| {
+                row.iter().enumerate().for_each(|(x, p)| {
+                    // Calculate luminance
+                    let luminance = 0.299 * p.red() as f32 + 0.597 * p.green() as f32 + 0.114 * p.blue() as f32;
+
+                    // Binary threshold: >= 128 = white (15), < 128 = black (0)
+                    let gray4_value = if luminance >= threshold as f32 && p.alpha() >= threshold {
+                        15u8  // White
+                    } else {
+                        0u8   // Black
+                    };
+
+                    // Pack into buffer (2 pixels per byte, high nibble first)
+                    let pixel_idx = y * self.target_width as usize + x;
+                    let byte_idx = pixel_idx / 2;
+                    if pixel_idx % 2 == 0 {
+                        // High nibble (first pixel in byte)
+                        buffer[byte_idx] = (gray4_value << 4) | (buffer[byte_idx] & 0x0F);
+                    } else {
+                        // Low nibble (second pixel in byte)
+                        buffer[byte_idx] = (buffer[byte_idx] & 0xF0) | gray4_value;
+                    }
+                });
+            });
+
+        debug!("SVG rendered to Gray4 buffer (binary threshold) successfully.");
+        Ok(())
+    }
+
 }

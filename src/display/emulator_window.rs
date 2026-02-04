@@ -161,6 +161,9 @@ impl EmulatorWindow {
         println!("  Keyboard Shortcuts:");
         println!("  ─────────────────────────────────────────────────");
         println!("    ESC / Q   - Quit");
+        println!("    W         - Lock to weather mode");
+        println!("    C         - Lock to clock mode");
+        println!("    A         - Return to automatic mode");
         println!("    G         - Toggle pixel grid");
         println!("    F         - Toggle FPS counter");
         println!("    H         - Toggle help overlay");
@@ -249,6 +252,47 @@ impl EmulatorWindow {
                     let mut state = self.state.lock().unwrap();
                     state.inverted = !state.inverted;
                     println!("Inverted: {}", state.inverted);
+                }
+
+                // Trigger weather mode (manual override)
+                // Toggle between WeatherCurrent and WeatherForecast if already in weather mode
+                if input.key_pressed(VirtualKeyCode::W) {
+                    let mut state = self.state.lock().unwrap();
+
+                    // Toggle based on what's currently showing
+                    let new_mode = match state.current_display_mode {
+                        crate::display::DisplayMode::WeatherCurrent => {
+                            println!("Switching to weather forecast");
+                            crate::display::DisplayMode::WeatherForecast
+                        }
+                        crate::display::DisplayMode::WeatherForecast => {
+                            println!("Switching to weather current");
+                            crate::display::DisplayMode::WeatherCurrent
+                        }
+                        _ => {
+                            println!("Weather current mode triggered (manual override active)");
+                            crate::display::DisplayMode::WeatherCurrent
+                        }
+                    };
+
+                    state.requested_mode = Some(new_mode);
+                    state.manual_mode_override = true;
+                }
+
+                // Trigger clock mode (manual override)
+                if input.key_pressed(VirtualKeyCode::C) {
+                    let mut state = self.state.lock().unwrap();
+                    state.requested_mode = Some(crate::display::DisplayMode::Clock);
+                    state.manual_mode_override = true;
+                    println!("Clock mode triggered (manual override active)");
+                }
+
+                // Return to automatic mode
+                if input.key_pressed(VirtualKeyCode::A) {
+                    let mut state = self.state.lock().unwrap();
+                    state.manual_mode_override = false;
+                    state.requested_mode = None;
+                    println!("Automatic mode switching re-enabled");
                 }
             }
 

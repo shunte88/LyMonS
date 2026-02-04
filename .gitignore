@@ -19,3 +19,4 @@ scratch.*
 # ignore migration documentation and workflow documents
 #PHASE*.md
 PLUGIN*.md
+tio.txt

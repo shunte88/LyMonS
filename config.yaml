@@ -1,0 +1,6 @@
+display:
+  driver: ssd1309
+  width: 128
+  height: 64
+  emulated: true
+  brightness: 200

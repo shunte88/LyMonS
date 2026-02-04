@@ -118,4 +118,9 @@ impl WeatherDisplay {
             None
         }
     }
+
+    /// Get weather data
+    pub fn weather_data(&self) -> &[WeatherData] {
+        &self.last_weather_data
+    }
 }

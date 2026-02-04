@@ -22,7 +22,8 @@
  */
 
 use embedded_graphics::prelude::*;
-use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+use crate::display::color_proxy::{ConvertColor};
 use crate::display::layout::LayoutConfig;
 use crate::visualizer::Visualizer;
 use crate::visualization::Visualization;
@@ -54,6 +55,7 @@ impl Default for VisualizerState {
 pub struct VisualizerComponent {
     visualizer: Option<Visualizer>,
     state: VisualizerState,
+    viz_state: crate::vision::LastVizState,
     layout: LayoutConfig,
     visualization_type: Visualization,
 }
@@ -61,9 +63,14 @@ pub struct VisualizerComponent {
 impl VisualizerComponent {
     /// Create a new visualizer component
     pub fn new(layout: LayoutConfig, visualization_type: Visualization) -> Self {
+        let mut viz_state = crate::vision::LastVizState::default();
+        // Set wide flag based on layout - critical for correct SVG loading
+        viz_state.wide = layout.visualizer.is_wide;
+
         Self {
             visualizer: None,
             state: VisualizerState::default(),
+            viz_state,
             layout,
             visualization_type,
         }
@@ -106,15 +113,44 @@ impl VisualizerComponent {
     }
 
     /// Render the visualizer
-    pub fn render<D>(&self, target: &mut D) -> Result<(), D::Error>
+    /// Render the visualizer (monochrome version)
+    pub fn render_mono<D>(&mut self, target: &mut D) -> Result<bool, D::Error>
     where
-        D: DrawTarget<Color = BinaryColor>,
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-        // TODO: Implement actual visualizer rendering
-        // This would draw VU meters, peak meters, histograms, etc.
-        // based on the visualization_type and current audio data
+        // Dispatch based on visualization type
+        match self.visualization_type {
+            Visualization::VuMono => {
+                let db = 0.0; // TODO: Get from viz_state
+                Ok(false) // TODO: Implement
+            }
+            Visualization::VuStereo => {
+                let l_db = 0.0; // TODO: Get from viz_state
+                let r_db = 0.0;
+                Ok(false) // TODO: Implement
+            }
+            _ => Ok(false) // Other types not yet implemented
+        }
+    }
 
-        Ok(())
+    /// Render the visualizer (grayscale version)
+    pub fn render_gray4<D>(&mut self, target: &mut D) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = Gray4> + OriginDimensions + 'static,
+    {
+        // Dispatch based on visualization type
+        match self.visualization_type {
+            Visualization::VuMono => {
+                let db = 0.0; // TODO: Get from viz_state
+                Ok(false) // TODO: Implement
+            }
+            Visualization::VuStereo => {
+                let l_db = 0.0; // TODO: Get from viz_state
+                let r_db = 0.0;
+                Ok(false) // TODO: Implement
+            }
+            _ => Ok(false) // Other types not yet implemented
+        }
     }
 
     /// Mark that initialization clear is needed
@@ -130,5 +166,15 @@ impl VisualizerComponent {
     /// Clear the init flag
     pub fn clear_init_flag(&mut self) {
         self.state.viz_init_clear = false;
+    }
+
+    /// Get mutable reference to visualization state
+    pub fn viz_state_mut(&mut self) -> &mut crate::vision::LastVizState {
+        &mut self.viz_state
+    }
+
+    /// Get reference to visualization state
+    pub fn viz_state(&self) -> &crate::vision::LastVizState {
+        &self.viz_state
     }
 }

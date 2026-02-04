@@ -100,14 +100,14 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
         "bass" => {
             Eggs::new(
                 EGGS_TYPE_BASS,
-                "./assets/bass.svg", 
+                "./assets/bass.svg",
                 Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(4,4), Size::new(120,6)), 
-                Rectangle::new(Point::new(4,12), Size::new(120,6)), 
-                48.0, 
-                88.0, 
+                Rectangle::new(Point::new(4,4), Size::new(120,6)),
+                Rectangle::new(Point::new(4,12), Size::new(120,6)),
+                48.0,
+                88.0,
                 false,
-                Rectangle::new(Point::new(64,26), Size::new(48,12)),
+                Rectangle::new(Point::new(48,26), Size::new(48,12)),
             )
         },
         "cassette" => {
@@ -206,12 +206,12 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
         "technics" => {
             Eggs::new(
                 EGGS_TYPE_TECHNICS,
-                "./assets/sl1200.svg", 
+                "./assets/sl1200.svg",
                 Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(85,3), Size::new(39,58)), 
+                Rectangle::new(Point::new(85,5), Size::new(39,56)),
                 Rectangle::new(Point::new(0,0), Size::new(0,0)),
-                -10.0, 
-                12.0, 
+                -10.0,
+                12.0,
                 true,
                 Rectangle::new(Point::new(85,52), Size::new(39,12)),
             )
@@ -232,14 +232,14 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
         "tvtime" => {
             Eggs::new(
                 EGGS_TYPE_TVTIME,
-                "./assets/tvtime2.svg", 
+                "./assets/tvtime2.svg",
                 Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(89,3), Size::new(35,58)), 
+                Rectangle::new(Point::new(85,3), Size::new(43,58)),
                 Rectangle::new(Point::new(0,0), Size::new(0,0)),
-                0.0, 
-                0.0, 
+                0.0,
+                0.0,
                 true,
-                Rectangle::new(Point::new(89,52), Size::new(35,12)),
+                Rectangle::new(Point::new(85,52), Size::new(43,12)),
             )
             },
         "vcr" => {
@@ -400,10 +400,22 @@ impl Eggs {
     }
 
     pub async fn update_and_render (
-        &mut self, 
-        artist: &str, 
-        title: &str, 
-        level: u8, 
+        &mut self,
+        artist: &str,
+        title: &str,
+        level: u8,
+        track_percent: f64,
+        track_time: f32,
+    ) -> Result<ImageRaw<BinaryColor>, EggsError> {
+        // Delegate to blocking version (no actual async ops here)
+        self.update_and_render_blocking(artist, title, level, track_percent, track_time)
+    }
+
+    pub fn update_and_render_blocking (
+        &mut self,
+        artist: &str,
+        title: &str,
+        level: u8,
         track_percent: f64,
         track_time: f32,
     ) -> Result<ImageRaw<BinaryColor>, EggsError> {
@@ -420,7 +432,7 @@ impl Eggs {
         }
         let raw_image = ImageRaw::<BinaryColor>::new(&self.buffer, width);
         Ok(raw_image)
-      
+
     }
 
     pub fn get_svg_data(&self) -> &str {

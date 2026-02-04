@@ -1,0 +1,40 @@
+#!/bin/bash
+# Test weather pages with emulator
+
+WEATHER_CONFIG="pm9iWRnHWowgH7cNOGeWmtgFYa6LLelk,F,,42.36141,-71.10408"
+PLAYER_NAME="TestPlayer"
+
+echo "═══════════════════════════════════════════════════════"
+echo "  LyMonS Weather Pages Test - Emulator"
+echo "═══════════════════════════════════════════════════════"
+echo ""
+echo "Configuration:"
+echo "  Player: $PLAYER_NAME"
+echo "  Weather: Boston, MA (42.36°N, 71.10°W)"
+echo "  Units: Fahrenheit"
+echo "  API: tomorrow.io"
+echo ""
+echo "Expected Behavior:"
+echo "  • Weather service will initialize and fetch data"
+echo "  • Background polling every 35 minutes"
+echo "  • Mode controller cycles through pages:"
+echo "    - Clock (when not playing)"
+echo "    - Weather Current (30 sec)"
+echo "    - Weather Forecast (30 sec)"
+echo "    - Weather displays every 20 minutes"
+echo ""
+echo "Keyboard Controls:"
+echo "  Q/ESC - Quit emulator"
+echo "  G - Toggle pixel grid"
+echo "  F - Toggle FPS counter"
+echo "  B - Cycle brightness"
+echo "  R - Cycle rotation"
+echo ""
+echo "═══════════════════════════════════════════════════════"
+echo ""
+echo "Starting emulator..."
+echo ""
+
+cargo run --features driver-ssd1306,emulator -- \
+    --name "$PLAYER_NAME" \
+    --weather "$WEATHER_CONFIG"

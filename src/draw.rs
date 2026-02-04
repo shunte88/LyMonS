@@ -212,16 +212,17 @@ where
 }
 
 #[allow(dead_code)]
-pub fn draw_circle<D>(
+pub fn draw_circle<D, C>(
     target: &mut D,
     origin: Point,
     diameter: u32,
-    color: BinaryColor,
+    color: C,
     stroke_width: u32,
-    fill_color: BinaryColor,
+    fill_color: C,
 ) -> Result<(), D::Error>
 where
-    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    D: DrawTarget<Color = C> + OriginDimensions,
+    C: PixelColor,
 {
     // Draw the circle
     Circle::new(origin, diameter / 2)
@@ -256,34 +257,30 @@ where
 }
 
 #[allow(dead_code)]
-pub fn draw_rectangle<D>(
+pub fn draw_rectangle<D, C>(
     target: &mut D,
     top_left: Point,
     w: u32,
     h: u32,
-    fill: BinaryColor,
+    fill: C,
     border_width: Option<u32>,
-    border_color: Option<BinaryColor>,
+    border_color: Option<C>,
 ) -> Result<(), D::Error>
 where
-    D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    D: DrawTarget<Color = C> + OriginDimensions,
+    C: PixelColor,
 {
+    let mut builder = PrimitiveStyleBuilder::new();
+    builder = builder.fill_color(fill);
+
+    if let (Some(color), Some(width)) = (border_color, border_width) {
+        if width > 0 {
+            builder = builder.stroke_color(color).stroke_width(width);
+        }
+    }
+
     Rectangle::new(top_left, Size::new(w, h))
-        .into_styled(
-            PrimitiveStyleBuilder::new()
-                .stroke_color(if border_color.is_some() {
-                    border_color.unwrap()
-                } else {
-                    BinaryColor::Off
-                })
-                .stroke_width(if border_width.is_some() {
-                    border_width.unwrap()
-                } else {
-                    0
-                })
-                .fill_color(fill)
-                .build(),
-        )
+        .into_styled(builder.build())
         .draw(target)?;
     Ok(())
 }

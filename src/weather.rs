@@ -192,7 +192,7 @@ impl WeatherConditions {
             lat,
             lng,
             current: WeatherData::default(),
-            forecast: vec![WeatherData::default(); 3],
+            forecast: vec![WeatherData::default(); 7],
             last_updated: Local::now(),
         }
     }
@@ -500,8 +500,8 @@ impl Weather {
             ("units", self.units.clone()),
             ("timesteps", "1h,1d".to_string()),
             ("startTime", "now".to_string()),
-            ("endTime", "nowPlus5d".to_string()),
-            ("dailyStartTime", "6".to_string()),
+            ("endTime", "nowPlus8d".to_string()),
+            ("dailyStartTime", "0".to_string()),
             ("apikey", self.api_key.clone()),
         ];
 
@@ -527,13 +527,13 @@ impl Weather {
                     }
                 }
             }
-            // 3-day daily forecast
+            // 7-day daily forecast
             let mut idx: usize = 0;
             let now_day = now.date_naive();
             if let Some(daily) = timelines.get("daily").and_then(|i| i.as_array()) {
-                for day in daily.iter().take(4) {
+                for day in daily.iter().take(8) {
                     //println!("{idx}");
-                    if idx > 2 { // safe!
+                    if idx > 6 { // safe! 7 days (0-6)
                         break;
                     }
                     let date_str = day["time"].as_str().unwrap();

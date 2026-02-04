@@ -1,12 +1,17 @@
 device: ssd1322
-
-player: devboard
-
+player: mythy
 visualization:
   vumeter
   histogram
 
 clock:
-  font: lcd17x44
+  font: roboto
+
+weather:
+  key:
+  units:
+  translate:
+  latitude:
+  longitude: 
 
 

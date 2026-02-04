@@ -182,9 +182,10 @@ async fn visualizer_worker(
         }
 
         let is_playing = *playing_rx.borrow();
-        
-        // if not ebabled or playing - nap then continue
-        if !enabled || !is_playing {
+
+        // if not enabled - nap then continue
+        // TEMP: bypass is_playing check to debug needle display
+        if !enabled {
             sleep(POLL_IDLE).await;
             continue;
         }

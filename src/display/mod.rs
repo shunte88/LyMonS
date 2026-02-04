@@ -27,6 +27,7 @@ pub mod error;
 pub mod framebuffer;
 pub mod factory;
 pub mod color;
+pub mod color_proxy;
 
 // Display drivers (conditionally compiled based on features)
 #[cfg(any(

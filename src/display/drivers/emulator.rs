@@ -90,6 +90,15 @@ pub struct EmulatorState {
 
     /// Display type name (for window title)
     pub display_type: String,
+
+    /// Requested display mode (for keyboard triggers)
+    pub requested_mode: Option<crate::display::DisplayMode>,
+
+    /// Manual mode override active (disables automatic mode switching)
+    pub manual_mode_override: bool,
+
+    /// Current display mode (what's actually showing)
+    pub current_display_mode: crate::display::DisplayMode,
 }
 
 /// Emulator display driver
@@ -160,6 +169,9 @@ impl EmulatorDriver {
             inverted: false,
             frame_count: 0,
             display_type: display_type.to_string(),
+            requested_mode: None,
+            manual_mode_override: false,
+            current_display_mode: crate::display::DisplayMode::Clock,
         }));
 
         Ok(Self {
@@ -194,6 +206,9 @@ impl EmulatorDriver {
             inverted: false,
             frame_count: 0,
             display_type: display_type.to_string(),
+            requested_mode: None,
+            manual_mode_override: false,
+            current_display_mode: crate::display::DisplayMode::Clock,
         }));
 
         Ok(Self {
@@ -249,6 +264,12 @@ impl EmulatorDriver {
         }
 
         state.frame_count += 1;
+    }
+
+    /// Check and consume requested display mode (for keyboard triggers)
+    pub fn take_requested_mode(&self) -> Option<crate::display::DisplayMode> {
+        let mut state = self.state.lock().unwrap();
+        state.requested_mode.take()
     }
 }
 
