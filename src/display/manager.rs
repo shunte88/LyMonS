@@ -1453,33 +1453,70 @@ impl DisplayManager {
                 "conditions" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_7X14), BinaryColor::On);
 
-                    // Calculate position based on alignment
-                    let text_x = match field.alignment {
-                        crate::display::Alignment::Left => pos.x,
-                        crate::display::Alignment::Center => {
-                            // Calculate text width and center it within field bounds
-                            let font = field.font.unwrap_or(&FONT_7X14);
-                            let text_width = (conditions_text.len() as i32) * (font.character_size.width as i32);
-                            let field_width = field.bounds.size.width as i32;
-                            pos.x + (field_width - text_width) / 2
-                        }
-                        crate::display::Alignment::Right => {
-                            let font = field.font.unwrap_or(&FONT_7X14);
-                            let text_width = (conditions_text.len() as i32) * (font.character_size.width as i32);
-                            let field_width = field.bounds.size.width as i32;
-                            pos.x + field_width - text_width
-                        }
-                    };
+                    // make this a method and DRY this entire script up
+                    // give it inline hints if thats a performance tack
+                    if field.use_styled {
 
-                    Text::with_baseline(conditions_text, Point::new(text_x, pos.y), style, Baseline::Top)
+                        use embedded_text::{
+                            style::TextBoxStyleBuilder,
+                            TextBox,
+                        };
+
+                        let textbox_style = 
+                            TextBoxStyleBuilder::new()
+                                .alignment(field.horizontal_alignment)
+                                .vertical_alignment(field.vertical_alignment)
+                                .build();
+
+                        TextBox::with_textbox_style(
+                            conditions_text,
+                            field.bounds,
+                            style,
+                            textbox_style,
+                        )
                         .draw(target)
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
+
+                    } else {
+
+                        // Calculate position based on alignment
+                        let text_x = match field.alignment {
+                            crate::display::Alignment::Left => pos.x,
+                            crate::display::Alignment::Center => {
+                                // Calculate text width and center it within field bounds
+                                let font = field.font.unwrap_or(&FONT_7X14);
+                                let text_width = (conditions_text.len() as i32) * (font.character_size.width as i32);
+                                let field_width = field.bounds.size.width as i32;
+                                pos.x + (field_width - text_width) / 2
+                            }
+                            crate::display::Alignment::Right => {
+                                let font = field.font.unwrap_or(&FONT_7X14);
+                                let text_width = (conditions_text.len() as i32) * (font.character_size.width as i32);
+                                let field_width = field.bounds.size.width as i32;
+                                pos.x + field_width - text_width
+                            }
+                        };
+
+                        Text::with_baseline(conditions_text, Point::new(text_x, pos.y), style, Baseline::Top)
+                            .draw(target)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
+                    }
+                }
+                "sunrise_glyph" => {
+                    use crate::weather_glyph::GLYPH_SUNRISE;
+                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, BinaryColor::On)
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
                 }
                 "sunrise" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), BinaryColor::On);
                     Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise".to_string()))?;
+                }
+                "sunset_glyph" => {
+                    use crate::weather_glyph::GLYPH_SUNSET;
+                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, BinaryColor::On)
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
                 }
                 "sunset" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), BinaryColor::On);
@@ -1526,8 +1563,23 @@ impl DisplayManager {
 
             match field.name.as_str() {
                 "weather_icon" => {
-                    // TODO: SVG rendering for Gray4 - need to convert BinaryColor to Gray4
-                    // Skip for now (mono SVG only)
+                    // Render SVG weather icon for Gray4
+                    if !svg_path.is_empty() && svg_path.contains(".svg") {
+                        let full_path = format!("./assets/mono/{}", svg_path);
+                        let icon_width = field.bounds.size.width;
+                        let icon_height = field.bounds.size.height;
+
+                        // Render SVG to Gray4 buffer
+                        let mut svg_buffer = Vec::new();
+                        if let Ok(_) = crate::drawsvg::get_svg_gray4_binary(&full_path, icon_width, icon_height, &mut svg_buffer) {
+                            // Draw the SVG buffer as ImageRaw
+                            use embedded_graphics::image::{Image, ImageRaw};
+                            let raw_image = ImageRaw::<Gray4>::new(&svg_buffer, icon_width);
+                            Image::new(&raw_image, Point::new(pos.x, pos.y))
+                                .draw(target)
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw weather icon".to_string()))?;
+                        }
+                    }
                 }
                 "temp_glyph" => {
                     Self::draw_weather_glyph(target, 0, pos.x, pos.y, Gray4::WHITE)
@@ -1594,11 +1646,21 @@ impl DisplayManager {
                         .draw(target)
                         .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
                 }
+                "sunrise_glyph" => {
+                    use crate::weather_glyph::GLYPH_SUNRISE;
+                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, Gray4::WHITE)
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
+                }
                 "sunrise" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), Gray4::WHITE);
                     Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise".to_string()))?;
+                }
+                "sunset_glyph" => {
+                    use crate::weather_glyph::GLYPH_SUNSET;
+                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, Gray4::WHITE)
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
                 }
                 "sunset" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), Gray4::WHITE);
@@ -1964,18 +2026,42 @@ impl DisplayManager {
         let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_4X6);
         let style = MonoTextStyle::new(font, BinaryColor::On);
 
-        let text_x = if field.alignment == crate::display::Alignment::Center {
-            let text_width = (text.len() as i32) * (font.character_size.width as i32);
-            let field_width = field.bounds.size.width as i32;
-            field.position().x + (field_width - text_width) / 2
-        } else {
-            field.position().x
-        };
+        if field.use_styled {
 
-        Text::with_baseline(text, Point::new(text_x, field.position().y), style, Baseline::Top)
+            use embedded_text::{
+                style::TextBoxStyleBuilder,
+                TextBox,
+            };
+
+            let textbox_style = 
+                TextBoxStyleBuilder::new()
+                    .alignment(field.horizontal_alignment)
+                    .vertical_alignment(field.vertical_alignment)
+                    .build();
+
+            TextBox::with_textbox_style(
+                text,
+                field.bounds,
+                style,
+                textbox_style,
+            )
             .draw(target)
-            .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))?;
+            .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
 
+        } else {
+
+            let text_x = if field.alignment == crate::display::Alignment::Center {
+                let text_width = (text.len() as i32) * (font.character_size.width as i32);
+                let field_width = field.bounds.size.width as i32;
+                field.position().x + (field_width - text_width) / 2
+            } else {
+                field.position().x
+            };
+
+            Text::with_baseline(text, Point::new(text_x, field.position().y), style, Baseline::Top)
+                .draw(target)
+                .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))?;
+        }
         Ok(())
     }
 
@@ -1999,17 +2085,41 @@ impl DisplayManager {
         let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_4X6);
         let style = MonoTextStyle::new(font, Gray4::WHITE);
 
-        let text_x = if field.alignment == crate::display::Alignment::Center {
-            let text_width = (text.len() as i32) * (font.character_size.width as i32);
-            let field_width = field.bounds.size.width as i32;
-            field.position().x + (field_width - text_width) / 2
-        } else {
-            field.position().x
-        };
+        if field.use_styled {
 
-        Text::with_baseline(text, Point::new(text_x, field.position().y), style, Baseline::Top)
+            use embedded_text::{
+                style::TextBoxStyleBuilder,
+                TextBox,
+            };
+
+            let textbox_style = 
+                TextBoxStyleBuilder::new()
+                    .alignment(field.horizontal_alignment)
+                    .vertical_alignment(field.vertical_alignment)
+                    .build();
+
+            TextBox::with_textbox_style(
+                text,
+                field.bounds,
+                style,
+                textbox_style,
+            )
             .draw(target)
-            .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))?;
+            .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
+
+        } else {
+            let text_x = if field.alignment == crate::display::Alignment::Center {
+                let text_width = (text.len() as i32) * (font.character_size.width as i32);
+                let field_width = field.bounds.size.width as i32;
+                field.position().x + (field_width - text_width) / 2
+            } else {
+                field.position().x
+            };
+
+            Text::with_baseline(text, Point::new(text_x, field.position().y), style, Baseline::Top)
+                .draw(target)
+                .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))?;
+        }
 
         Ok(())
     }

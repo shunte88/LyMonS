@@ -16,9 +16,41 @@
 ---
 
 **Location**: `/data2/refactor/LyMonS/REFACTORING_STATE.md`
-**Last Updated**: 2026-02-04 08:45 UTC
-**Current Phase**: Weather System Complete ✓ (Current + Forecast + Wide Display + Gray4 SVG) - SSD1309 Validated
-**Next Phase**: Moon Phase Integration, Wide Display Hardware Testing
+**Last Updated**: 2026-02-04 13:00 UTC
+**Current Phase**: Weather System Complete ✓ (Current + Forecast + Wide Display + Gray4 SVG + Sunrise/Sunset Glyphs)
+**Next Phase**: Fix Translation Issue (Priority), Moon Phase Glyph Integration
+
+## 🔴 FIRST TASK - Weather Translation Issue
+
+**Status**: API responds without error, but weather details are empty when translation enabled
+
+**What Works**:
+- ✓ Translation parameter parsing fixed: use `lang=pl` (not `translate=`)
+- ✓ Gzip decoding fixed: handles both compressed and plain text responses
+- ✓ No crashes or exceptions
+
+**What Doesn't Work**:
+- ❌ Weather details empty when using `lang=pl` parameter
+- Weather API responds successfully but display shows no data
+
+**To Investigate**:
+1. Check if translation API calls are succeeding/failing silently
+2. Verify JSON parsing still works after translation
+3. Check if empty translation results are blocking data display
+4. Add debug logging to translation flow to see where data is lost
+5. Test with `lang=en` to confirm issue is translation-specific
+
+**Test Command**:
+```bash
+./target/release/LyMonS --name mythy \
+  -W "API_KEY,units=F,lang=pl,lat=42.36141470379943,lng=-71.1040784239152" \
+  --config test_config.yaml
+```
+
+**Files to Check**:
+- `src/weather.rs` lines 1151-1160 (translation call in parse_weather_code)
+- `src/translate.rs` (Translation implementation)
+- Weather data parsing after translation attempt
 
 > **Note**: This file is maintained at the project root and persists across reboots.
 > It serves as the primary reference for project state and resumption context.
@@ -191,32 +223,80 @@ Fixed day header borders not rendering in forecast display:
 **Files Modified**:
 - `src/display/manager.rs` (lines 1925-1981) - Border support added
 
+### Sunrise/Sunset Glyphs ✓ (2026-02-04)
+
+Added sunrise and sunset glyphs to weather display:
+
+**Binary File Update**:
+- Updated from `thermo_12x48.bin` (4 glyphs) to `thermo_12x72.bin` (6 glyphs)
+- File size: 96 bytes → 144 bytes
+- Glyph indices: 4=sunset, 5=sunrise (user adjusted order)
+
+**Layout Changes**:
+- Added `sunrise_glyph` and `sunset_glyph` custom fields (12x12px) at x=133
+- **Glyphs only, no text labels** (per user preference)
+- Moon phase text remains at y=30
+- Conditions text field uses `width - 4` for proper centering on all display sizes
+- Forecast day headers moved down 1 pixel (y = icon_size + 3)
+
+**Implementation**:
+- `src/weather_glyph.rs` - Updated file reference, added GLYPH_SUNRISE/GLYPH_SUNSET constants
+- `src/display/layout_manager.rs` (lines 289-312) - Added glyph-only fields to wide display layout
+- `src/display/manager.rs` (lines 1478-1624) - Added glyph rendering for both mono and Gray4
+
+**Bug Fixes**:
+- Fixed Gray4 weather icon rendering (was TODO, now implemented using `get_svg_gray4_binary()`)
+- Current weather SVG now renders on both mono and Gray4 displays
+
 ### Weather Glyphs Inventory
 
-**Available** (`src/weather_glyph.rs`):
-- THERMO_RAW_DATA: 4 glyphs (12x12px)
+**Available** (`src/weather_glyph.rs`, loaded from `./data/thermo_12x72.bin`):
+- THERMO_RAW_DATA: 6 glyphs (12x12px each)
   - Index 0: Temperature (thermometer)
   - Index 1: Wind
   - Index 2: Humidity
   - Index 3: Precipitation
-- MOON_PHASE_RAW_DATA: 8 moon phase glyphs (30x30px)
+  - Index 4: Sunrise (new)
+  - Index 5: Sunset (new)
+- MOON_PHASE glyphs: 8 phases (30x30px, loaded from `./data/moonphase_30x30.bin`)
   - New, Waxing Crescent, First Quarter, Waxing Gibbous
   - Full, Waning Gibbous, Third Quarter, Waning Crescent
 
-**Not Available**:
-- Sunrise/Sunset glyphs (currently text-only display)
-- Could be added in future if needed
+**Loading Mechanism**:
+- Uses `include_bytes!()` to embed .bin files at compile time
+- `get_glyph_slice()` calculates offsets for each glyph
+- Zero runtime overhead, same as hardcoded arrays
+
+### Session Summary (2026-02-04)
+
+**Major Accomplishments**:
+- ✓ Glyph data moved from hardcoded arrays to .bin files (weather + moon phase)
+- ✓ Sunrise/sunset glyphs added (thermo_12x72.bin with 6 glyphs)
+- ✓ Wide display support implemented (sunrise/sunset/moon on right side)
+- ✓ Gray4 SVG rendering completed (binary threshold approach)
+- ✓ Weather icon SVG fixed for Gray4 displays
+- ✓ Forecast day headers adjusted (moved down 1px)
+- ✓ Conditions text centering fixed (width - 4)
+- ✓ Gzip decoding error handling improved
+
+**Bug Fixes**:
+- Fixed weather icon not rendering on Gray4/SSD1322 displays
+- Fixed crash on non-gzipped API responses (lines 449-466 in weather.rs)
+- Fixed conditions text field width for proper centering on all displays
+
+**Outstanding Issues**:
+- 🔴 Translation enabled but weather details empty (next session priority)
 
 ### Known Limitations & TODO
 
-1. **Moon Phase Glyphs** - Glyphs exist but not yet integrated
+1. **Translation Issue** - First priority for next session
+   - Weather data empty when `lang=pl` parameter used
+   - Need to debug translation flow
+
+2. **Moon Phase Glyphs** - Glyphs exist but not yet integrated
    - 8 phases available at 30x30px
    - Need to add rendering logic similar to weather glyphs
    - Could replace text "Moon: HH:MM" with visual moon phase
-
-2. **Sunrise/Sunset Visual** - Currently text-only
-   - No glyphs available in weather_glyph.rs
-   - Could create or add sunrise/sunset icons if desired
 
 3. **Wide Display Testing** - Need to test on actual SSD1322 (256x64)
    - Currently validated on emulator only

@@ -6,7 +6,9 @@ OLED information display control program for [piCorePlayer](https://www.picorepl
 <img width="800" src="assets/lymons.webp" align="center" />
 
 ### Features
+- Oled drivers loaded on demand - delete the ones you don't use and save space
 - SVG are utilized enabling support on many different OLED displays
+- Mono, Gray4, and Color supported - depending ondisplay you use
 - SVG are lightweight external files, embeded graphic are not stored in memory
 - Track details are displayed only when playing
 - Display features independant scrolling of track details as required.
@@ -24,6 +26,7 @@ OLED information display control program for [piCorePlayer](https://www.picorepl
 - Multiple visualization styles are supported
 - If monitoring from a separate device animations can be displayed as the track plays
 - Alternatively can also be displayed instead of a visualization as the track plays
+- Written in Rust - robust and memory safe
 
 ### Options
 ```bash
@@ -43,6 +46,7 @@ Supported OLED types:
     SSD1306
     SSD1309
     SSD1322
+    SHARP-memory
 
 OLED Clock Fonts:
     7seg ........: Classic LCD Clock Font
@@ -62,12 +66,14 @@ OLED Clock Fonts:
 Several visualizer modes are supported
 - Stereo VU Meters - dBfs metered
 - Stereo 12-band Spectrum Analysis
+- Stereo 20-band Spectrum Analysis for wide displays
 - Stereo Peak Meter - dBfs metered
 - Downmix (visual data only) Peak Meter
 - Large Downmix (visual data only) VU meter
 - Large Downmix (visual data only) Spectrum
-- All-In-One - track details and spectrum/VU "swoosh" (use -a1 or simply -a)
-- All-In-One - fixed mode (use -a2 or simply -a -a)
+- All-In-One - track details and spectrum/VU "swoosh" - other keywords to come
+- All-In-One - fixed mode  - other keywords to come
+- Wave Forms - wigly waves - coming soon
 - Easter Eggs - fixed mode (use --egg <<name>>)
 
 ### Installation
@@ -101,20 +107,14 @@ There are currently 7 easter egg modes:
 - <b>[vcr]</b> VCR with flashing 12:00 AM clock! No additional animation - the clock is annoying enough.
 - <b>[radio40]</b> An large ornate radio. Minor animation, radio changes station as track progresses.
 - <b>[radio50]</b> An old bakelite radio. Minor animation, radio changes station as track progresses.
-- <b>[tvtime]</b> An old analog TV in all its 5x4 glory... VHF or UHF... no it's worms?!?
+- <b>[tvtime]</b> An old analog TV in all its 5x4 glory... VHF or UHF... no it's currently blank
 - <b>[pctime]</b> A crusty old IBM PS/2 clone... simple animation just for fun
+- <b>[bass]</b> A rubbish bass guitar - and why not...
 
 Specify --egg <name> to display eggs on track playback
 </p>
 These are just a fun display mode where visualization is not possible.
 
-### Coming soon
-
-- TODO! Audio visualizer support: stereo VU meters
-- TODO! Audio visualizer support: histogram spectrum
-- TODO! Audio visualizer support: horizontal Peak RMS
-- TODO! Downmix PK Meter - scratch draw and animation
-- TODO! SSD1322 256x64 OLED support - WIP
 
 ## Like The App - Git The Shirt
 

@@ -1,2 +1,2 @@
 clear
-./target/release/LyMonS --name mythy -W "pm9iWRnHWowgH7cNOGeWmtgFYa6LLelk,F,,42.36141470379943,-71.1040784239152" --config test_config.yaml  
+./target/release/LyMonS --name mythy -W "pm9iWRnHWowgH7cNOGeWmtgFYa6LLelk,units=imperial,lang=PL,lat=42.36141470379943,lng=-71.1040784239152" --config test_config.yaml  

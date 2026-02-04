@@ -450,9 +450,19 @@ impl Weather {
                 .query(params).send().await {
                 Ok(response) => {
                     let raw = response.bytes().await?;
-                    let mut plain = String::new();
-                    let mut decoder = GzDecoder::new(&raw[..]);
-                    decoder.read_to_string(&mut plain).unwrap();
+
+                    // Try to decode as gzip first, fall back to plain text if it fails
+                    let plain = {
+                        let mut decoder = GzDecoder::new(&raw[..]);
+                        let mut decoded = String::new();
+                        match decoder.read_to_string(&mut decoded) {
+                            Ok(_) => decoded,
+                            Err(_) => {
+                                // Not gzipped, treat as plain text
+                                String::from_utf8_lossy(&raw).to_string()
+                            }
+                        }
+                    };
                     return Ok(plain);
                 }
                 Err(e) => {

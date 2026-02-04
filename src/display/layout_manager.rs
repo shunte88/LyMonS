@@ -32,6 +32,7 @@ use embedded_graphics::mono_font::iso_8859_13::{
     FONT_6X10, FONT_6X13_BOLD,
     FONT_7X14
 };
+use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
 
 /// Layout manager - creates and owns all page definitions
 pub struct LayoutManager {
@@ -280,38 +281,43 @@ impl LayoutManager {
                     "conditions",
                     Rectangle::new(
                         Point::new(2, height as i32 - 16),
-                        Size::new(if is_wide { 128 - 4 } else { width - 4 }, 14)),
+                        Size::new(width - 4, 14)),
                     &FONT_7X14
                 )
-                .align(Alignment::Center)
+                .align(Alignment::Center) // once styled alignment in play remove this
+                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
             );
 
         // Wide display additions (width > 128): Sunrise/Sunset/Moon on the right
+        // we're going to want Moonrise, Moonset, and Moonphase
         if is_wide {
+            let glyph_x_right = 133;
+
             page = page
+                // Sunrise glyph only
                 .add_field(
-                    Field::new_text(
-                        "sunrise",
+                    Field::new_custom(
+                        "sunrise_glyph",
                         Rectangle::new(
-                            Point::new(135, 2),
-                            Size::new(120, 10)),
-                        &FONT_5X8
+                            Point::new(glyph_x_right, 2),
+                            Size::new(12, 12))
                     )
                 )
+                // Sunset glyph only
                 .add_field(
-                    Field::new_text(
-                        "sunset",
+                    Field::new_custom(
+                        "sunset_glyph",
                         Rectangle::new(
-                            Point::new(135, 14),
-                            Size::new(120, 10)),
-                        &FONT_5X8
+                            Point::new(glyph_x_right, 16),
+                            Size::new(12, 12))
                     )
                 )
+                // Moon phase text (could add glyph in future)
                 .add_field(
                     Field::new_text(
                         "moon_phase",
                         Rectangle::new(
-                            Point::new(135, 26),
+                            Point::new(135, 30),
                             Size::new(120, 10)),
                         &FONT_5X8
                     )
@@ -329,6 +335,8 @@ impl LayoutManager {
         let is_wide = width > 128;
 
         // Original: icon_w = height/2 + 2 = 34, icon size = icon_w - 4 = 30
+        let header_y = 2;
+        let header_height = 10;
         let icon_w = height / 2 + 2;
         let icon_size = icon_w - 4;  // 30 for 128x64
         let spacing = icon_w + 6;     // 40 pixels - column width
@@ -352,165 +360,64 @@ impl LayoutManager {
 
         let mut page = PageLayout::new("weather_forecast")
             // Day 1 column (x=4, width=40)
-            .add_field(
-                Field::new_glyph(
-                    "day1_icon",
-                    Rectangle::new(Point::new(icon_x1, 1), Size::new(icon_size, icon_size))
-                )
-            )
-            .add_field(
-                Field::new_text(
-                    "day1_name",  // "Mon", "Tue", etc
-                    Rectangle::new(
-                        Point::new(col_x1, icon_size as i32 + 2),
-                        Size::new(spacing, 10)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-                .border(1)
-            )
-            .add_field(
-                Field::new_custom(
-                    "day1_data_box",  // Bordered box for temp+precip
-                    Rectangle::new(
-                        Point::new(col_x1, icon_size as i32 + 12),
-                        Size::new(spacing, 22))
-                )
-                .border(1)
-            )
-            .add_field(
-                Field::new_text(
-                    "day1_temp",  // "45°F|62°F" format - 3px down from box top, inset by 1px for border
-                    Rectangle::new(
-                        Point::new(col_x1 + 1, icon_size as i32 + 15),
-                        Size::new(spacing - 2, 7)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-            )
-            .add_field(
-                Field::new_text(
-                    "day1_precip",  // "20%" format - below temp, inset by 1px for border
-                    Rectangle::new(
-                        Point::new(col_x1 + 1, icon_size as i32 + 22),
-                        Size::new(spacing - 2, 10)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-            )
+            .add_field(Field::new_glyph("day1_icon",Rectangle::new(Point::new(icon_x1, 1), Size::new(icon_size, icon_size))))
+            // day name. Mon, Tue... etc
+            .add_field(Field::new_text("day1_name",Rectangle::new(Point::new(col_x1, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
+                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .border(1))
+            // Bordered box for temp+precip
+            .add_field(Field::new_custom("day1_data_box", Rectangle::new(Point::new(col_x1, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
+            // "45°F|62°F" format - 3px down from box top, inset by 1px for border
+            .add_field(Field::new_text("day1_temp",Rectangle::new(Point::new(col_x1 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).align(Alignment::Center))
+            // "20%" format - below temp, inset by 1px for border
+            .add_field(Field::new_text("day1_precip",Rectangle::new(Point::new(col_x1 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).align(Alignment::Center))
             // Day 2 column (x=44, width=40)
-            .add_field(
-                Field::new_glyph(
-                    "day2_icon",
-                    Rectangle::new(Point::new(icon_x2, 1), Size::new(icon_size, icon_size))
-                )
-            )
-            .add_field(
-                Field::new_text(
-                    "day2_name",
-                    Rectangle::new(
-                        Point::new(col_x2, icon_size as i32 + 2),
-                        Size::new(spacing, 10)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-                .border(1)
-            )
-            .add_field(
-                Field::new_custom(
-                    "day2_data_box",  // Bordered box for temp+precip
-                    Rectangle::new(
-                        Point::new(col_x2, icon_size as i32 + 12),
-                        Size::new(spacing, 22))
-                )
-                .border(1)
-            )
-            .add_field(
-                Field::new_text(
-                    "day2_temp",  // "45°F|62°F" format
-                    Rectangle::new(
-                        Point::new(col_x2 + 1, icon_size as i32 + 15),
-                        Size::new(spacing - 2, 7)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-            )
-            .add_field(
-                Field::new_text(
-                    "day2_precip",  // "20%" format
-                    Rectangle::new(
-                        Point::new(col_x2 + 1, icon_size as i32 + 22),
-                        Size::new(spacing - 2, 10)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-            )
+            .add_field(Field::new_glyph("day2_icon",Rectangle::new(Point::new(icon_x2, 1), Size::new(icon_size, icon_size))))
+            .add_field(Field::new_text("day2_name",Rectangle::new(Point::new(col_x2, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
+                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .border(1))
+            // Bordered box for temp+precip
+            .add_field(Field::new_custom("day2_data_box",Rectangle::new(Point::new(col_x2, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
+            // "45°F|62°F" format
+            .add_field(Field::new_text("day2_temp", Rectangle::new(Point::new(col_x2 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).align(Alignment::Center))
+            // "20%" format
+            .add_field(Field::new_text("day2_precip",Rectangle::new(Point::new(col_x2 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).align(Alignment::Center))
             // Day 3 column (x=84, width=40)
-            .add_field(
-                Field::new_glyph(
-                    "day3_icon",
-                    Rectangle::new(Point::new(icon_x3, 1), Size::new(icon_size, icon_size))
-                )
-            )
-            .add_field(
-                Field::new_text(
-                    "day3_name",
-                    Rectangle::new(
-                        Point::new(col_x3, icon_size as i32 + 2),
-                        Size::new(spacing, 10)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-                .border(1)
-            )
-            .add_field(
-                Field::new_custom(
-                    "day3_data_box",  // Bordered box for temp+precip
-                    Rectangle::new(
-                        Point::new(col_x3, icon_size as i32 + 12),
-                        Size::new(spacing, 22))
-                )
-                .border(1)
-            )
-            .add_field(
-                Field::new_text(
-                    "day3_temp",  // "45°F|62°F" format
-                    Rectangle::new(
-                        Point::new(col_x3 + 1, icon_size as i32 + 15),
-                        Size::new(spacing - 2, 7)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-            )
-            .add_field(
-                Field::new_text(
-                    "day3_precip",  // "20%" format
-                    Rectangle::new(
-                        Point::new(col_x3 + 1, icon_size as i32 + 22),
-                        Size::new(spacing - 2, 10)),
-                    &FONT_4X6
-                )
-                .align(Alignment::Center)
-            );
+            .add_field(Field::new_glyph("day3_icon",Rectangle::new(Point::new(icon_x3, 1), Size::new(icon_size, icon_size))))
+            .add_field(Field::new_text("day3_name",Rectangle::new(Point::new(col_x3, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
+                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .border(1))
+            // Bordered box for temp+precip
+            .add_field(Field::new_custom("day3_data_box",Rectangle::new(Point::new(col_x3, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
+            // "45°F|62°F" format
+            .add_field(Field::new_text("day3_temp", Rectangle::new(Point::new(col_x3 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).align(Alignment::Center))
+            // "20%" format
+            .add_field(Field::new_text("day3_precip", Rectangle::new(Point::new(col_x3 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).align(Alignment::Center));
 
         // Wide display additions (width > 128): Days 4-6
         if is_wide {
             page = page
                 // Day 4 column
                 .add_field(Field::new_glyph("day4_icon", Rectangle::new(Point::new(icon_x4, 1), Size::new(icon_size, icon_size))))
-                .add_field(Field::new_text("day4_name", Rectangle::new(Point::new(col_x4, icon_size as i32 + 2), Size::new(spacing, 10)), &FONT_4X6).align(Alignment::Center).border(1))
+                .add_field(Field::new_text("day4_name", Rectangle::new(Point::new(col_x4, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
+                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .border(1))
                 .add_field(Field::new_custom("day4_data_box", Rectangle::new(Point::new(col_x4, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
                 .add_field(Field::new_text("day4_temp", Rectangle::new(Point::new(col_x4 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).align(Alignment::Center))
                 .add_field(Field::new_text("day4_precip", Rectangle::new(Point::new(col_x4 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).align(Alignment::Center))
                 // Day 5 column
                 .add_field(Field::new_glyph("day5_icon", Rectangle::new(Point::new(icon_x5, 1), Size::new(icon_size, icon_size))))
-                .add_field(Field::new_text("day5_name", Rectangle::new(Point::new(col_x5, icon_size as i32 + 2), Size::new(spacing, 10)), &FONT_4X6).align(Alignment::Center).border(1))
+                .add_field(Field::new_text("day5_name", Rectangle::new(Point::new(col_x5, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
+                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .border(1))
                 .add_field(Field::new_custom("day5_data_box", Rectangle::new(Point::new(col_x5, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
                 .add_field(Field::new_text("day5_temp", Rectangle::new(Point::new(col_x5 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).align(Alignment::Center))
                 .add_field(Field::new_text("day5_precip", Rectangle::new(Point::new(col_x5 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).align(Alignment::Center))
                 // Day 6 column
                 .add_field(Field::new_glyph("day6_icon", Rectangle::new(Point::new(icon_x6, 1), Size::new(icon_size, icon_size))))
-                .add_field(Field::new_text("day6_name", Rectangle::new(Point::new(col_x6, icon_size as i32 + 2), Size::new(spacing, 10)), &FONT_4X6).align(Alignment::Center).border(1))
+                .add_field(Field::new_text("day6_name", Rectangle::new(Point::new(col_x6, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
+                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .border(1))
                 .add_field(Field::new_custom("day6_data_box", Rectangle::new(Point::new(col_x6, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
                 .add_field(Field::new_text("day6_temp", Rectangle::new(Point::new(col_x6 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).align(Alignment::Center))
                 .add_field(Field::new_text("day6_precip", Rectangle::new(Point::new(col_x6 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).align(Alignment::Center));
