@@ -1,6 +1,0 @@
-display:
-  driver: ssd1322
-  width: 256
-  height: 64
-  emulated: true
-  brightness: 200
