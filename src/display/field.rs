@@ -28,14 +28,6 @@ use embedded_graphics::mono_font::MonoFont;
 use embedded_text::{alignment::{HorizontalAlignment, VerticalAlignment}};
 use super::color::Color;
 
-/// Alignment type determines rendering behavior
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Alignment {
-    Left,
-    Center,
-    Right,
-}
-
 /// Field type determines rendering behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldType {
@@ -77,11 +69,7 @@ pub struct Field {
     /// Background color (None for transparent, adapts to display color depth)
     pub bg_color: Option<Color>,
 
-    /// Text simple alignment/justification within field
-    pub alignment: Alignment, // legacy alignment migrate to use the following for text style builder
-
-    /// Text specific alignment/justification within field
-    pub use_styled: bool,
+    /// Text alignment/justification within field
     pub horizontal_alignment: HorizontalAlignment,
     pub vertical_alignment: VerticalAlignment,
 }
@@ -102,8 +90,6 @@ impl Field {
             font: Some(font),
             fg_color: Color::White,
             bg_color: None,
-            alignment: Alignment::Left,
-            use_styled: false,
             horizontal_alignment: HorizontalAlignment::Left,
             vertical_alignment: VerticalAlignment::Top,
         }
@@ -123,8 +109,6 @@ impl Field {
             font: None,
             fg_color: Color::White,
             bg_color: None,
-            alignment: Alignment::Left,
-            use_styled: false,
             horizontal_alignment: HorizontalAlignment::Justified,
             vertical_alignment: VerticalAlignment::Top,
         }
@@ -144,8 +128,6 @@ impl Field {
             font: None,
             fg_color: Color::White,
             bg_color: None,
-            alignment: Alignment::Left,
-            use_styled: false,
             horizontal_alignment: HorizontalAlignment::Justified,
             vertical_alignment: VerticalAlignment::Top,
         }
@@ -163,16 +145,8 @@ impl Field {
         self
     }
 
-    /// Builder: set alignment
-    pub fn align(mut self, alignment: Alignment) -> Self {
-        self.use_styled = false;
-        self.alignment = alignment;
-        self
-    }
-
-    /// Builder: set styled_alignment
+    /// Builder: set text alignment
     pub fn styled_alignment(mut self, horizontal_alignment: HorizontalAlignment, vertical_alignment: VerticalAlignment) -> Self {
-        self.use_styled = true;
         self.horizontal_alignment = horizontal_alignment;
         self.vertical_alignment = vertical_alignment;
         self

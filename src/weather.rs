@@ -273,6 +273,14 @@ impl Weather {
                 icons = part.trim_start_matches("icons=").to_string().parse().map_err(|_| WeatherApiError::InvalidInput("Invalid icons format".to_string()))?;
             }
         }
+
+        // Normalize units to API format (Tomorrow.io expects "metric" or "imperial")
+        units = match units.to_lowercase().as_str() {
+            "f" | "fahrenheit" | "imperial" => "imperial".to_string(),
+            "c" | "celsius" | "metric" => "metric".to_string(),
+            _ => units, // Keep as-is if already correct or unknown
+        };
+
         let conditions_units = units.clone();
 
         let mut headers = header::HeaderMap::new();

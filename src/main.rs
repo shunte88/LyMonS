@@ -28,7 +28,7 @@ compile_error!("LyMonS currently requires the 'driver-ssd1306' feature. Use --fe
 #[allow(dead_code)]
 #[allow(unused_imports)]
 use std::{time::Duration};
-use log::{info, error};
+use log::{info, error, warn};
 use env_logger::Env;
 use clap::{Arg, ArgAction, Command};
 use chrono::{Timelike, Local};
@@ -64,6 +64,8 @@ mod weather;
 mod textable;
 mod weather_glyph;
 mod geoloc;
+mod location;
+mod astral;
 mod translate;
 mod eggs;
 mod spectrum;
@@ -194,6 +196,30 @@ async fn unified_display_loop(
             if let Some(requested_mode) = display_lock.check_emulator_mode_request() {
                 mode = requested_mode;
                 info!("Emulator mode override: {:?} (manual lock enabled)", mode);
+            }
+        }
+
+        // Check for emulator easter egg cycling (requires track playing)
+        #[cfg(feature = "emulator")]
+        if display_lock.check_and_clear_cycle_easter_egg() {
+            if is_playing {
+                display_lock.cycle_easter_egg();
+                mode = display::DisplayMode::EasterEggs;
+                info!("Easter egg cycled (track playing)");
+            } else {
+                info!("Easter egg cycle requested but no track playing - ignored");
+            }
+        }
+
+        // Check for emulator visualization cycling (requires track playing)
+        #[cfg(feature = "emulator")]
+        if display_lock.check_and_clear_cycle_visualization() {
+            if is_playing {
+                display_lock.cycle_visualization();
+                mode = display::DisplayMode::Visualizer;
+                info!("Visualization cycled (track playing)");
+            } else {
+                info!("Visualization cycle requested but no track playing - ignored");
             }
         }
 
@@ -826,10 +852,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
         .default_value("none")
         .required(false))
-        .arg(Arg::new("splash")
-        .short('S')
-        .long("splash")
-        .help("Display splash screen") 
+        .arg(Arg::new("no-splash")
+        .long("no-splash")
+        .help("Skip splash screen (shown by default)")
         .action(ArgAction::SetTrue)
         .required(false))
         .arg(Arg::new("metrics")
@@ -883,7 +908,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             \n\ttodo.")
         .get_matches();
 
-    let show_splash = matches.get_flag("splash");
+    let skip_splash = matches.get_flag("no-splash");
+    let show_splash = !skip_splash; // Show splash by default unless --no-splash is provided
     let show_metrics = matches.get_flag("metrics");
     let show_remaining = matches.get_flag("remain");
     let debug_enabled = matches.get_flag("debug");
@@ -1006,6 +1032,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         info!("DisplayManager created - using unified display loop");
 
+        // === INITIALIZATION SEQUENCE WITH SPLASH SCREEN ===
+        // Load full config for location settings
+        let full_config = if let Ok(config_content) = std::fs::read_to_string(_config_file) {
+            serde_yaml::from_str::<config::Config>(&config_content).ok()
+        } else {
+            None
+        };
+
+        // Show splash screen during initialization (unless user opted out)
+        display_manager.splash(
+            show_splash,
+            &format!("v{}", env!("CARGO_PKG_VERSION")).as_str(),
+            BUILD_DATE
+        ).await?;
+
+        // Initialize location service
+        let location = {
+            let lat = full_config.as_ref().and_then(|c| c.latitude);
+            let lng = full_config.as_ref().and_then(|c| c.longitude);
+
+            if show_splash {
+                display_manager.update_splash_status("Determining location...")?;
+            }
+
+            match location::get_location(lat, lng).await {
+                Ok(loc) => {
+                    info!("Location determined: {}", loc);
+                    Some(loc)
+                }
+                Err(e) => {
+                    warn!("Failed to determine location: {}", e);
+                    info!("Astronomical calculations will be unavailable");
+                    None
+                }
+            }
+        };
+
+        // Initialize astral service (if location is available)
+        let _astral_service = if let Some(loc) = location.clone() {
+            if show_splash {
+                display_manager.update_splash_status("Calculating astronomical data...")?;
+            }
+
+            let astral = astral::AstralService::new(loc);
+            let astral_data = astral.get_today();
+
+            info!("Astronomical data calculated:");
+            if let Some(sunrise) = astral_data.sunrise {
+                info!("  Sunrise: {}", sunrise.format("%H:%M"));
+            }
+            if let Some(sunset) = astral_data.sunset {
+                info!("  Sunset: {}", sunset.format("%H:%M"));
+            }
+
+            // TODO: Pass astral_service to DisplayManager for auto-brightness
+            // TODO: Use astral_data for sunrise/sunset display in weather/clock pages
+            Some(astral)
+        } else {
+            None
+        };
+
+        if show_splash {
+            display_manager.update_splash_status("Initialization complete")?;
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        }
+
         // Wrap DisplayManager in Arc<Mutex> for sharing with unified loop
         let display_arc = std::sync::Arc::new(tokio::sync::Mutex::new(display_manager));
         let display_clone = display_arc.clone();
@@ -1083,11 +1175,71 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         wlan0_mac_addr.clone().as_str()
     );
 
+    // === INITIALIZATION SEQUENCE (HARDWARE PATH) ===
+    // Load full config for location settings
+    let full_config = if let Ok(config_content) = std::fs::read_to_string(_config_file) {
+        serde_yaml::from_str::<config::Config>(&config_content).ok()
+    } else {
+        None
+    };
+
+    // Show splash screen during initialization (unless user opted out)
     display_manager.splash(
         show_splash,
         &format!("v{}",env!("CARGO_PKG_VERSION")).as_str(),
         BUILD_DATE
     ).await?;
+
+    // Initialize location service
+    let location = {
+        let lat = full_config.as_ref().and_then(|c| c.latitude);
+        let lng = full_config.as_ref().and_then(|c| c.longitude);
+
+        if show_splash {
+            display_manager.update_splash_status("Determining location...")?;
+        }
+
+        match location::get_location(lat, lng).await {
+            Ok(loc) => {
+                info!("Location determined: {}", loc);
+                Some(loc)
+            }
+            Err(e) => {
+                warn!("Failed to determine location: {}", e);
+                info!("Astronomical calculations will be unavailable");
+                None
+            }
+        }
+    };
+
+    // Initialize astral service (if location is available)
+    let _astral_service = if let Some(loc) = location.clone() {
+        if show_splash {
+            display_manager.update_splash_status("Calculating astronomical data...")?;
+        }
+
+        let astral = astral::AstralService::new(loc);
+        let astral_data = astral.get_today();
+
+        info!("Astronomical data calculated:");
+        if let Some(sunrise) = astral_data.sunrise {
+            info!("  Sunrise: {}", sunrise.format("%H:%M"));
+        }
+        if let Some(sunset) = astral_data.sunset {
+            info!("  Sunset: {}", sunset.format("%H:%M"));
+        }
+
+        // TODO: Pass astral_service to DisplayManager for auto-brightness
+        // TODO: Use astral_data for sunrise/sunset display
+        Some(astral)
+    } else {
+        None
+    };
+
+    if show_splash {
+        display_manager.update_splash_status("Initialization complete")?;
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    }
 
     if weather_config != "" {
         display_manager.setup_weather(weather_config).await?;

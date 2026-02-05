@@ -164,6 +164,8 @@ impl EmulatorWindow {
         println!("    W         - Lock to weather mode");
         println!("    C         - Lock to clock mode");
         println!("    A         - Return to automatic mode");
+        println!("    E         - Cycle easter egg animations");
+        println!("    V         - Cycle visualizations");
         println!("    G         - Toggle pixel grid");
         println!("    F         - Toggle FPS counter");
         println!("    H         - Toggle help overlay");
@@ -293,6 +295,24 @@ impl EmulatorWindow {
                     state.manual_mode_override = false;
                     state.requested_mode = None;
                     println!("Automatic mode switching re-enabled");
+                }
+
+                // Cycle through easter eggs (requires track playing)
+                if input.key_pressed(VirtualKeyCode::E) {
+                    let mut state = self.state.lock().unwrap();
+                    state.cycle_easter_egg = true;
+                    state.manual_mode_override = true;
+                    state.requested_mode = Some(crate::display::DisplayMode::EasterEggs);
+                    println!("Cycling to next easter egg animation (manual mode locked)");
+                }
+
+                // Cycle through visualizations (requires track playing)
+                if input.key_pressed(VirtualKeyCode::V) {
+                    let mut state = self.state.lock().unwrap();
+                    state.cycle_visualization = true;
+                    state.manual_mode_override = true;
+                    state.requested_mode = Some(crate::display::DisplayMode::Visualizer);
+                    println!("Cycling to next visualization (manual mode locked)");
                 }
             }
 

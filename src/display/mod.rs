@@ -74,7 +74,7 @@ pub use framebuffer::FrameBuffer;
 pub use factory::{DisplayDriverFactory, BoxedDriver};
 pub use layout::{LayoutConfig, LayoutCategory, AssetType, FontSize};
 pub use manager::DisplayManager;
-pub use field::{Field, FieldType, Alignment};
+pub use field::{Field, FieldType};
 pub use page::PageLayout;
 pub use layout_manager::LayoutManager;
 pub use color::{Color, ColorValue};

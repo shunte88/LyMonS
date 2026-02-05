@@ -44,7 +44,7 @@ impl ConvertColor<Gray4> for BinaryColor {
     }
 }
 
-// Extend ConvertColor to work with Color enum
+//  Extend ConvertColor to work with Color enum
 impl ConvertColor<BinaryColor> for crate::display::color::Color {
     fn to_color(self) -> BinaryColor {
         self.to_binary()

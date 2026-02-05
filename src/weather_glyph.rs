@@ -33,26 +33,28 @@ pub enum MoonPhase {
     WaningCrescent = 7,
 }
 
-/// Weather glyph dimensions (6 glyphs in vertical strip)
+/// Weather glyph dimensions (8 glyphs in vertical strip)
 pub const THERMO_GLYPH_WIDTH: u32 = 12;
 pub const THERMO_GLYPH_HEIGHT: u32 = 12;
 
 /// Load weather glyphs from binary file
-/// 'thermo', 12x72px (6 glyphs: 0=temperature, 1=wind, 2=humidity, 3=precipitation, 4=sunrise, 5=sunset)
-pub const THERMO_RAW_DATA: &[u8] = include_bytes!("../data/thermo_12x72.bin");
+/// 'thermo', 12x96px (8 glyphs: 0=temperature, 1=wind, 2=humidity, 3=precipitation, 4=sunrise, 5=sunset, 6=moonset, 7=moonrise)
+pub const THERMO_RAW_DATA: &[u8] = include_bytes!("../data/thermo_12x96.bin");
 
 /// Weather glyph indices
 pub const GLYPH_TEMPERATURE: usize = 0;
 pub const GLYPH_WIND: usize = 1;
 pub const GLYPH_HUMIDITY: usize = 2;
 pub const GLYPH_PRECIPITATION: usize = 3;
-pub const GLYPH_SUNSET: usize = 4;
-pub const GLYPH_SUNRISE: usize = 5;
+pub const GLYPH_SUNRISE: usize = 4;
+pub const GLYPH_SUNSET: usize = 5;
+pub const GLYPH_MOONSET: usize = 6;
+pub const GLYPH_MOONRISE: usize = 7;
 
 /// Get a slice for a specific weather glyph
 ///
 /// # Arguments
-/// * `glyph_index` - 0=temperature, 1=wind, 2=humidity, 3=precipitation, 4=sunset, 5=sunrise
+/// * `glyph_index` - 0=temperature, 1=wind, 2=humidity, 3=precipitation, 4=sunrise, 5=sunset, 6=moonset, 7=moonrise
 ///
 /// # Returns
 /// Byte slice containing the 12x12 monochrome bitmap for the requested glyph

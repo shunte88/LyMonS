@@ -432,7 +432,7 @@ impl LayoutConfig {
     pub fn asset_path_for(&self, asset_type: AssetType) -> String {
         match asset_type {
             AssetType::Weather => {
-                // Weather icons are in basic/ or mono/ subdirectories
+                // Weather icons are in basic/, mono/ or color/ subdirectories
                 match self.color_depth {
                     ColorDepth::Monochrome => "./assets/mono/".to_string(),
                     ColorDepth::Gray4 => "./assets/basic/".to_string(),

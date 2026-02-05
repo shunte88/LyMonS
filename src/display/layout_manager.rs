@@ -21,9 +21,10 @@
  *
  */
 
-use super::field::{Field, FieldType, Alignment};
+use super::field::{Field, FieldType};
 use super::page::PageLayout;
 use super::layout::LayoutConfig;
+use super::color::Color;
 use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::geometry::{Point, Size};
 use embedded_graphics::mono_font::iso_8859_13::{
@@ -143,20 +144,21 @@ impl LayoutManager {
                 Field::new_text(
                     "metrics",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj), 
+                        Point::new(border_adj, border_adj),
                         Size::new(width_adj, 7)),
                     &FONT_5X7
                 )
-                .align(Alignment::Center)
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
             )
-            // Clock digits - custom font with 2px border
+            // Clock digits - custom font with 2px border (green color)
             .add_field(
                 Field::new_custom(
                     "clock_digits",
                     Rectangle::new(
-                        Point::new(border_adj, clock_y_start), 
+                        Point::new(border_adj, clock_y_start),
                         Size::new(width_adj, CLOCK_DIGIT_HEIGHT as u32))
                 )
+                .colors(Color::Green, None)
             )
             // Seconds progress bar (full width)
             .add_field(
@@ -167,16 +169,17 @@ impl LayoutManager {
                         Size::new(width_adj, PROGRESS_BAR_HEIGHT as u32))
                 )
             )
-            // Date at bottom (centered)
+            // Date at bottom (centered, cyan color)
             .add_field(
                 Field::new_text(
                     "date",
                     Rectangle::new(
-                        Point::new(border_adj, date_y), 
+                        Point::new(border_adj, date_y),
                         Size::new(width_adj, DATE_FONT_HEIGHT as u32)),
                     &FONT_6X10
                 )
-                .align(Alignment::Center)
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
+                .colors(Color::Cyan, None)
             )
     }
 
@@ -190,8 +193,8 @@ impl LayoutManager {
         // Original: icon_w = height/2 + 2 = 34 for 128x64
         let icon_size = height / 2 + 2;
         let glyph_w = 12;
-        let glyph_x = 52;
-        let text_x = glyph_x + 2 + glyph_w; // 66
+        let mut glyph_x = 52;
+        let mut text_x = glyph_x + 2 + glyph_w; // 66
 
         let mut page = PageLayout::new("weather_current")
             // Large weather icon - left side (original: 12, 10, 34x34)
@@ -208,74 +211,82 @@ impl LayoutManager {
                 Field::new_custom(
                     "temp_glyph",
                     Rectangle::new(
-                        Point::new(glyph_x as i32, 2), 
+                        Point::new(glyph_x as i32, 2),
                         Size::new(glyph_w, glyph_w))
                 )
+                .colors(Color::Cyan, None)
             )
             .add_field(
                 Field::new_text(
                     "temperature",  // "72(68) °F" format
                     Rectangle::new(
-                        Point::new(text_x as i32, 2), 
+                        Point::new(text_x as i32, 2),
                         Size::new(width - text_x, 14)),
                     &FONT_6X13_BOLD
                 )
+                .colors(Color::Cyan, None)
             )
             // Humidity row with glyph (humidity icon at 52, 15)
             .add_field(
                 Field::new_custom(
                     "humidity_glyph",
                     Rectangle::new(
-                        Point::new(glyph_x as i32, 14), 
+                        Point::new(glyph_x as i32, 14),
                         Size::new(glyph_w, glyph_w))
                 )
+                .colors(Color::Cyan, None)
             )
             .add_field(
                 Field::new_text(
                     "humidity",  // "65%" format
                     Rectangle::new(
-                        Point::new(text_x as i32, 15), 
+                        Point::new(text_x as i32, 15),
                         Size::new(width - text_x, 12)),
                     &FONT_5X8
                 )
+                .colors(Color::Cyan, None)
             )
             // Wind row with glyph (wind icon at 52, 24)
             .add_field(
                 Field::new_custom(
                     "wind_glyph",
                     Rectangle::new(
-                        Point::new(glyph_x as i32, 24), 
+                        Point::new(glyph_x as i32, 24),
                         Size::new(glyph_w, glyph_w))
                 )
+                .colors(Color::Cyan, None)
             )
             .add_field(
                 Field::new_text(
                     "wind",  // "10 mph NW" format
                     Rectangle::new(
-                        Point::new(text_x as i32, 25), 
+                        Point::new(text_x as i32, 25),
                         Size::new(width - text_x, 12)),
                     &FONT_5X8
                 )
+                .colors(Color::Cyan, None)
             )
             // Precipitation row with glyph (rain icon at 52, 34)
             .add_field(
                 Field::new_custom(
                     "precip_glyph",
                     Rectangle::new(
-                        Point::new(glyph_x as i32, 34), 
+                        Point::new(glyph_x as i32, 34),
                         Size::new(glyph_w, glyph_w))
                 )
+                .colors(Color::Cyan, None)
             )
             .add_field(
                 Field::new_text(
                     "precipitation",  // "20%" format
                     Rectangle::new(
-                        Point::new(text_x as i32, 35), 
+                        Point::new(text_x as i32, 35),
                         Size::new(width - text_x, 12)),
                     &FONT_5X8
                 )
+                .colors(Color::Cyan, None)
             )
-            // Conditions text centered at bottom (original: y=46+, FONT_7X14)
+            // Conditions text centered at bottom (yellow, original: y=46+, FONT_7X14)
             .add_field(
                 Field::new_text(
                     "conditions",
@@ -284,42 +295,120 @@ impl LayoutManager {
                         Size::new(width - 4, 14)),
                     &FONT_7X14
                 )
-                .align(Alignment::Center) // once styled alignment in play remove this
-                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                .colors(Color::Yellow, None)
             );
 
         // Wide display additions (width > 128): Sunrise/Sunset/Moon on the right
         // we're going to want Moonrise, Moonset, and Moonphase
         if is_wide {
-            let glyph_x_right = 133;
+
+            glyph_x = 133;
+            text_x = glyph_x + 2 + glyph_w;
+            let astral_field_width = 33;
 
             page = page
-                // Sunrise glyph only
+                // Sunrise glyph
                 .add_field(
                     Field::new_custom(
                         "sunrise_glyph",
                         Rectangle::new(
-                            Point::new(glyph_x_right, 2),
-                            Size::new(12, 12))
+                            Point::new(glyph_x as i32, 2),
+                            Size::new(glyph_w, glyph_w))
                     )
+                    .colors(Color::Yellow, None)
                 )
-                // Sunset glyph only
+                // Sunrise text
+                .add_field(
+                    Field::new_text(
+                        "sunrise_text",
+                        Rectangle::new(
+                            Point::new(text_x as i32, 3),
+                            Size::new(astral_field_width, 10)),
+                        &FONT_5X8
+                    )
+                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                    .colors(Color::Yellow, None)
+                )
                 .add_field(
                     Field::new_custom(
                         "sunset_glyph",
                         Rectangle::new(
-                            Point::new(glyph_x_right, 16),
-                            Size::new(12, 12))
+                            Point::new(glyph_x as i32, 16),
+                            Size::new(glyph_w, glyph_w))
                     )
+                    .colors(Color::Yellow, None)
                 )
-                // Moon phase text (could add glyph in future)
+                // Sunset text
                 .add_field(
                     Field::new_text(
-                        "moon_phase",
+                        "sunset_text",
                         Rectangle::new(
-                            Point::new(135, 30),
-                            Size::new(120, 10)),
+                            Point::new(text_x as i32, 17),
+                            Size::new(astral_field_width, 10)),
                         &FONT_5X8
+                    )
+                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                    .colors(Color::Yellow, None)
+                );
+
+            glyph_x += 40;
+            text_x = glyph_x + 2 + glyph_w;
+            page = page
+                // Moonrise glyph
+                .add_field(
+                    Field::new_custom(
+                        "moonrise_glyph",
+                        Rectangle::new(
+                            Point::new(glyph_x as i32, 2),
+                            Size::new(glyph_w, glyph_w))
+                    )
+                    .colors(Color::Cyan, None)
+                )
+                // moonrise text
+                .add_field(
+                    Field::new_text(
+                        "moonrise_text",
+                        Rectangle::new(
+                            Point::new(text_x as i32, 3),
+                            Size::new(astral_field_width, 10)),
+                        &FONT_5X8
+                    )
+                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                    .colors(Color::Cyan, None)
+                )
+                // Moonset glyph
+                .add_field(
+                    Field::new_custom(
+                        "moonset_glyph",
+                        Rectangle::new(
+                            Point::new(glyph_x as i32, 16),
+                            Size::new(glyph_w, glyph_w))
+                    )
+                    .colors(Color::Cyan, None)
+                )
+                // moonset text
+                .add_field(
+                    Field::new_text(
+                        "moonset_text",
+                        Rectangle::new(
+                            Point::new(text_x as i32, 17),
+                            Size::new(astral_field_width, 10)),
+                        &FONT_5X8
+                    )
+                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                    .colors(Color::Cyan, None)
+                )
+;
+            glyph_x += 40;
+            page = page
+                // Moonphase svg
+                .add_field(
+                    Field::new_custom(
+                        "moonphase_svg",
+                        Rectangle::new(
+                            Point::new(glyph_x as i32, 10),
+                            Size::new(34, 34))
                     )
                 );
         }
@@ -339,7 +428,7 @@ impl LayoutManager {
         let header_height = 10;
         let icon_w = height / 2 + 2;
         let icon_size = icon_w - 4;  // 30 for 128x64
-        let spacing = icon_w + 6;     // 40 pixels - column width
+        let spacing = icon_w + 6;    // 40 pixels - column width
 
         // Start leftmost column at x=4, use spacing (40px) for column width
         let col_x1 = 4;
@@ -364,35 +453,38 @@ impl LayoutManager {
             // day name. Mon, Tue... etc
             .add_field(Field::new_text("day1_name",Rectangle::new(Point::new(col_x1, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
                 .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .colors(Color::Cyan, None)
                 .border(1))
             // Bordered box for temp+precip
             .add_field(Field::new_custom("day1_data_box", Rectangle::new(Point::new(col_x1, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
             // "45°F|62°F" format - 3px down from box top, inset by 1px for border
-            .add_field(Field::new_text("day1_temp",Rectangle::new(Point::new(col_x1 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).align(Alignment::Center))
+            .add_field(Field::new_text("day1_temp",Rectangle::new(Point::new(col_x1 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
             // "20%" format - below temp, inset by 1px for border
-            .add_field(Field::new_text("day1_precip",Rectangle::new(Point::new(col_x1 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).align(Alignment::Center))
+            .add_field(Field::new_text("day1_precip",Rectangle::new(Point::new(col_x1 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
             // Day 2 column (x=44, width=40)
             .add_field(Field::new_glyph("day2_icon",Rectangle::new(Point::new(icon_x2, 1), Size::new(icon_size, icon_size))))
             .add_field(Field::new_text("day2_name",Rectangle::new(Point::new(col_x2, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
                 .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .colors(Color::Cyan, None)
                 .border(1))
             // Bordered box for temp+precip
             .add_field(Field::new_custom("day2_data_box",Rectangle::new(Point::new(col_x2, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
             // "45°F|62°F" format
-            .add_field(Field::new_text("day2_temp", Rectangle::new(Point::new(col_x2 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).align(Alignment::Center))
+            .add_field(Field::new_text("day2_temp", Rectangle::new(Point::new(col_x2 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
             // "20%" format
-            .add_field(Field::new_text("day2_precip",Rectangle::new(Point::new(col_x2 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).align(Alignment::Center))
+            .add_field(Field::new_text("day2_precip",Rectangle::new(Point::new(col_x2 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
             // Day 3 column (x=84, width=40)
             .add_field(Field::new_glyph("day3_icon",Rectangle::new(Point::new(icon_x3, 1), Size::new(icon_size, icon_size))))
             .add_field(Field::new_text("day3_name",Rectangle::new(Point::new(col_x3, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
                 .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .colors(Color::Cyan, None)
                 .border(1))
             // Bordered box for temp+precip
             .add_field(Field::new_custom("day3_data_box",Rectangle::new(Point::new(col_x3, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
             // "45°F|62°F" format
-            .add_field(Field::new_text("day3_temp", Rectangle::new(Point::new(col_x3 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).align(Alignment::Center))
+            .add_field(Field::new_text("day3_temp", Rectangle::new(Point::new(col_x3 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
             // "20%" format
-            .add_field(Field::new_text("day3_precip", Rectangle::new(Point::new(col_x3 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).align(Alignment::Center));
+            .add_field(Field::new_text("day3_precip", Rectangle::new(Point::new(col_x3 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None));
 
         // Wide display additions (width > 128): Days 4-6
         if is_wide {
@@ -401,26 +493,29 @@ impl LayoutManager {
                 .add_field(Field::new_glyph("day4_icon", Rectangle::new(Point::new(icon_x4, 1), Size::new(icon_size, icon_size))))
                 .add_field(Field::new_text("day4_name", Rectangle::new(Point::new(col_x4, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
                     .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .colors(Color::Cyan, None)
                     .border(1))
                 .add_field(Field::new_custom("day4_data_box", Rectangle::new(Point::new(col_x4, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
-                .add_field(Field::new_text("day4_temp", Rectangle::new(Point::new(col_x4 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).align(Alignment::Center))
-                .add_field(Field::new_text("day4_precip", Rectangle::new(Point::new(col_x4 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).align(Alignment::Center))
+                .add_field(Field::new_text("day4_temp", Rectangle::new(Point::new(col_x4 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
+                .add_field(Field::new_text("day4_precip", Rectangle::new(Point::new(col_x4 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
                 // Day 5 column
                 .add_field(Field::new_glyph("day5_icon", Rectangle::new(Point::new(icon_x5, 1), Size::new(icon_size, icon_size))))
                 .add_field(Field::new_text("day5_name", Rectangle::new(Point::new(col_x5, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
                     .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .colors(Color::Cyan, None)
                     .border(1))
                 .add_field(Field::new_custom("day5_data_box", Rectangle::new(Point::new(col_x5, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
-                .add_field(Field::new_text("day5_temp", Rectangle::new(Point::new(col_x5 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).align(Alignment::Center))
-                .add_field(Field::new_text("day5_precip", Rectangle::new(Point::new(col_x5 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).align(Alignment::Center))
+                .add_field(Field::new_text("day5_temp", Rectangle::new(Point::new(col_x5 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
+                .add_field(Field::new_text("day5_precip", Rectangle::new(Point::new(col_x5 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
                 // Day 6 column
                 .add_field(Field::new_glyph("day6_icon", Rectangle::new(Point::new(icon_x6, 1), Size::new(icon_size, icon_size))))
                 .add_field(Field::new_text("day6_name", Rectangle::new(Point::new(col_x6, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
                     .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .colors(Color::Cyan, None)
                     .border(1))
                 .add_field(Field::new_custom("day6_data_box", Rectangle::new(Point::new(col_x6, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
-                .add_field(Field::new_text("day6_temp", Rectangle::new(Point::new(col_x6 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).align(Alignment::Center))
-                .add_field(Field::new_text("day6_precip", Rectangle::new(Point::new(col_x6 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).align(Alignment::Center));
+                .add_field(Field::new_text("day6_temp", Rectangle::new(Point::new(col_x6 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
+                .add_field(Field::new_text("day6_precip", Rectangle::new(Point::new(col_x6 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None));
         }
 
         page
@@ -461,6 +556,58 @@ impl LayoutManager {
                     "animation",
                     Rectangle::new(Point::new(0, 0), Size::new(width, height))
                 )
+            )
+    }
+
+    /// Create the splash screen layout
+    /// Shows: logo SVG (background), version, build date, and optional status message
+    pub fn create_splash_page(&self) -> PageLayout {
+        let width = self.layout_config.width;
+        let height = self.layout_config.height;
+
+        // Calculate positions similar to original splash
+        // Version is 17px above bottom, build date at bottom - 10px
+        let version_y = (height as i32) - 10 - 17;  // ~37 for 64px height
+        let build_y = (height as i32) - 10;         // ~54 for 64px height
+
+        PageLayout::new("splash")
+            // Logo SVG (full screen background) - custom field for SVG rendering
+            .add_field(
+                Field::new_custom(
+                    "logo_svg",
+                    Rectangle::new(Point::new(0, 0), Size::new(width, height))
+                )
+            )
+            // Version string (e.g., "LyMonS v0.2.3")
+            .add_field(
+                Field::new_text(
+                    "version",
+                    Rectangle::new(Point::new(0, version_y), Size::new(width, 15)),
+                    &FONT_6X13_BOLD
+                )
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                .colors(Color::White, None)
+            )
+            // Build date (e.g., "2026-02-04")
+            .add_field(
+                Field::new_text(
+                    "build_date",
+                    Rectangle::new(Point::new(0, build_y), Size::new(width, 10)),
+                    &FONT_5X8
+                )
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                .colors(Color::Cyan, None)
+            )
+            // Status/task message (optional, for showing initialization progress)
+            // Positioned in middle area, above version
+            .add_field(
+                Field::new_text(
+                    "status",
+                    Rectangle::new(Point::new(0, (height / 2) as i32), Size::new(width, 8)),
+                    &FONT_5X8
+                )
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                .colors(Color::Green, None)
             )
     }
 

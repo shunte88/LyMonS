@@ -2,7 +2,7 @@
  *  geoloc.rs
  * 
  *  LyMonS - worth the squeeze
- *	(c) 2020-25 Stuart Hunter
+ *	(c) 2020-26 Stuart Hunter
  *
  *	TODO:
  *

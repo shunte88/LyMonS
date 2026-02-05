@@ -24,6 +24,10 @@ pub struct Config {
     /// display-specific geometry & behavior
     pub display: Option<DisplayConfig>,
 
+    /// Location for astronomical calculations (optional, uses GeoIP if not specified)
+    pub latitude: Option<f64>,         // -90.0 to 90.0
+    pub longitude: Option<f64>,        // -180.0 to 180.0
+
     // Any other groups you already have can go here
     // pub network: Option<NetConfig>,
     // pub theme: Option<ThemeConfig>,

@@ -330,6 +330,11 @@ pub struct DisplayManager {
 
     /// Weather data receiver (watch channel for lock-free updates)
     weather_rx: Option<tokio::sync::watch::Receiver<crate::weather::WeatherConditions>>,
+
+    /// Splash screen state
+    splash_active: bool,
+    splash_version: String,
+    splash_build_date: String,
 }
 
 impl DisplayManager {
@@ -457,6 +462,9 @@ impl DisplayManager {
             weather_wind_speed_units: String::from("km/h"),
             weather_location_name: String::new(),
             weather_rx: None,
+            splash_active: false,
+            splash_version: String::new(),
+            splash_build_date: String::new(),
             #[cfg(feature = "emulator")]
             emulator_state: None,
         })
@@ -1128,8 +1136,8 @@ impl DisplayManager {
                             // Already rendered above
                         }
                         "clock_digits" => {
-                            // Clock renders digits only (no progress bar)
-                            self.clock_display.render(fb)
+                            // Clock renders digits with field color (e.g., green)
+                            self.clock_display.render(fb, field.fg_binary())
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1170,32 +1178,15 @@ impl DisplayManager {
                             }
                         }
                         "date" => {
-                            // Render date text centered at bottom
+                            // Render date text using field color (e.g., cyan)
                             use embedded_graphics::mono_font::MonoTextStyle;
-                            use embedded_graphics::text::{Text, Baseline};
-                            use embedded_graphics::prelude::*;
-                            use chrono::Local;
-
-                            let field_pos = field.position();
-                            let field_width = field.width();
                             let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
                             let style = MonoTextStyle::new(font, field.fg_binary());
+                            let date_str = chrono::Local::now().format("%a %b %d").to_string();
 
-                            // Format date as "Day Mon DD"
-                            let date_str = Local::now().format("%a %b %d").to_string();
-
-                            // Center the text
-                            let text_width = date_str.len() * 6; // Approximate width
-                            let x = field_pos.x + ((field_width as i32 - text_width as i32) / 2);
-
-                            Text::with_baseline(
-                                &date_str,
-                                Point::new(x, field_pos.y),
-                                style,
-                                Baseline::Top,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
+                            // Use DRY helper for text rendering
+                            Self::draw_field_text_mono(fb, field, &date_str, style)
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
                         }
                         _ => {}
                     }
@@ -1209,8 +1200,8 @@ impl DisplayManager {
                             // Already rendered above
                         }
                         "clock_digits" => {
-                            // Clock renders digits using grayscale variant
-                            self.clock_display.render_gray4(fb)
+                            // Clock renders digits with field color (e.g., green → gray4 value 8)
+                            self.clock_display.render_gray4(fb, field.fg_color.to_gray4())
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1251,32 +1242,15 @@ impl DisplayManager {
                             }
                         }
                         "date" => {
-                            // Render date text in white
+                            // Render date text using field color (e.g., cyan → gray4 value 11)
                             use embedded_graphics::mono_font::MonoTextStyle;
-                            use embedded_graphics::text::{Text, Baseline};
-                            use embedded_graphics::prelude::*;
-                            use chrono::Local;
-
-                            let field_pos = field.position();
-                            let field_width = field.width();
                             let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
-                            let style = MonoTextStyle::new(font, Gray4::WHITE);
+                            let style = MonoTextStyle::new(font, field.fg_color.to_gray4());
+                            let date_str = chrono::Local::now().format("%a %b %d").to_string();
 
-                            // Format date as "Day Mon DD"
-                            let date_str = Local::now().format("%a %b %d").to_string();
-
-                            // Center the text
-                            let text_width = date_str.len() * 6; // Approximate width
-                            let x = field_pos.x + ((field_width as i32 - text_width as i32) / 2);
-
-                            Text::with_baseline(
-                                &date_str,
-                                Point::new(x, field_pos.y),
-                                style,
-                                Baseline::Top,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
+                            // Use DRY helper for text rendering
+                            Self::draw_field_text_gray4(fb, field, &date_str, style)
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
                         }
                         _ => {}
                     }
@@ -1411,123 +1385,99 @@ impl DisplayManager {
                     }
                 }
                 "temp_glyph" => {
-                    Self::draw_weather_glyph(target, 0, pos.x, pos.y, BinaryColor::On)
+                    use crate::weather_glyph::GLYPH_TEMPERATURE;
+                    Self::draw_weather_glyph(target, GLYPH_TEMPERATURE, pos.x, pos.y, field.fg_color.to_binary())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw temp glyph".to_string()))?;
                 }
                 "humidity_glyph" => {
-                    Self::draw_weather_glyph(target, 2, pos.x, pos.y, BinaryColor::On)
+                    use crate::weather_glyph::GLYPH_HUMIDITY;
+                    Self::draw_weather_glyph(target, GLYPH_HUMIDITY, pos.x, pos.y, field.fg_color.to_binary())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw humidity glyph".to_string()))?;
                 }
                 "wind_glyph" => {
-                    Self::draw_weather_glyph(target, 1, pos.x, pos.y, BinaryColor::On)
+                    use crate::weather_glyph::GLYPH_WIND;
+                    Self::draw_weather_glyph(target, GLYPH_WIND, pos.x, pos.y, field.fg_color.to_binary())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw wind glyph".to_string()))?;
                 }
                 "precip_glyph" => {
-                    Self::draw_weather_glyph(target, 3, pos.x, pos.y, BinaryColor::On)
+                    use crate::weather_glyph::GLYPH_PRECIPITATION;
+                    Self::draw_weather_glyph(target, GLYPH_PRECIPITATION, pos.x, pos.y, field.fg_color.to_binary())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw precip glyph".to_string()))?;
                 }
                 "temperature" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), BinaryColor::On);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), field.fg_color.to_binary());
                     Text::with_baseline(temp_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw temperature".to_string()))?;
                 }
                 "humidity" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), BinaryColor::On);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
                     Text::with_baseline(humidity_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw humidity".to_string()))?;
                 }
                 "wind" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), BinaryColor::On);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
                     Text::with_baseline(wind_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw wind".to_string()))?;
                 }
                 "precipitation" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), BinaryColor::On);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
                     Text::with_baseline(precip_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw precipitation".to_string()))?;
                 }
                 "conditions" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_7X14), BinaryColor::On);
-
-                    // make this a method and DRY this entire script up
-                    // give it inline hints if thats a performance tack
-                    if field.use_styled {
-
-                        use embedded_text::{
-                            style::TextBoxStyleBuilder,
-                            TextBox,
-                        };
-
-                        let textbox_style = 
-                            TextBoxStyleBuilder::new()
-                                .alignment(field.horizontal_alignment)
-                                .vertical_alignment(field.vertical_alignment)
-                                .build();
-
-                        TextBox::with_textbox_style(
-                            conditions_text,
-                            field.bounds,
-                            style,
-                            textbox_style,
-                        )
-                        .draw(target)
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
-
-                    } else {
-
-                        // Calculate position based on alignment
-                        let text_x = match field.alignment {
-                            crate::display::Alignment::Left => pos.x,
-                            crate::display::Alignment::Center => {
-                                // Calculate text width and center it within field bounds
-                                let font = field.font.unwrap_or(&FONT_7X14);
-                                let text_width = (conditions_text.len() as i32) * (font.character_size.width as i32);
-                                let field_width = field.bounds.size.width as i32;
-                                pos.x + (field_width - text_width) / 2
-                            }
-                            crate::display::Alignment::Right => {
-                                let font = field.font.unwrap_or(&FONT_7X14);
-                                let text_width = (conditions_text.len() as i32) * (font.character_size.width as i32);
-                                let field_width = field.bounds.size.width as i32;
-                                pos.x + field_width - text_width
-                            }
-                        };
-
-                        Text::with_baseline(conditions_text, Point::new(text_x, pos.y), style, Baseline::Top)
-                            .draw(target)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
-                    }
+                    let font = field.font.unwrap_or(&FONT_7X14);
+                    let style = MonoTextStyle::new(font, BinaryColor::On);
+                    // Use DRY helper for text rendering
+                    Self::draw_field_text_mono(target, field, conditions_text, style)
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
                 }
                 "sunrise_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNRISE;
-                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, BinaryColor::On)
+                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, field.fg_color.to_binary())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
                 }
                 "sunrise" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), BinaryColor::On);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
                     Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise".to_string()))?;
                 }
                 "sunset_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNSET;
-                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, BinaryColor::On)
+                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, field.fg_color.to_binary())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
                 }
+                "moonrise_glyph" => {
+                    use crate::weather_glyph::GLYPH_MOONRISE;
+                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_binary())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
+                }
+                "moonset_glyph" => {
+                    use crate::weather_glyph::GLYPH_MOONSET;
+                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_binary())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
+                }
                 "sunset" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), BinaryColor::On);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
                     Text::with_baseline(sunset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset".to_string()))?;
                 }
                 "moon_phase" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), BinaryColor::On);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
                     Text::with_baseline(moon_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
                 }
                 _ => {}
@@ -1565,13 +1515,13 @@ impl DisplayManager {
                 "weather_icon" => {
                     // Render SVG weather icon for Gray4
                     if !svg_path.is_empty() && svg_path.contains(".svg") {
-                        let full_path = format!("./assets/mono/{}", svg_path);
+                        let full_path = format!("./assets/color/{}", svg_path);
                         let icon_width = field.bounds.size.width;
                         let icon_height = field.bounds.size.height;
 
-                        // Render SVG to Gray4 buffer
+                        // Render SVG to Gray4 buffer with color support
                         let mut svg_buffer = Vec::new();
-                        if let Ok(_) = crate::drawsvg::get_svg_gray4_binary(&full_path, icon_width, icon_height, &mut svg_buffer) {
+                        if let Ok(_) = crate::drawsvg::get_svg_gray4(&full_path, icon_width, icon_height, &mut svg_buffer) {
                             // Draw the SVG buffer as ImageRaw
                             use embedded_graphics::image::{Image, ImageRaw};
                             let raw_image = ImageRaw::<Gray4>::new(&svg_buffer, icon_width);
@@ -1582,96 +1532,99 @@ impl DisplayManager {
                     }
                 }
                 "temp_glyph" => {
-                    Self::draw_weather_glyph(target, 0, pos.x, pos.y, Gray4::WHITE)
+                    use crate::weather_glyph::GLYPH_TEMPERATURE;
+                    Self::draw_weather_glyph(target, GLYPH_TEMPERATURE, pos.x, pos.y, field.fg_color.to_gray4())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw temp glyph".to_string()))?;
                 }
                 "humidity_glyph" => {
-                    Self::draw_weather_glyph(target, 2, pos.x, pos.y, Gray4::WHITE)
+                    use crate::weather_glyph::GLYPH_HUMIDITY;
+                    Self::draw_weather_glyph(target, GLYPH_HUMIDITY, pos.x, pos.y, field.fg_color.to_gray4())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw humidity glyph".to_string()))?;
                 }
                 "wind_glyph" => {
-                    Self::draw_weather_glyph(target, 1, pos.x, pos.y, Gray4::WHITE)
+                    use crate::weather_glyph::GLYPH_WIND;
+                    Self::draw_weather_glyph(target, GLYPH_WIND, pos.x, pos.y, field.fg_color.to_gray4())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw wind glyph".to_string()))?;
                 }
                 "precip_glyph" => {
-                    Self::draw_weather_glyph(target, 3, pos.x, pos.y, Gray4::WHITE)
+                    use crate::weather_glyph::GLYPH_PRECIPITATION;
+                    Self::draw_weather_glyph(target, GLYPH_PRECIPITATION, pos.x, pos.y, field.fg_color.to_gray4())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw precip glyph".to_string()))?;
                 }
                 "temperature" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), Gray4::WHITE);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), field.fg_color.to_gray4());
                     Text::with_baseline(temp_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw temperature".to_string()))?;
                 }
                 "humidity" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), Gray4::WHITE);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
                     Text::with_baseline(humidity_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw humidity".to_string()))?;
                 }
                 "wind" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), Gray4::WHITE);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
                     Text::with_baseline(wind_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw wind".to_string()))?;
                 }
                 "precipitation" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), Gray4::WHITE);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
                     Text::with_baseline(precip_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw precipitation".to_string()))?;
                 }
                 "conditions" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_7X14), Gray4::WHITE);
-
-                    // Calculate position based on alignment
-                    let text_x = match field.alignment {
-                        crate::display::Alignment::Left => pos.x,
-                        crate::display::Alignment::Center => {
-                            // Calculate text width and center it within field bounds
-                            let font = field.font.unwrap_or(&FONT_7X14);
-                            let text_width = (conditions_text.len() as i32) * (font.character_size.width as i32);
-                            let field_width = field.bounds.size.width as i32;
-                            pos.x + (field_width - text_width) / 2
-                        }
-                        crate::display::Alignment::Right => {
-                            let font = field.font.unwrap_or(&FONT_7X14);
-                            let text_width = (conditions_text.len() as i32) * (font.character_size.width as i32);
-                            let field_width = field.bounds.size.width as i32;
-                            pos.x + field_width - text_width
-                        }
-                    };
-
-                    Text::with_baseline(conditions_text, Point::new(text_x, pos.y), style, Baseline::Top)
-                        .draw(target)
+                    let font = field.font.unwrap_or(&FONT_7X14);
+                    let style = MonoTextStyle::new(font, Gray4::WHITE);
+                    // Use DRY helper for text rendering
+                    Self::draw_field_text_gray4(target, field, conditions_text, style)
                         .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
                 }
                 "sunrise_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNRISE;
-                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, Gray4::WHITE)
+                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, field.fg_color.to_gray4())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
                 }
                 "sunrise" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), Gray4::WHITE);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
                     Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise".to_string()))?;
                 }
                 "sunset_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNSET;
-                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, Gray4::WHITE)
+                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, field.fg_color.to_gray4())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
                 }
+                "moonrise_glyph" => {
+                    use crate::weather_glyph::GLYPH_MOONRISE;
+                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_gray4())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
+                }
+                "moonset_glyph" => {
+                    use crate::weather_glyph::GLYPH_MOONSET;
+                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_gray4())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
+                }
                 "sunset" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), Gray4::WHITE);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
                     Text::with_baseline(sunset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset".to_string()))?;
                 }
                 "moon_phase" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), Gray4::WHITE);
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
                     Text::with_baseline(moon_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
+                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
                 }
                 _ => {}
@@ -1990,12 +1943,12 @@ impl DisplayManager {
         svg_path: &str,
     ) -> Result<(), DisplayError> {
         if !svg_path.is_empty() && svg_path.contains(".svg") {
-            let full_path = format!("./assets/mono/{}", svg_path);
+            let full_path = format!("./assets/color/{}", svg_path);
             let icon_width = field.bounds.size.width;
             let icon_height = field.bounds.size.height;
 
             let mut svg_buffer = Vec::new();
-            if let Ok(_) = crate::drawsvg::get_svg_gray4_binary(&full_path, icon_width, icon_height, &mut svg_buffer) {
+            if let Ok(_) = crate::drawsvg::get_svg_gray4(&full_path, icon_width, icon_height, &mut svg_buffer) {
                 use embedded_graphics::image::{Image, ImageRaw};
                 let raw_image = ImageRaw::<Gray4>::new(&svg_buffer, icon_width);
                 Image::new(&raw_image, field.position())
@@ -2006,63 +1959,91 @@ impl DisplayManager {
         Ok(())
     }
 
+    /// Text rendering helper for BinaryColor using TextBoxStyleBuilder
+    ///
+    /// Uses embedded_text's TextBoxStyleBuilder for proper text alignment and layout.
+    #[inline]
+    fn draw_field_text_mono(
+        target: &mut impl DrawTarget<Color = BinaryColor>,
+        field: &crate::display::Field,
+        text: &str,
+        style: embedded_graphics::mono_font::MonoTextStyle<'static, BinaryColor>,
+    ) -> Result<(), DisplayError>
+    {
+        use embedded_text::{
+            style::TextBoxStyleBuilder,
+            TextBox,
+        };
+
+        let textbox_style = TextBoxStyleBuilder::new()
+            .alignment(field.horizontal_alignment)
+            .vertical_alignment(field.vertical_alignment)
+            .build();
+
+        TextBox::with_textbox_style(
+            text,
+            field.bounds,
+            style,
+            textbox_style,
+        )
+        .draw(target)
+        .map(|_| ()) // TextBox::draw returns &str, map to ()
+        .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))
+    }
+
+    /// Text rendering helper for Gray4 using TextBoxStyleBuilder
+    ///
+    /// Uses embedded_text's TextBoxStyleBuilder for proper text alignment and layout.
+    #[inline]
+    fn draw_field_text_gray4(
+        target: &mut impl DrawTarget<Color = Gray4>,
+        field: &crate::display::Field,
+        text: &str,
+        style: embedded_graphics::mono_font::MonoTextStyle<'static, Gray4>,
+    ) -> Result<(), DisplayError>
+    {
+        use embedded_text::{
+            style::TextBoxStyleBuilder,
+            TextBox,
+        };
+
+        let textbox_style = TextBoxStyleBuilder::new()
+            .alignment(field.horizontal_alignment)
+            .vertical_alignment(field.vertical_alignment)
+            .build();
+
+        TextBox::with_textbox_style(
+            text,
+            field.bounds,
+            style,
+            textbox_style,
+        )
+        .draw(target)
+        .map(|_| ()) // TextBox::draw returns &str, map to ()
+        .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))
+    }
+
     fn render_centered_text_mono(
         target: &mut impl DrawTarget<Color = BinaryColor>,
         field: &crate::display::Field,
         text: &str,
     ) -> Result<(), DisplayError> {
         use embedded_graphics::mono_font::MonoTextStyle;
-        use embedded_graphics::text::{Text, Baseline};
         use embedded_graphics::primitives::{PrimitiveStyle, Rectangle as EgRect};
 
         // Draw border if specified
         if field.border > 0 {
             let rect = EgRect::new(field.position(), field.bounds.size);
-            rect.into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, field.border as u32))
+            rect.into_styled(PrimitiveStyle::with_stroke(field.fg_color.to_binary(), field.border as u32))
                 .draw(target)
                 .map_err(|_| DisplayError::DrawingError("Failed to draw border".to_string()))?;
         }
 
         let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_4X6);
-        let style = MonoTextStyle::new(font, BinaryColor::On);
+        let style = MonoTextStyle::new(font, field.fg_color.to_binary());
 
-        if field.use_styled {
-
-            use embedded_text::{
-                style::TextBoxStyleBuilder,
-                TextBox,
-            };
-
-            let textbox_style = 
-                TextBoxStyleBuilder::new()
-                    .alignment(field.horizontal_alignment)
-                    .vertical_alignment(field.vertical_alignment)
-                    .build();
-
-            TextBox::with_textbox_style(
-                text,
-                field.bounds,
-                style,
-                textbox_style,
-            )
-            .draw(target)
-            .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
-
-        } else {
-
-            let text_x = if field.alignment == crate::display::Alignment::Center {
-                let text_width = (text.len() as i32) * (font.character_size.width as i32);
-                let field_width = field.bounds.size.width as i32;
-                field.position().x + (field_width - text_width) / 2
-            } else {
-                field.position().x
-            };
-
-            Text::with_baseline(text, Point::new(text_x, field.position().y), style, Baseline::Top)
-                .draw(target)
-                .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))?;
-        }
-        Ok(())
+        // Use DRY helper for text rendering
+        Self::draw_field_text_mono(target, field, text, style)
     }
 
     fn render_centered_text_gray4(
@@ -2071,57 +2052,21 @@ impl DisplayManager {
         text: &str,
     ) -> Result<(), DisplayError> {
         use embedded_graphics::mono_font::MonoTextStyle;
-        use embedded_graphics::text::{Text, Baseline};
         use embedded_graphics::primitives::{PrimitiveStyle, Rectangle as EgRect};
 
         // Draw border if specified
         if field.border > 0 {
             let rect = EgRect::new(field.position(), field.bounds.size);
-            rect.into_styled(PrimitiveStyle::with_stroke(Gray4::WHITE, field.border as u32))
+            rect.into_styled(PrimitiveStyle::with_stroke(field.fg_color.to_gray4(), field.border as u32))
                 .draw(target)
                 .map_err(|_| DisplayError::DrawingError("Failed to draw border".to_string()))?;
         }
 
         let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_4X6);
-        let style = MonoTextStyle::new(font, Gray4::WHITE);
+        let style = MonoTextStyle::new(font, field.fg_color.to_gray4());
 
-        if field.use_styled {
-
-            use embedded_text::{
-                style::TextBoxStyleBuilder,
-                TextBox,
-            };
-
-            let textbox_style = 
-                TextBoxStyleBuilder::new()
-                    .alignment(field.horizontal_alignment)
-                    .vertical_alignment(field.vertical_alignment)
-                    .build();
-
-            TextBox::with_textbox_style(
-                text,
-                field.bounds,
-                style,
-                textbox_style,
-            )
-            .draw(target)
-            .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
-
-        } else {
-            let text_x = if field.alignment == crate::display::Alignment::Center {
-                let text_width = (text.len() as i32) * (font.character_size.width as i32);
-                let field_width = field.bounds.size.width as i32;
-                field.position().x + (field_width - text_width) / 2
-            } else {
-                field.position().x
-            };
-
-            Text::with_baseline(text, Point::new(text_x, field.position().y), style, Baseline::Top)
-                .draw(target)
-                .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))?;
-        }
-
-        Ok(())
+        // Use DRY helper for text rendering
+        Self::draw_field_text_gray4(target, field, text, style)
     }
 
     fn render_box_mono(
@@ -2160,6 +2105,106 @@ impl DisplayManager {
         Ok(())
     }
 
+
+    /// Render splash screen for monochrome displays
+    fn render_splash_mono(
+        target: &mut impl DrawTarget<Color = BinaryColor>,
+        page: &crate::display::PageLayout,
+        version: &str,
+        build_date: &str,
+        status: Option<&str>,
+    ) -> Result<(), DisplayError> {
+        use embedded_graphics::mono_font::MonoTextStyle;
+
+        for field in page.fields() {
+            match field.name.as_str() {
+                "logo_svg" => {
+                    // Render logo SVG
+                    let svg_path = "./assets/lymonslogo.svg";
+                    let mut svg_buffer = Vec::new();
+                    if let Ok(_) = crate::drawsvg::get_svg(
+                        svg_path,
+                        field.bounds.size.width,
+                        field.bounds.size.height,
+                        &mut svg_buffer
+                    ) {
+                        use embedded_graphics::image::{Image, ImageRaw};
+                        let raw_image = ImageRaw::<BinaryColor>::new(&svg_buffer, field.bounds.size.width);
+                        Image::new(&raw_image, field.position())
+                            .draw(target)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw logo".to_string()))?;
+                    }
+                }
+                "version" => {
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X13_BOLD), field.fg_color.to_binary());
+                    Self::draw_field_text_mono(target, field, version, style)?;
+                }
+                "build_date" => {
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_binary());
+                    Self::draw_field_text_mono(target, field, build_date, style)?;
+                }
+                "status" => {
+                    // Optional status field - render if provided
+                    if let Some(status_text) = status {
+                        let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_binary());
+                        Self::draw_field_text_mono(target, field, status_text, style)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Render splash screen for grayscale displays
+    fn render_splash_gray4(
+        target: &mut impl DrawTarget<Color = Gray4>,
+        page: &crate::display::PageLayout,
+        version: &str,
+        build_date: &str,
+        status: Option<&str>,
+    ) -> Result<(), DisplayError> {
+        use embedded_graphics::mono_font::MonoTextStyle;
+
+        for field in page.fields() {
+            match field.name.as_str() {
+                "logo_svg" => {
+                    // Render logo SVG with color support
+                    let svg_path = "./assets/lymonslogo.svg";
+                    let mut svg_buffer = Vec::new();
+                    if let Ok(_) = crate::drawsvg::get_svg_gray4(
+                        svg_path,
+                        field.bounds.size.width,
+                        field.bounds.size.height,
+                        &mut svg_buffer
+                    ) {
+                        use embedded_graphics::image::{Image, ImageRaw};
+                        let raw_image = ImageRaw::<Gray4>::new(&svg_buffer, field.bounds.size.width);
+                        Image::new(&raw_image, field.position())
+                            .draw(target)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw logo".to_string()))?;
+                    }
+                }
+                "version" => {
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X13_BOLD), field.fg_color.to_gray4());
+                    Self::draw_field_text_gray4(target, field, version, style)?;
+                }
+                "build_date" => {
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_gray4());
+                    Self::draw_field_text_gray4(target, field, build_date, style)?;
+                }
+                "status" => {
+                    // Optional status field - render if provided
+                    if let Some(status_text) = status {
+                        let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_gray4());
+                        Self::draw_field_text_gray4(target, field, status_text, style)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 
     /// Render visualizer
     fn render_visualizer(&mut self) -> Result<(), DisplayError> {
@@ -2238,72 +2283,137 @@ impl DisplayManager {
             0.0
         };
 
-        // Get position and rectangles before mutable borrow
+        // Check if display is wide (256+ pixels)
+        let is_wide = self.capabilities.width >= 256;
+
+        // Get position and rectangles
         let position = self.easter_egg.get_top_left();
-        let artist_rect = self.easter_egg.get_artist_rect();
-        let title_rect = self.easter_egg.get_title_rect();
-        let time_rect = self.easter_egg.get_time_rect();
+        let mut artist_rect = self.easter_egg.get_artist_rect();
+        let mut title_rect = self.easter_egg.get_title_rect();
+        let mut time_rect = self.easter_egg.get_time_rect();
         let is_combined = self.easter_egg.is_combined();
 
-        // Render the easter egg SVG with animations
-        let raw_image = self.easter_egg
-            .update_and_render_blocking(
-                &self.artist,
-                &self.title,
-                self.audio_level,
-                track_percent,
-                self.current_track_time_secs,
-            )
-            .map_err(|e| DisplayError::DrawingError(format!("Easter egg render failed: {}", e)))?;
+        // For wide displays, extend text block widths by 128 pixels
+        // can_widen attribute refines the rule - cassette for example 
+        // uses text overlay for artist and track so widen is not applicable
+        if is_wide {
+            if self.easter_egg.can_widen() {
+                artist_rect.size.width += 128;
+                title_rect.size.width += 128;
+            }
+            // does not fall umder can_widen rule
+            time_rect.size.width += 128;
+        }
 
-        // Draw the rendered SVG image at the egg's position
-        {
-            let fb = self.framebuffer.as_mono_mut();
-            embedded_graphics::image::Image::new(&raw_image, position)
-                .draw(fb)
-                .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
-        } // fb borrow ends here, raw_image reference is dropped
+        // Match on framebuffer type and render accordingly
+        // We handle the render and text extraction separately for each type to avoid borrow issues
+        match &mut self.framebuffer {
+            crate::display::framebuffer::FrameBuffer::Mono(fb) => {
+                // Render the easter egg SVG
+                let raw_image = self.easter_egg
+                    .update_and_render_blocking(
+                        &self.artist,
+                        &self.title,
+                        self.audio_level,
+                        track_percent,
+                        self.current_track_time_secs,
+                    )
+                    .map_err(|e| DisplayError::DrawingError(format!("Easter egg render failed: {}", e)))?;
 
-        // Now we can borrow self.easter_egg again to get text values
+                // Draw SVG image
+                embedded_graphics::image::Image::new(&raw_image, position)
+                    .draw(fb)
+                    .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
+            } // raw_image dropped here, borrow of self.easter_egg ends
+
+            crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                // Render the easter egg SVG
+                let raw_image = self.easter_egg
+                    .update_and_render_blocking(
+                        &self.artist,
+                        &self.title,
+                        self.audio_level,
+                        track_percent,
+                        self.current_track_time_secs,
+                    )
+                    .map_err(|e| DisplayError::DrawingError(format!("Easter egg render failed: {}", e)))?;
+
+                // Convert BinaryColor image to Gray4 and draw
+                use crate::vframebuf::VarFrameBuf;
+                use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+                use embedded_graphics::prelude::*;
+
+                let width = raw_image.size().width;
+                let height = raw_image.size().height;
+
+                // Create temp monochrome framebuffer and draw image to it
+                let mut temp_fb = VarFrameBuf::new(width, height, BinaryColor::Off);
+                embedded_graphics::image::Image::new(&raw_image, Point::zero())
+                    .draw(&mut temp_fb)
+                    .map_err(|_| DisplayError::DrawingError("Failed to draw to temp buffer".to_string()))?;
+
+                // Convert and draw to Gray4 framebuffer
+                let temp_slice = temp_fb.as_mut_slice();
+                for y in 0..height {
+                    for x in 0..width {
+                        let idx = (y * width + x) as usize;
+                        let gray_color = if temp_slice[idx] == BinaryColor::On {
+                            Gray4::WHITE
+                        } else {
+                            Gray4::BLACK
+                        };
+                        Pixel(Point::new(position.x + x as i32, position.y + y as i32), gray_color)
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg pixel".to_string()))?;
+                    }
+                }
+            } // raw_image dropped here, borrow of self.easter_egg ends
+        }
+
+        // Now draw text overlays (borrow of self.easter_egg is free)
         let artist_text = self.easter_egg.get_artist().to_string();
         let title_text = self.easter_egg.get_title().to_string();
         let track_time = self.easter_egg.get_track_time();
         let show_remaining = self.show_remaining;
         let remaining_time = self.remaining_time_secs;
 
-        // Draw text overlays (get a new fb reference for each)
-        // Artist text
-        if !artist_rect.is_zero_sized() {
-            let fb = self.framebuffer.as_mono_mut();
-            Self::draw_egg_artist_text_static(fb, &artist_rect, &artist_text, is_combined)?;
-        }
-
-        // Title text (only if not combined)
-        if !is_combined && !title_rect.is_zero_sized() {
-            let fb = self.framebuffer.as_mono_mut();
-            Self::draw_egg_title_text_static(fb, &title_rect, &title_text)?;
-        }
-
-        // Time text
-        if !time_rect.is_zero_sized() {
-            let fb = self.framebuffer.as_mono_mut();
-            Self::draw_egg_time_text_static(fb, &time_rect, track_time, show_remaining, remaining_time)?;
+        match &mut self.framebuffer {
+            crate::display::framebuffer::FrameBuffer::Mono(fb) => {
+                if !artist_rect.is_zero_sized() {
+                    Self::draw_egg_artist_text_mono(fb, &artist_rect, &artist_text, is_combined, is_wide)?;
+                }
+                if !is_combined && !title_rect.is_zero_sized() {
+                    Self::draw_egg_title_text_mono(fb, &title_rect, &title_text, is_wide)?;
+                }
+                if !time_rect.is_zero_sized() {
+                    Self::draw_egg_time_text_mono(fb, &time_rect, track_time, show_remaining, remaining_time)?;
+                }
+            }
+            crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                if !artist_rect.is_zero_sized() {
+                    Self::draw_egg_artist_text_gray4(fb, &artist_rect, &artist_text, is_combined, is_wide)?;
+                }
+                if !is_combined && !title_rect.is_zero_sized() {
+                    Self::draw_egg_title_text_gray4(fb, &title_rect, &title_text, is_wide)?;
+                }
+                if !time_rect.is_zero_sized() {
+                    Self::draw_egg_time_text_gray4(fb, &time_rect, track_time, show_remaining, remaining_time)?;
+                }
+            }
         }
 
         Ok(())
     }
 
-    /// Draw artist text for easter egg (static method)
-    fn draw_egg_artist_text_static<D>(
-        target: &mut D,
+    /// Draw artist text for easter egg (monochrome)
+    fn draw_egg_artist_text_mono(
+        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
         rect: &embedded_graphics::primitives::Rectangle,
         artist_text: &str,
         is_combined: bool,
-    ) -> Result<(), DisplayError>
-    where
-        D: embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
-    {
-        use embedded_graphics::mono_font::{iso_8859_13::FONT_4X6, MonoTextStyle};
+        is_wide: bool,
+    ) -> Result<(), DisplayError> {
+        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_9X15}, MonoTextStyle};
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
             style::TextBoxStyleBuilder,
@@ -2314,7 +2424,9 @@ impl DisplayManager {
             return Ok(());
         }
 
-        let character_style = MonoTextStyle::new(&FONT_4X6, BinaryColor::On);
+        // Use larger font for wide displays (double size: 4x6 -> 9x15)
+        let font = if is_wide { &FONT_9X15 } else { &FONT_4X6 };
+        let character_style = MonoTextStyle::new(font, BinaryColor::On);
 
         // Use TextBox for automatic text wrapping (like original implementation)
         let textbox_style = if is_combined {
@@ -2344,15 +2456,13 @@ impl DisplayManager {
     }
 
     /// Draw title text for easter egg (static method)
-    fn draw_egg_title_text_static<D>(
-        target: &mut D,
+    fn draw_egg_title_text_mono(
+        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
         rect: &embedded_graphics::primitives::Rectangle,
         title_text: &str,
-    ) -> Result<(), DisplayError>
-    where
-        D: embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
-    {
-        use embedded_graphics::mono_font::{iso_8859_13::FONT_4X6, MonoTextStyle};
+        is_wide: bool,
+    ) -> Result<(), DisplayError> {
+        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_9X15}, MonoTextStyle};
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
             style::TextBoxStyleBuilder,
@@ -2363,7 +2473,9 @@ impl DisplayManager {
             return Ok(());
         }
 
-        let character_style = MonoTextStyle::new(&FONT_4X6, BinaryColor::On);
+        // Use larger font for wide displays (double size: 4x6 -> 9x15)
+        let font = if is_wide { &FONT_9X15 } else { &FONT_4X6 };
+        let character_style = MonoTextStyle::new(font, BinaryColor::On);
 
         // Center alignment, Middle vertical alignment (with wrapping)
         let textbox_style = TextBoxStyleBuilder::new()
@@ -2383,17 +2495,14 @@ impl DisplayManager {
         Ok(())
     }
 
-    /// Draw time text for easter egg (static method)
-    fn draw_egg_time_text_static<D>(
-        target: &mut D,
+    /// Draw time text for easter egg (monochrome)
+    fn draw_egg_time_text_mono(
+        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
         rect: &embedded_graphics::primitives::Rectangle,
         track_time: f32,
         show_remaining: bool,
         remaining_time: f32,
-    ) -> Result<(), DisplayError>
-    where
-        D: embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
-    {
+    ) -> Result<(), DisplayError> {
         use embedded_graphics::mono_font::{iso_8859_13::FONT_6X10, MonoTextStyle};
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
@@ -2409,6 +2518,138 @@ impl DisplayManager {
         };
 
         let character_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+
+        // Right alignment, Middle vertical alignment
+        let textbox_style = TextBoxStyleBuilder::new()
+            .alignment(HorizontalAlignment::Right)
+            .vertical_alignment(VerticalAlignment::Middle)
+            .build();
+
+        TextBox::with_textbox_style(
+            &time_str,
+            *rect,
+            character_style,
+            textbox_style,
+        )
+        .draw(target)
+        .map_err(|_| DisplayError::DrawingError("Failed to draw time text".to_string()))?;
+
+        Ok(())
+    }
+
+    /// Draw artist text for easter egg (grayscale)
+    fn draw_egg_artist_text_gray4(
+        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = embedded_graphics::pixelcolor::Gray4>,
+        rect: &embedded_graphics::primitives::Rectangle,
+        artist_text: &str,
+        is_combined: bool,
+        is_wide: bool,
+    ) -> Result<(), DisplayError> {
+        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_9X15}, MonoTextStyle};
+        use embedded_graphics::pixelcolor::Gray4;
+        use embedded_text::{
+            alignment::{HorizontalAlignment, VerticalAlignment},
+            style::TextBoxStyleBuilder,
+            TextBox,
+        };
+
+        if artist_text.is_empty() {
+            return Ok(());
+        }
+
+        // Use larger font for wide displays (double size: 4x6 -> 9x15)
+        let font = if is_wide { &FONT_9X15 } else { &FONT_4X6 };
+        let character_style = MonoTextStyle::new(font, Gray4::WHITE);
+
+        // Center alignment, Top/Middle based on is_combined
+        let textbox_style = if is_combined {
+            TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Center)
+                .vertical_alignment(VerticalAlignment::Top)
+                .build()
+        } else {
+            TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Center)
+                .vertical_alignment(VerticalAlignment::Middle)
+                .build()
+        };
+
+        TextBox::with_textbox_style(
+            artist_text,
+            *rect,
+            character_style,
+            textbox_style,
+        )
+        .draw(target)
+        .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
+
+        Ok(())
+    }
+
+    fn draw_egg_title_text_gray4(
+        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = embedded_graphics::pixelcolor::Gray4>,
+        rect: &embedded_graphics::primitives::Rectangle,
+        title_text: &str,
+        is_wide: bool,
+    ) -> Result<(), DisplayError> {
+        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_9X15}, MonoTextStyle};
+        use embedded_graphics::pixelcolor::Gray4;
+        use embedded_text::{
+            alignment::{HorizontalAlignment, VerticalAlignment},
+            style::TextBoxStyleBuilder,
+            TextBox,
+        };
+
+        if title_text.is_empty() {
+            return Ok(());
+        }
+
+        // Use larger font for wide displays (double size: 4x6 -> 9x15)
+        let font = if is_wide { &FONT_9X15 } else { &FONT_4X6 };
+        let character_style = MonoTextStyle::new(font, Gray4::WHITE);
+
+        // Center alignment, Middle vertical alignment (with wrapping)
+        let textbox_style = TextBoxStyleBuilder::new()
+            .alignment(HorizontalAlignment::Center)
+            .vertical_alignment(VerticalAlignment::Middle)
+            .build();
+
+        TextBox::with_textbox_style(
+            title_text,
+            *rect,
+            character_style,
+            textbox_style,
+        )
+        .draw(target)
+        .map_err(|_| DisplayError::DrawingError("Failed to draw title text".to_string()))?;
+
+        Ok(())
+    }
+
+    /// Draw time text for easter egg (grayscale)
+    fn draw_egg_time_text_gray4(
+        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = embedded_graphics::pixelcolor::Gray4>,
+        rect: &embedded_graphics::primitives::Rectangle,
+        track_time: f32,
+        show_remaining: bool,
+        remaining_time: f32,
+    ) -> Result<(), DisplayError> {
+        use embedded_graphics::mono_font::{iso_8859_13::FONT_6X10, MonoTextStyle};
+        use embedded_graphics::pixelcolor::Gray4;
+        use embedded_text::{
+            alignment::{HorizontalAlignment, VerticalAlignment},
+            style::TextBoxStyleBuilder,
+            TextBox,
+        };
+        use crate::deutils::seconds_to_hms;
+
+        let time_str = if show_remaining {
+            format!("-{}", seconds_to_hms(remaining_time))
+        } else {
+            seconds_to_hms(track_time)
+        };
+
+        let character_style = MonoTextStyle::new(&FONT_6X10, Gray4::WHITE);
 
         // Right alignment, Middle vertical alignment
         let textbox_style = TextBoxStyleBuilder::new()
@@ -2614,7 +2855,85 @@ impl DisplayManager {
 
     /// Stub methods for OledDisplay compatibility
     pub fn connections(&mut self, _inet: &str, _eth0: &str, _wlan0: &str) {}
-    pub async fn splash(&mut self, _show: bool, _version: &str, _build_date: &str) -> Result<(), DisplayError> { Ok(()) }
+
+    /// Display splash screen with logo, version, and build date
+    pub async fn splash(&mut self, show: bool, version: &str, build_date: &str) -> Result<(), DisplayError> {
+        if !show {
+            self.splash_active = false;
+            return Ok(());
+        }
+
+        // Store splash state for status updates
+        self.splash_active = true;
+        self.splash_version = version.to_string();
+        self.splash_build_date = build_date.to_string();
+
+        info!("Rendering splash screen...");
+
+        // Get splash page layout
+        let splash_page = self.layout_manager.create_splash_page();
+
+        // Clear display
+        self.clear();
+
+        // Render based on framebuffer type
+        match &mut self.framebuffer {
+            crate::display::framebuffer::FrameBuffer::Mono(fb) => {
+                Self::render_splash_mono(fb, &splash_page, version, build_date, None)?;
+            }
+            crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                Self::render_splash_gray4(fb, &splash_page, version, build_date, None)?;
+            }
+        }
+
+        // Flush to display
+        self.driver.flush()?;
+
+        // Hold splash for a moment
+        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+
+        Ok(())
+    }
+
+    /// Update splash screen status message (during initialization)
+    pub fn update_splash_status(&mut self, status: &str) -> Result<(), DisplayError> {
+        if !self.splash_active {
+            return Ok(());
+        }
+
+        // Get splash page layout
+        let splash_page = self.layout_manager.create_splash_page();
+
+        // Clear display
+        self.clear();
+
+        // Render with status message
+        match &mut self.framebuffer {
+            crate::display::framebuffer::FrameBuffer::Mono(fb) => {
+                Self::render_splash_mono(
+                    fb,
+                    &splash_page,
+                    &self.splash_version,
+                    &self.splash_build_date,
+                    Some(status)
+                )?;
+            }
+            crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                Self::render_splash_gray4(
+                    fb,
+                    &splash_page,
+                    &self.splash_version,
+                    &self.splash_build_date,
+                    Some(status)
+                )?;
+            }
+        }
+
+        // Flush to display
+        self.driver.flush()?;
+
+        Ok(())
+    }
     /// Setup weather service with background polling
     pub async fn setup_weather(&mut self, config: &str) -> Result<(), DisplayError> {
         use crate::weather::Weather;
@@ -2725,5 +3044,93 @@ impl DisplayManager {
         // This is a hack - ideally we'd have a better way to access driver internals
         // For now, return None and we'll handle this differently
         None
+    }
+
+    /// Cycle to next easter egg animation
+    pub fn cycle_easter_egg(&mut self) {
+        use crate::eggs::set_easter_egg;
+
+        let egg_names = [
+            "bass", "cassette", "ibmpc", "moog", "reel2reel",
+            "radio40", "radio50", "scope", "technics", "tubeamp",
+            "tvtime", "vcr", "none"
+        ];
+
+        // Find current egg name
+        let current_type = self.easter_egg.egg_type;
+        let current_idx = egg_names.iter().position(|&name| {
+            let egg = set_easter_egg(name);
+            egg.egg_type == current_type
+        }).unwrap_or(0);
+
+        // Get next egg
+        let next_idx = (current_idx + 1) % egg_names.len();
+        let next_egg_name = egg_names[next_idx];
+
+        info!("Cycling easter egg: {} -> {}", egg_names[current_idx], next_egg_name);
+        self.easter_egg = set_easter_egg(next_egg_name);
+
+        // Switch to easter eggs mode
+        self.current_mode = crate::display::DisplayMode::EasterEggs;
+    }
+
+    /// Cycle to next visualization type
+    pub fn cycle_visualization(&mut self) {
+        use crate::visualization::Visualization;
+
+        let viz_types = [
+            Visualization::VuStereo,
+            Visualization::VuMono,
+            Visualization::PeakStereo,
+            Visualization::PeakMono,
+            Visualization::HistStereo,
+            Visualization::HistMono,
+            Visualization::VuStereoWithCenterPeak,
+            Visualization::AioVuMono,
+            Visualization::AioHistMono,
+        ];
+
+        // Find current viz index
+        let current_type = self.visualizer.visualization_type();
+        let current_idx = viz_types.iter().position(|&t| {
+            // Compare as debug strings since Visualization doesn't derive PartialEq
+            format!("{:?}", t) == format!("{:?}", current_type)
+        }).unwrap_or(0);
+
+        // Get next viz
+        let next_idx = (current_idx + 1) % viz_types.len();
+        let next_viz = viz_types[next_idx];
+
+        info!("Cycling visualization: {:?} -> {:?}", current_type, next_viz);
+        self.visualizer.set_visualization_type(next_viz);
+
+        // Switch to visualizer mode
+        self.current_mode = crate::display::DisplayMode::Visualizer;
+    }
+
+    /// Check and clear easter egg cycle request from emulator
+    #[cfg(feature = "emulator")]
+    pub fn check_and_clear_cycle_easter_egg(&mut self) -> bool {
+        if let Some(emu_state) = &self.emulator_state {
+            let mut state = emu_state.lock().unwrap();
+            if state.cycle_easter_egg {
+                state.cycle_easter_egg = false;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Check and clear visualization cycle request from emulator
+    #[cfg(feature = "emulator")]
+    pub fn check_and_clear_cycle_visualization(&mut self) -> bool {
+        if let Some(emu_state) = &self.emulator_state {
+            let mut state = emu_state.lock().unwrap();
+            if state.cycle_visualization {
+                state.cycle_visualization = false;
+                return true;
+            }
+        }
+        false
     }
 }

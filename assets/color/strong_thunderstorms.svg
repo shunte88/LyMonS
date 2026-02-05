@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   fill="none"
+   viewBox="0 0 48 48"
+   version="1.1"
+   id="svg4"
+   sodipodi:docname="strong_thunderstorms.svg"
+   inkscape:version="1.4.3 (1:1.4.3+202512261035+0d15f75042)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs4" />
+  <sodipodi:namedview
+     id="namedview4"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="16.625"
+     inkscape:cx="24.030075"
+     inkscape:cy="24.030075"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg4" />
+  <rect
+     x="0.0"
+     y="0.0"
+     width="48.0"
+     height="48.0"
+     fill="#ff0000"
+     stroke="none"
+     data-bg="1"
+     id="rect1"
+     style="fill:#000000;fill-opacity:1" />
+  <path
+     fill-rule="evenodd"
+     d="M30.667 21 24 34.757h6L29.257 47 44 30.962l-5.335-.021L44 21H30.667Z"
+     clip-rule="evenodd"
+     fill="#ff0000"
+     stroke="white"
+     stroke-width="1px"
+     id="path1"
+     style="stroke:none;fill:#79ecff;fill-opacity:1" />
+  <path
+     fill-rule="evenodd"
+     d="M18.667 37 16 42.291h2.4L18.103 47 24 40.832l-2.134-.008L24 37h-5.333Z"
+     clip-rule="evenodd"
+     fill="white"
+     stroke="none"
+     id="path2"
+     style="fill:#79ecff;fill-opacity:1" />
+  <path
+     fill-rule="evenodd"
+     d="M27.304 20.22 21.604 32H18.77a.836.836 0 0 1-.298-1.105l1.045-1.952c.712-1.332-.253-2.943-1.764-2.943h-3.586c-.179 0-.353.024-.521.069a1.976 1.976 0 0 0-.522-.069h-3.039c-.771 0-1.474.444-1.806 1.141l-1.821 3.828C3.223 29.366 1 26.049 1 22.209c0-5.412 4.41-9.791 9.854-9.791a9.82 9.82 0 0 1 5.151 1.447C17.271 6.554 23.674 1 31.394 1 40.009 1 47 7.936 47 16.5c0 .439-.026.865-.064 1.292H30.857a3.83 3.83 0 0 0-3.553 2.428Z"
+     clip-rule="evenodd"
+     fill="#ff0000"
+     stroke="white"
+     stroke-width="1px"
+     id="path3"
+     style="fill:#929292;fill-opacity:1" />
+  <path
+     fill-rule="evenodd"
+     d="m10 28-4 7.937h3.6L9.154 43 18 33.748l-3.201-.013L18 28h-8Z"
+     clip-rule="evenodd"
+     fill="white"
+     stroke="none"
+     id="path4"
+     style="fill:#79ecff;fill-opacity:1" />
+</svg>

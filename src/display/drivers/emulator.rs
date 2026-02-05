@@ -99,6 +99,12 @@ pub struct EmulatorState {
 
     /// Current display mode (what's actually showing)
     pub current_display_mode: crate::display::DisplayMode,
+
+    /// Request to cycle to next easter egg
+    pub cycle_easter_egg: bool,
+
+    /// Request to cycle to next visualization
+    pub cycle_visualization: bool,
 }
 
 /// Emulator display driver
@@ -172,6 +178,8 @@ impl EmulatorDriver {
             requested_mode: None,
             manual_mode_override: false,
             current_display_mode: crate::display::DisplayMode::Clock,
+            cycle_easter_egg: false,
+            cycle_visualization: false,
         }));
 
         Ok(Self {
@@ -209,6 +217,8 @@ impl EmulatorDriver {
             requested_mode: None,
             manual_mode_override: false,
             current_display_mode: crate::display::DisplayMode::Clock,
+            cycle_easter_egg: false,
+            cycle_visualization: false,
         }));
 
         Ok(Self {

@@ -16,41 +16,89 @@
 ---
 
 **Location**: `/data2/refactor/LyMonS/REFACTORING_STATE.md`
-**Last Updated**: 2026-02-04 13:00 UTC
-**Current Phase**: Weather System Complete ✓ (Current + Forecast + Wide Display + Gray4 SVG + Sunrise/Sunset Glyphs)
-**Next Phase**: Fix Translation Issue (Priority), Moon Phase Glyph Integration
+**Last Updated**: 2026-02-04 20:00 UTC
+**Current Phase**: Color Proxy System Complete ✓
+**Next Phase**: Extend color support across all display modes
+**Back-burnered**: Translation feature (weather displays work, translation not activating)
 
-## 🔴 FIRST TASK - Weather Translation Issue
+## ✓ COMPLETED - Weather Translation Issue (2026-02-04 18:00)
 
-**Status**: API responds without error, but weather details are empty when translation enabled
+**Root Cause**: Units parameter format mismatch
+- User was passing `units=F` but Tomorrow.io API expects `units=imperial` or `units=metric`
+- The translation was unrelated - issue was that invalid units parameter caused API to return empty data
 
-**What Works**:
-- ✓ Translation parameter parsing fixed: use `lang=pl` (not `translate=`)
-- ✓ Gzip decoding fixed: handles both compressed and plain text responses
-- ✓ No crashes or exceptions
+**Fix Applied** (`src/weather.rs` lines 276-282):
+- Added units normalization after parameter parsing
+- Converts user-friendly formats to API-friendly formats:
+  - "F", "fahrenheit", "imperial" → "imperial"
+  - "C", "celsius", "metric" → "metric"
 
-**What Doesn't Work**:
-- ❌ Weather details empty when using `lang=pl` parameter
-- Weather API responds successfully but display shows no data
-
-**To Investigate**:
-1. Check if translation API calls are succeeding/failing silently
-2. Verify JSON parsing still works after translation
-3. Check if empty translation results are blocking data display
-4. Add debug logging to translation flow to see where data is lost
-5. Test with `lang=en` to confirm issue is translation-specific
-
-**Test Command**:
+**Test Command** (now works correctly):
 ```bash
 ./target/release/LyMonS --name mythy \
   -W "API_KEY,units=F,lang=pl,lat=42.36141470379943,lng=-71.1040784239152" \
   --config test_config.yaml
 ```
 
-**Files to Check**:
-- `src/weather.rs` lines 1151-1160 (translation call in parse_weather_code)
-- `src/translate.rs` (Translation implementation)
-- Weather data parsing after translation attempt
+## ✓ COMPLETED - Text Rendering DRY Refactoring (2026-02-04 18:30)
+
+**Problem**: Duplicate code for styled vs legacy text alignment (appeared 6+ times)
+- Each location had if/else block: use_styled → TextBoxStyleBuilder vs legacy → manual calculation
+- ~40 lines of code duplication per instance
+
+**Solution Implemented**:
+- Created `draw_field_text_mono()` and `draw_field_text_gray4()` helper methods
+- Consolidated both styled and legacy paths into single reusable function
+- Eliminated ~200 lines of duplicate code across manager.rs
+
+**Files Modified**:
+- `src/display/manager.rs` (lines 1946-2055) - Added DRY helpers
+- Refactored: `render_centered_text_mono()`, `render_centered_text_gray4()`
+- Refactored: Weather conditions rendering (both mono and gray4)
+
+## ✓ COMPLETED - Text Rendering Migration (2026-02-04 19:15)
+
+**All Tasks Complete**:
+1. ✓ Migrated clock page fields (metrics, date) to styled_alignment
+2. ✓ Migrated weather forecast fields (12 day temp/precip fields) to styled_alignment
+3. ✓ Removed dual alignment from conditions field
+4. ✓ Removed legacy alignment code path from DRY helpers
+5. ✓ Cleaned up Field struct (removed Alignment enum, use_styled flag, align() method)
+6. ✓ Updated module exports
+
+**Code Elimination**:
+- ~300 lines of duplicate/legacy code removed
+- Field struct simplified (2 fields removed)
+- Single source of truth: embedded_text's TextBoxStyleBuilder
+
+**Files Modified**:
+- `src/display/field.rs` - Removed Alignment enum, alignment field, use_styled flag
+- `src/display/layout_manager.rs` - All fields use styled_alignment()
+- `src/display/manager.rs` - Simplified DRY helpers (no conditional logic)
+- `src/display/mod.rs` - Removed Alignment from exports
+
+**Result**: Clean, maintainable codebase with library-driven text layout
+
+## ✓ COMPLETED - Color Proxy System (2026-02-04 20:00)
+
+**Tested & Verified**:
+1. ✓ Added Cyan color → Clock date field (Gray4 value 11)
+2. ✓ Added Green color → Clock digits (Gray4 value 8)
+3. ✓ Updated ClockDisplay to accept color parameters
+4. ✓ Verified color conversions work correctly on Gray4 displays
+
+**Color Conversions Working**:
+- Cyan: Mono=On, Gray4=11 (light gray, 73%)
+- Green: Mono=On, Gray4=8 (medium gray, 50%)
+- Extensible: Easy to add more colors (Red, Blue, Yellow, etc.)
+
+**Files Modified**:
+- `src/display/color.rs` - Added Cyan and Green variants
+- `src/display/layout_manager.rs` - Clock fields use Color::Cyan and Color::Green
+- `src/display/components/clock.rs` - Render methods accept color parameters
+- `src/display/manager.rs` - Clock rendering passes field colors
+
+**Result**: Universal color system adapts seamlessly to display capabilities
 
 > **Note**: This file is maintained at the project root and persists across reboots.
 > It serves as the primary reference for project state and resumption context.

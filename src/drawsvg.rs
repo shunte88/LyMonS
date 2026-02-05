@@ -199,3 +199,27 @@ pub fn get_svg_gray4_binary(
     }
     Ok(())
 }
+
+/// Render an SVG to a Gray4 buffer with color support
+pub fn get_svg_gray4(
+    path: &str,
+    width: u32,
+    height: u32,
+    buffer: &mut Vec<u8>,
+) -> Result<(), PutSvgError<std::io::Error>>
+{
+    if fs_std::metadata(path).is_ok() {
+        let data = fs_std::read_to_string(path).map_err(PutSvgError::Io)?;
+        let buffer_size = (height as usize * width as usize + 1) / 2;
+        *buffer = vec![0u8; buffer_size];
+
+        let svg_renderer = SvgImageRenderer::new(&data, width, height)
+            .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+        svg_renderer
+            .render_to_buffer_gray4(buffer)
+            .map_err(|e| PutSvgError::Svg(Box::new(e)))?;
+    } else {
+        warn!("{path} doesn't exist!");
+    }
+    Ok(())
+}

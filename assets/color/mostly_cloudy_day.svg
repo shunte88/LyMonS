@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   fill="none"
+   viewBox="0 0 48 48"
+   version="1.1"
+   id="svg2"
+   sodipodi:docname="mostly_cloudy_day.svg"
+   inkscape:version="1.4.3 (1:1.4.3+202512261035+0d15f75042)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2" />
+  <sodipodi:namedview
+     id="namedview2"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="16.625"
+     inkscape:cx="24.030075"
+     inkscape:cy="24.030075"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg2" />
+  <rect
+     x="0.0"
+     y="0.0"
+     width="48.0"
+     height="48.0"
+     fill="#ff0000"
+     stroke="none"
+     data-bg="1"
+     id="rect1"
+     style="fill:#000000;fill-opacity:1" />
+  <path
+     d="M26.97 5.324a6.272 6.272 0 0 1 5.986 5.985 6.3 6.3 0 0 0 1.532 3.835c2.082 2.401 2.084 5.985-.012 8.373l-.243.277a6.803 6.803 0 0 0-1.658 3.866 6.923 6.923 0 0 1-6.248 6.248 6.8 6.8 0 0 0-3.866 1.658l-.277.243c-2.388 2.097-5.973 2.094-8.373.013a6.294 6.294 0 0 0-3.835-1.533 6.273 6.273 0 0 1-5.986-5.986 6.293 6.293 0 0 0-1.532-3.834c-2.082-2.401-2.084-5.986.013-8.373l.243-.277a6.808 6.808 0 0 0 1.657-3.867 6.923 6.923 0 0 1 6.248-6.247 6.803 6.803 0 0 0 3.867-1.658l.276-.243c2.388-2.097 5.973-2.095 8.373-.013a6.3 6.3 0 0 0 3.835 1.533Z"
+     fill="#ff0000"
+     stroke="white"
+     stroke-width="1px"
+     id="path1"
+     style="fill:#ffa500;fill-opacity:1;stroke:none" />
+  <path
+     fill-rule="evenodd"
+     d="M47 27.5c0 8.358-6.662 15.171-15 15.487V43H11v-.003l-.143.001C5.413 42.998 1 38.615 1 33.209c0-5.407 4.413-9.789 9.857-9.789 1.889 0 3.654.528 5.154 1.443C17.271 17.559 23.679 12 31.393 12 40.013 12 47 18.939 47 27.5Z"
+     clip-rule="evenodd"
+     fill="#ff0000"
+     stroke="white"
+     stroke-width="1px"
+     id="path2"
+     style="fill:#a9a9a9;fill-opacity:1" />
+</svg>

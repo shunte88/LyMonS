@@ -45,6 +45,15 @@ pub enum Color {
     /// White/On (100% intensity)
     White,
 
+    /// Cyan (bright blue-green, maps to LightGray on grayscale displays)
+    Cyan,
+
+    /// Green (maps to Gray on grayscale displays)
+    Green,
+
+    /// Yellow (bright, maps to LightGray on grayscale displays)
+    Yellow,
+
     /// Custom grayscale value (0-255)
     Grayscale(u8),
 }
@@ -59,6 +68,9 @@ impl Color {
             Color::Gray => BinaryColor::On,
             Color::DarkGray => BinaryColor::Off,
             Color::LightGray => BinaryColor::On,
+            Color::Cyan => BinaryColor::On, // Cyan is a bright color
+            Color::Green => BinaryColor::On, // Green is visible, maps to On
+            Color::Yellow => BinaryColor::On, // Yellow is a bright color
             Color::Grayscale(val) => {
                 if *val >= 128 {
                     BinaryColor::On
@@ -77,6 +89,9 @@ impl Color {
             Color::Gray => Gray4::new(8),
             Color::LightGray => Gray4::new(11),
             Color::White => Gray4::new(15),
+            Color::Cyan => Gray4::new(11), // Map to LightGray (bright but not full white)
+            Color::Green => Gray4::new(8), // Map to Gray (medium brightness, ~50%)
+            Color::Yellow => Gray4::new(12), // Map to bright gray (~80%)
             Color::Grayscale(val) => Gray4::new(((*val as u16 * 15) / 255) as u8),
         }
     }
@@ -97,6 +112,9 @@ impl Color {
             Color::Gray => 128,
             Color::LightGray => 170,
             Color::White => 255,
+            Color::Cyan => 180, // Bright cyan (~70% luminance)
+            Color::Green => 128, // Green (~50% luminance)
+            Color::Yellow => 200, // Bright yellow (~78% luminance)
             Color::Grayscale(val) => *val,
         }
     }

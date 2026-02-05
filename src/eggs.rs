@@ -52,6 +52,8 @@ pub const EGGS_TYPE_TVTIME: u8 = 110;
 pub const EGGS_TYPE_VCR: u8 = 120;
 pub const EGGS_TYPE_UNKNOWN: u8 = 255;
 
+pub const NO_WIDE_ASSETS: [u8; 1] = [EGGS_TYPE_CASSETTE];
+
 /// Custom error type for Eggs rendering operations.
 #[derive(Debug)]
 pub enum EggsError {
@@ -91,9 +93,10 @@ pub struct Eggs {
     time_rect: Rectangle,
     track_pcnt: f64,
     track_time_secs: f32,
+    can_widen: bool,
 }
 
-/// Sets the clock display font
+/// Loads/sets the active easter_egg
 pub fn set_easter_egg(egg_name: &str) -> Eggs {
     info!("Load egg: {}",egg_name);
     match egg_name {
@@ -101,20 +104,21 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
             Eggs::new(
                 EGGS_TYPE_BASS,
                 "./assets/bass.svg",
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(4,4), Size::new(120,6)),
                 Rectangle::new(Point::new(4,12), Size::new(120,6)),
                 48.0,
                 88.0,
                 false,
                 Rectangle::new(Point::new(48,26), Size::new(48,12)),
+                true,
             )
         },
         "cassette" => {
             Eggs::new(
                 EGGS_TYPE_CASSETTE,
-                "./assets/compactcassettef.svg",
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                "./assets/compactcassette.svg",
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(18,6), Size::new(90,6)), 
                 Rectangle::new(Point::new(18,11), Size::new(90,6)), 
                 // 13.5=0%, 0=100%
@@ -122,150 +126,163 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 13.5, 
                 false,
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                // empty time rect
+                Rectangle::new(Point::zero(), Size::new(0,0)),
+                false,
             )
         },
         "ibmpc" => {
             Eggs::new(
                 EGGS_TYPE_IBMPC,
                 "./assets/ibmpc.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(70,3), Size::new(64,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 0.0, 
                 true,
                 Rectangle::new(Point::new(70,52), Size::new(54,12)),
+                true,
             )
         },
         "moog" => {
             Eggs::new(
                 EGGS_TYPE_MOOG,
-                "./assets/moogf.svg",
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                "./assets/moog.svg",
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(83,3), Size::new(41,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)), 
+                Rectangle::new(Point::zero(), Size::new(0,0)), 
                 -10.0, 
                 0.0, 
                 true,
                 Rectangle::new(Point::new(83,52), Size::new(41,12)),
+                true,
             )
         },
         "reel2reel" => {
             Eggs::new(
                 EGGS_TYPE_REEL2REEL,
                 "./assets/reel2reels.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(72,3), Size::new(52,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 0.0, 
                 true,
                 Rectangle::new(Point::new(72,52), Size::new(52,12)),
+                true,
             )
             },
         "radio40" => {
             Eggs::new(
                 EGGS_TYPE_RADIO40,
                 "./assets/radio40s.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(64,3), Size::new(60,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 -5.0, 
                 5.0, 
                 true,
                 Rectangle::new(Point::new(64,52), Size::new(60,12)),
+                true,
             )
             },
         "radio50" => {
             Eggs::new(
                 EGGS_TYPE_RADIO50,
                 "./assets/radio502.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(74,3), Size::new(46,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 0.0, 
                 true,
                 Rectangle::new(Point::new(74,52), Size::new(46,12)),
+                true,
             )
             },
         "scope" => {
             Eggs::new(
                 EGGS_TYPE_SCOPE,
                 "./assets/scope.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(65,3), Size::new(59,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 10.0, 
                 true,
                 Rectangle::new(Point::new(65,52), Size::new(59,12)),
+                true,
             )
         },
         "technics" => {
             Eggs::new(
                 EGGS_TYPE_TECHNICS,
                 "./assets/sl1200.svg",
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(85,5), Size::new(39,56)),
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 -10.0,
                 12.0,
                 true,
                 Rectangle::new(Point::new(85,52), Size::new(39,12)),
+                true,
             )
             },
         "tubeamp" => {        
             Eggs::new(
                 EGGS_TYPE_TUBEAMP,
                 "./assets/tubeampd.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(87,3), Size::new(37,58)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 100.0, 
                 true,
                 Rectangle::new(Point::new(87,52), Size::new(37,12)),
+                true,
             )
             },
         "tvtime" => {
             Eggs::new(
                 EGGS_TYPE_TVTIME,
                 "./assets/tvtime2.svg",
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(85,3), Size::new(43,58)),
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0,
                 0.0,
                 true,
                 Rectangle::new(Point::new(85,52), Size::new(43,12)),
+                true,
             )
             },
         "vcr" => {
             Eggs::new(
                 EGGS_TYPE_VCR,
-                "./assets/vcr2000z.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
+                "./assets/vcr2000.svg", 
+                Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(4,2), Size::new(120,6)), 
                 Rectangle::new(Point::new(4,10), Size::new(120,6)), 
                 0.0, 
                 0.0, 
                 false, // should replace clock
                 Rectangle::new(Point::new(30,16), Size::new(48,12)),
+                true,
             )
             },
         _ => {
             Eggs::new(
                 EGGS_TYPE_UNKNOWN,
                 "./assets/none.svg", 
-                Rectangle::new(Point::new(0,0), Size::new(128,64)),
-                Rectangle::new(Point::new(0,0), Size::new(0,0)), 
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(0,0)), 
+                Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 0.0, 
                 false,
-                Rectangle::new(Point::new(0,0), Size::new(0,0)),
+                Rectangle::new(Point::zero(), Size::new(0,0)),
+                false,
             )
         }
     }
@@ -285,7 +302,8 @@ impl Eggs {
         low_limit: f64, 
         high_limit: f64,
         combine: bool,
-        time_rect: Rectangle
+        time_rect: Rectangle,
+        can_widen: bool,
     ) -> Self {
 
         let width = rect.size.width as usize;
@@ -308,6 +326,7 @@ impl Eggs {
             time_rect,
             track_pcnt: 0.00,
             track_time_secs: 0.00,
+            can_widen
         }
     }
 
@@ -473,6 +492,10 @@ impl Eggs {
 
     pub fn get_time_rect(&self) -> Rectangle {
         self.time_rect
+    }
+
+    pub fn can_widen(&self) -> bool {
+        self.can_widen
     }
 
     fn calc_progress_angle(&mut self, angle0:f32, angle100:f32, progress_percent: f32) -> f32 {
