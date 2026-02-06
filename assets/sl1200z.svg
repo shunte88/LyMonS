@@ -156,11 +156,11 @@
    y="53.001358" /><path
    id="ripple-even"
    transform="rotate({{ripple-even}} 33.215 31.962)"
-   style="fill:#ffffff;stroke:#b0b0b0;stroke-width:0.5;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:0;fill-opacity:1;stroke-opacity:1"
+   style="fill:#ffffff;fill-opacity:{{ripple-even}}"
    d="m 32.499027,7.5 c -2.558824,0 -5.018103,0.426904 -7.310547,1.214844 14.961118,-2.7601352 19.04896,3.49178 22.15625,4.380859 C 43.382319,9.613072 38.185279,7.5 32.499027,7.5 Z m 8.069045,15.25757 c -5.920907,-2.166814 -9.402001,-5.896003 -14.787795,-1.525148 5.18498,-2.82087 8.969144,-0.02986 14.787795,1.525148 z" />
 <path
    id="ripple-odd"
    transform="rotate({{ripple-odd}} 33.215 31.962)"
-   style="fill:#ffffff;fill-opacity:{{ripple-odd}};stroke:#b0b0b0;stroke-width:0.5;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:0;stroke-opacity:{{ripple-even}}"
+   style="fill:#ffffff;fill-opacity:{{ripple-odd}}"
    d="m 32.499027,12.5 c -3.701062,0 -7.162393,1.033086 -10.111328,2.826172 6.559846,-2.941897 13.272943,-3.393443 20.222656,0 C 39.661419,13.533086 36.200088,12.5 32.499027,12.5 Z m -7.986328,41.29297 c 2.437723,1.09667 5.141515,1.70703 7.986328,1.70703 2.844812,0 5.548604,-0.61036 7.986328,-1.70703 -5.22877,1.71808 -10.547469,1.81744 -15.972656,0 z" />
 </svg>
