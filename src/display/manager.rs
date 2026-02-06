@@ -2338,9 +2338,9 @@ impl DisplayManager {
             } // raw_image dropped here, borrow of self.easter_egg ends
 
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                // Render the easter egg SVG
+                // Render the easter egg SVG with full Gray4 color support
                 let raw_image = self.easter_egg
-                    .update_and_render_blocking(
+                    .update_and_render_blocking_gray4(
                         &self.artist,
                         &self.title,
                         self.audio_level,
@@ -2349,35 +2349,10 @@ impl DisplayManager {
                     )
                     .map_err(|e| DisplayError::DrawingError(format!("Easter egg render failed: {}", e)))?;
 
-                // Convert BinaryColor image to Gray4 and draw
-                use crate::vframebuf::VarFrameBuf;
-                use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
-                use embedded_graphics::prelude::*;
-
-                let width = raw_image.size().width;
-                let height = raw_image.size().height;
-
-                // Create temp monochrome framebuffer and draw image to it
-                let mut temp_fb = VarFrameBuf::new(width, height, BinaryColor::Off);
-                embedded_graphics::image::Image::new(&raw_image, Point::zero())
-                    .draw(&mut temp_fb)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw to temp buffer".to_string()))?;
-
-                // Convert and draw to Gray4 framebuffer
-                let temp_slice = temp_fb.as_mut_slice();
-                for y in 0..height {
-                    for x in 0..width {
-                        let idx = (y * width + x) as usize;
-                        let gray_color = if temp_slice[idx] == BinaryColor::On {
-                            Gray4::WHITE
-                        } else {
-                            Gray4::BLACK
-                        };
-                        Pixel(Point::new(position.x + x as i32, position.y + y as i32), gray_color)
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg pixel".to_string()))?;
-                    }
-                }
+                // Draw Gray4 SVG image directly
+                embedded_graphics::image::Image::new(&raw_image, position)
+                    .draw(fb)
+                    .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
             } // raw_image dropped here, borrow of self.easter_egg ends
         }
 
@@ -2889,7 +2864,7 @@ impl DisplayManager {
         let splash_page = self.layout_manager.create_splash_page();
 
         // Clear display
-        self.clear();
+        let _ = self.clear();
 
         // Render based on framebuffer type
         match &mut self.framebuffer {
@@ -2920,7 +2895,7 @@ impl DisplayManager {
         let splash_page = self.layout_manager.create_splash_page();
 
         // Clear display
-        self.clear();
+        let _ = self.clear();
 
         // Render with status message
         match &mut self.framebuffer {

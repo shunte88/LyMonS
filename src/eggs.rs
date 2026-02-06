@@ -26,9 +26,9 @@
 use chrono::{Timelike, Local};
 use embedded_graphics::{
     image::{ImageRaw},
-    pixelcolor::BinaryColor,
-    prelude::*, 
-    primitives::{Rectangle}, 
+    pixelcolor::{BinaryColor, Gray4},
+    prelude::*,
+    primitives::{Rectangle},
 };
 
 use log::{info};
@@ -450,6 +450,36 @@ impl Eggs {
                 .map_err(|e| EggsError::EggBufferError(e.to_string()))?;
         }
         let raw_image = ImageRaw::<BinaryColor>::new(&self.buffer, width);
+        Ok(raw_image)
+
+    }
+
+    /// Render to Gray4 format with full 16-level grayscale support for colorized SVGs
+    pub fn update_and_render_blocking_gray4 (
+        &mut self,
+        artist: &str,
+        title: &str,
+        level: u8,
+        track_percent: f64,
+        track_time: f32,
+    ) -> Result<ImageRaw<Gray4>, EggsError> {
+
+        let width = self.rect.size.width as u32;
+        let height = self.rect.size.height as u32;
+        if self.egg_type != EGGS_TYPE_UNKNOWN{
+            self.update(artist, title, level, track_percent, track_time)?;
+            let data = self.modified_svg_data.clone();
+            let svg_renderer = SvgImageRenderer::new(&data, width, height)
+                .map_err(|e| EggsError::EggRenderError(e.to_string()))?;
+
+            // Resize buffer for Gray4 format (2 pixels per byte)
+            let buffer_size = (height as usize * width as usize + 1) / 2;
+            self.buffer.resize(buffer_size, 0);
+
+            svg_renderer.render_to_buffer_gray4(&mut self.buffer)
+                .map_err(|e| EggsError::EggBufferError(e.to_string()))?;
+        }
+        let raw_image = ImageRaw::<Gray4>::new(&self.buffer, width);
         Ok(raw_image)
 
     }

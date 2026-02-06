@@ -16,10 +16,93 @@
 ---
 
 **Location**: `/data2/refactor/LyMonS/REFACTORING_STATE.md`
-**Last Updated**: 2026-02-04 20:00 UTC
-**Current Phase**: Color Proxy System Complete ✓
-**Next Phase**: Extend color support across all display modes
+**Last Updated**: 2026-02-06 12:15 UTC
+**Current Phase**: Histograms Gray4 Complete ✓
+**Next Phase**: Add Gray4 support to VU meters
 **Back-burnered**: Translation feature (weather displays work, translation not activating)
+
+## ✓ COMPLETED - Histogram Gray4 Support (2026-02-06 12:15)
+
+**Problem**: Histograms were only rendering in monochrome
+- Histogram code still in display_old.rs, not ported to new component architecture
+- No Gray4 support for histogram visualizations
+- Helper functions (decay physics, cap markers) not available in new component
+
+**Solution Implemented**:
+- Ported histogram drawing functions from display_old.rs to visualizer component
+- Created 8 new functions:
+  - `update_body_decay()` - Bar decay physics helper (rise fast, fall slow)
+  - `update_caps()` - Peak cap marker physics (hold then decay)
+  - `draw_hist_panel_mono()` + `draw_hist_panel_gray4()` - Panel rendering helpers
+  - `draw_hist_mono()` + `draw_hist_mono_gray4()` - Mono histogram
+  - `draw_hist_pair()` + `draw_hist_pair_gray4()` - Stereo histogram
+- Unlike peak meters, histograms use direct bar drawing (no SVG backgrounds)
+- Gray4 versions use Gray4::WHITE/BLACK for bars and labels
+
+**Constants Added**:
+- HIST_DECAY_PER_TICK = 1
+- CAP_HOLD = 500ms
+- CAP_DECAY_LPS = 8.0 levels/sec
+- CAP_THICKNESS_PX = 1
+
+**Files Modified**:
+- `src/display/components/visualizer.rs` (lines 24-35, 440-820) - Added imports, constants, and 8 histogram functions
+
+**Testing**:
+- ✅ hist_mono works on both BinaryColor and Gray4 displays
+- ✅ hist_stereo works on both BinaryColor and Gray4 displays
+- ✅ Decay physics and cap markers working correctly
+- ✅ Clean bar rendering with proper labeling
+
+**Result**: Histograms now have full Gray4 support with proper grayscale bar rendering
+
+## ✓ COMPLETED - Peak Meter Gray4 Support (2026-02-06 11:50)
+
+**Problem**: Peak meters were only rendering in monochrome
+- Visualization code still in display_old.rs, not ported to new component architecture
+- render_mono() and render_gray4() methods in visualizer component only had TODO stubs
+- No Gray4 support for peak meters (mono or stereo)
+
+**Solution Implemented**:
+- Ported peak meter drawing functions from display_old.rs to visualizer component
+- Created 4 new functions:
+  - `draw_peak_mono()` - Monochrome mono meter
+  - `draw_peak_mono_gray4()` - Gray4 mono meter
+  - `draw_peak_pair()` - Monochrome stereo meters
+  - `draw_peak_pair_gray4()` - Gray4 stereo meters
+- Wired up render_mono() and render_gray4() to dispatch to appropriate functions
+- Gray4 versions use `get_svg_gray4()` for background panels with full 16-level grayscale
+
+**Files Modified**:
+- `src/display/components/visualizer.rs` (lines 115-453) - Complete rewrite of render methods + 4 new drawing functions
+
+**Testing**:
+- ✅ peak_mono works on both BinaryColor and Gray4 displays
+- ✅ peak_stereo works on both BinaryColor and Gray4 displays
+- ✅ SVG backgrounds render correctly with grayscale
+
+**Result**: Peak meters now have full Gray4 support with proper grayscale rendering
+
+## ✓ COMPLETED - Gray4 Easter Egg Support (2026-02-06 10:30)
+
+**Problem**: Easter eggs were rendering as monochrome only on Gray4 displays
+- SVGs were rendered as BinaryColor, then converted pixel-by-pixel to Gray4::WHITE/BLACK
+- Colorized SVG information was lost - all gray levels collapsed to pure white or black
+- ~120 lines of inefficient pixel-by-pixel conversion code
+
+**Solution Implemented**:
+- Added `update_and_render_blocking_gray4()` method to Eggs struct
+- Uses `SvgImageRenderer::render_to_buffer_gray4()` for full 16-level grayscale
+- Returns `ImageRaw<Gray4>` directly without conversion
+- Easter eggs now preserve all color information as grayscale levels
+
+**Files Modified**:
+- `src/eggs.rs` (lines 27-31, 456-477) - Added Gray4 import and new render method
+- `src/display/manager.rs` (lines 2340-2355) - Replaced pixel conversion with direct Gray4 rendering
+
+**Code Reduction**: Eliminated ~30 lines of conversion code, replaced with 3-line direct draw
+
+**Result**: Colorized easter eggs now display with full grayscale fidelity on Gray4/SSD1322 displays
 
 ## ✓ COMPLETED - Weather Translation Issue (2026-02-04 18:00)
 
