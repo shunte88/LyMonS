@@ -4,7 +4,7 @@
    viewBox="0 0 48 48"
    version="1.1"
    id="svg8"
-   sodipodi:docname="scattered_snow_showers_day.svg"
+   sodipodi:docname="light_snow.svg"
    inkscape:version="1.4.3 (1:1.4.3+202512261035+0d15f75042)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -46,7 +46,7 @@
      stroke="white"
      stroke-width="1px"
      id="path1"
-     style="fill:#ffec00;fill-opacity:1;stroke:none" />
+     style="fill:#ffe100;fill-opacity:1;stroke:none" />
   <path
      fill-rule="evenodd"
      d="M47 16.499c0 8.358-6.662 15.17-15 15.487V32H11v-.004l-.143.001C5.413 31.997 1 27.615 1 22.209c0-5.406 4.413-9.789 9.857-9.789 1.889 0 3.654.528 5.154 1.443C17.271 6.559 23.678 1 31.393 1 40.013 1 47 7.939 47 16.499Z"
@@ -55,32 +55,9 @@
      stroke="white"
      stroke-width="1px"
      id="path2"
-     style="fill:#c0c0c0;fill-opacity:1" />
+     style="fill:#b6b6b6;fill-opacity:1" />
   <path
-     fill-rule="evenodd"
-     d="M23.254 29.193V34h1.492v-4.807l4.508 2.403.746-1.192L25.491 28 30 25.596l-.746-1.192-4.508 2.404V22h-1.492v4.807l-4.508-2.403L18 25.596 22.509 28 18 30.404l.746 1.192 4.508-2.403Z"
-     clip-rule="evenodd"
-     fill="#ff0000"
-     stroke="white"
-     stroke-width="1px"
      id="path3"
-     style="stroke:none;fill:#ffffff;fill-opacity:1" />
-  <path
-     fill-rule="evenodd"
-     d="M34.379 39.993V44h1.242v-4.007l3.758 2.003.621-.993L36.243 39 40 36.996l-.621-.993-3.758 2.003V34h-1.242v4.006l-3.758-2.003-.621.993L33.757 39 30 41.003l.621.993 3.758-2.003Z"
-     clip-rule="evenodd"
-     fill="#ff0000"
-     stroke="white"
-     stroke-width="1px"
-     id="path5"
-     style="fill:#ffffff;fill-opacity:1;stroke:none" />
-  <path
-     fill-rule="evenodd"
-     d="M39.254 25.193V30h1.491v-4.807l4.509 2.403.746-1.192L41.491 24 46 21.596l-.746-1.192-4.509 2.404V18h-1.491v4.807l-4.508-2.403L34 21.596 38.509 24 34 26.404l.746 1.192 4.508-2.403Z"
-     clip-rule="evenodd"
-     fill="#ff0000"
-     stroke="white"
-     stroke-width="1px"
-     id="path7"
-     style="stroke:none;fill:#ffffff;fill-opacity:1" />
+     style="stroke:none;fill:#ffffff;fill-opacity:1"
+     d="M 39.253906 18 L 39.253906 22.806641 L 34.746094 20.404297 L 34 21.595703 L 38.509766 24 L 34 26.404297 L 34.746094 27.595703 L 39.253906 25.193359 L 39.253906 30 L 40.744141 30 L 40.744141 25.193359 L 45.253906 27.595703 L 46 26.404297 L 41.490234 24 L 46 21.595703 L 45.253906 20.404297 L 40.744141 22.808594 L 40.744141 18 L 39.253906 18 z M 23.253906 22 L 23.253906 26.806641 L 18.746094 24.404297 L 18 25.595703 L 22.509766 28 L 18 30.404297 L 18.746094 31.595703 L 23.253906 29.193359 L 23.253906 34 L 24.746094 34 L 24.746094 29.193359 L 29.253906 31.595703 L 30 30.404297 L 25.490234 28 L 30 25.595703 L 29.253906 24.404297 L 24.746094 26.808594 L 24.746094 22 L 23.253906 22 z M 34.378906 34 L 34.378906 38.005859 L 30.621094 36.003906 L 30 36.996094 L 33.757812 39 L 30 41.003906 L 30.621094 41.996094 L 34.378906 39.992188 L 34.378906 44 L 35.621094 44 L 35.621094 39.992188 L 39.378906 41.996094 L 40 41.003906 L 36.242188 39 L 40 36.996094 L 39.378906 36.003906 L 35.621094 38.005859 L 35.621094 34 L 34.378906 34 z " />
 </svg>

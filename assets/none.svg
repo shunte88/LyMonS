@@ -10,9 +10,10 @@
   <defs
      id="defs1" />
   <rect
-     id="none"
-     width="0"
-     height="0"
+     style="fill:#000000;fill-opacity:1;stroke-linecap:square"
+     id="rect1"
+     width="128"
+     height="64"
      x="0"
      y="0" />
 </svg>

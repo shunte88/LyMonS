@@ -48,6 +48,7 @@ use crate::metrics::MachineMetrics;
 use crate::vision::LastVizState;
 use crate::display_old::{RepeatMode, ShuffleMode};
 
+use embedded_graphics::mono_font::ascii::FONT_4X6;
 use log::{info, warn};
 use std::time::Instant;
 use arrayvec::ArrayString;
@@ -1793,10 +1794,8 @@ impl DisplayManager {
         day5_name: &str, day5_temp: &str, day5_precip: &str, day5_svg: &str,
         day6_name: &str, day6_temp: &str, day6_precip: &str, day6_svg: &str,
     ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::iso_8859_13::FONT_4X6;
 
         for field in page.fields() {
-            let pos = field.position();
 
             match field.name.as_str() {
                 // Day 1
@@ -1859,10 +1858,8 @@ impl DisplayManager {
         day5_name: &str, day5_temp: &str, day5_precip: &str, day5_svg: &str,
         day6_name: &str, day6_temp: &str, day6_precip: &str, day6_svg: &str,
     ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::iso_8859_13::FONT_4X6;
 
         for field in page.fields() {
-            let pos = field.position();
 
             match field.name.as_str() {
                 // Day 1
@@ -2285,6 +2282,7 @@ impl DisplayManager {
 
         // Check if display is wide (256+ pixels)
         let is_wide = self.capabilities.width >= 256;
+        let can_widen = self.easter_egg.can_widen();
 
         // Get position and rectangles
         let position = self.easter_egg.get_top_left();
@@ -2297,12 +2295,25 @@ impl DisplayManager {
         // can_widen attribute refines the rule - cassette for example 
         // uses text overlay for artist and track so widen is not applicable
         if is_wide {
-            if self.easter_egg.can_widen() {
-                artist_rect.size.width += 128;
-                title_rect.size.width += 128;
+            if can_widen {
+                if artist_rect.size.width != 0 {
+                    artist_rect.size.width += 128;
+                    if artist_rect.top_left.x+artist_rect.size.width as i32 > self.capabilities.width  as i32{
+                        artist_rect.size.width = self.capabilities.width - (artist_rect.top_left.x - 4) as u32 
+                    }
+                }
+                if title_rect.size.width != 0 {
+                    title_rect.size.width += 128;
+                    if title_rect.top_left.x+title_rect.size.width as i32 > self.capabilities.width  as i32{
+                        title_rect.size.width = self.capabilities.width - (title_rect.top_left.x - 4) as u32 
+                    }
+                }
             }
             // does not fall umder can_widen rule
             time_rect.size.width += 128;
+            if time_rect.top_left.x+time_rect.size.width as i32 > self.capabilities.width  as i32{
+                time_rect.size.width = self.capabilities.width - (time_rect.top_left.x - 4) as u32 
+            }
         }
 
         // Match on framebuffer type and render accordingly
@@ -2380,10 +2391,10 @@ impl DisplayManager {
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
                 if !artist_rect.is_zero_sized() {
-                    Self::draw_egg_artist_text_mono(fb, &artist_rect, &artist_text, is_combined, is_wide)?;
+                    Self::draw_egg_artist_text_mono(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen)?;
                 }
                 if !is_combined && !title_rect.is_zero_sized() {
-                    Self::draw_egg_title_text_mono(fb, &title_rect, &title_text, is_wide)?;
+                    Self::draw_egg_title_text_mono(fb, &title_rect, &title_text, is_wide, can_widen)?;
                 }
                 if !time_rect.is_zero_sized() {
                     Self::draw_egg_time_text_mono(fb, &time_rect, track_time, show_remaining, remaining_time)?;
@@ -2391,10 +2402,10 @@ impl DisplayManager {
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
                 if !artist_rect.is_zero_sized() {
-                    Self::draw_egg_artist_text_gray4(fb, &artist_rect, &artist_text, is_combined, is_wide)?;
+                    Self::draw_egg_artist_text_gray4(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen)?;
                 }
                 if !is_combined && !title_rect.is_zero_sized() {
-                    Self::draw_egg_title_text_gray4(fb, &title_rect, &title_text, is_wide)?;
+                    Self::draw_egg_title_text_gray4(fb, &title_rect, &title_text, is_wide, can_widen)?;
                 }
                 if !time_rect.is_zero_sized() {
                     Self::draw_egg_time_text_gray4(fb, &time_rect, track_time, show_remaining, remaining_time)?;
@@ -2412,8 +2423,9 @@ impl DisplayManager {
         artist_text: &str,
         is_combined: bool,
         is_wide: bool,
+        can_widen: bool,
     ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_9X15}, MonoTextStyle};
+        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_7X13_BOLD}, MonoTextStyle};
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
             style::TextBoxStyleBuilder,
@@ -2424,8 +2436,8 @@ impl DisplayManager {
             return Ok(());
         }
 
-        // Use larger font for wide displays (double size: 4x6 -> 9x15)
-        let font = if is_wide { &FONT_9X15 } else { &FONT_4X6 };
+        // Use larger font for wide displays (double size: 4x6 -> 8x13)
+        let font = if is_wide && can_widen{ &FONT_7X13_BOLD } else { &FONT_4X6 };
         let character_style = MonoTextStyle::new(font, BinaryColor::On);
 
         // Use TextBox for automatic text wrapping (like original implementation)
@@ -2461,8 +2473,9 @@ impl DisplayManager {
         rect: &embedded_graphics::primitives::Rectangle,
         title_text: &str,
         is_wide: bool,
+        can_widen: bool,
     ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_9X15}, MonoTextStyle};
+        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_7X13_BOLD}, MonoTextStyle};
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
             style::TextBoxStyleBuilder,
@@ -2473,8 +2486,8 @@ impl DisplayManager {
             return Ok(());
         }
 
-        // Use larger font for wide displays (double size: 4x6 -> 9x15)
-        let font = if is_wide { &FONT_9X15 } else { &FONT_4X6 };
+        // Use larger font for wide displays (double size: 4x6 -> 8x13)
+        let font = if is_wide && can_widen{ &FONT_7X13_BOLD } else { &FONT_4X6 };
         let character_style = MonoTextStyle::new(font, BinaryColor::On);
 
         // Center alignment, Middle vertical alignment (with wrapping)
@@ -2544,8 +2557,9 @@ impl DisplayManager {
         artist_text: &str,
         is_combined: bool,
         is_wide: bool,
+        can_widen: bool,
     ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_9X15}, MonoTextStyle};
+        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_7X13_BOLD}, MonoTextStyle};
         use embedded_graphics::pixelcolor::Gray4;
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
@@ -2557,8 +2571,8 @@ impl DisplayManager {
             return Ok(());
         }
 
-        // Use larger font for wide displays (double size: 4x6 -> 9x15)
-        let font = if is_wide { &FONT_9X15 } else { &FONT_4X6 };
+        // Use larger font for wide displays (double size: 4x6 -> 8x13)
+        let font = if is_wide && can_widen { &FONT_7X13_BOLD } else { &FONT_4X6 };
         let character_style = MonoTextStyle::new(font, Gray4::WHITE);
 
         // Center alignment, Top/Middle based on is_combined
@@ -2591,8 +2605,9 @@ impl DisplayManager {
         rect: &embedded_graphics::primitives::Rectangle,
         title_text: &str,
         is_wide: bool,
+        can_widen: bool,
     ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_9X15}, MonoTextStyle};
+        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_7X13_BOLD}, MonoTextStyle};
         use embedded_graphics::pixelcolor::Gray4;
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
@@ -2604,8 +2619,8 @@ impl DisplayManager {
             return Ok(());
         }
 
-        // Use larger font for wide displays (double size: 4x6 -> 9x15)
-        let font = if is_wide { &FONT_9X15 } else { &FONT_4X6 };
+        // Use larger font for wide displays (double size: 4x6 -> 8x13)
+        let font = if is_wide && can_widen { &FONT_7X13_BOLD } else { &FONT_4X6 };
         let character_style = MonoTextStyle::new(font, Gray4::WHITE);
 
         // Center alignment, Middle vertical alignment (with wrapping)

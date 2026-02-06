@@ -5,7 +5,7 @@
    version="1.1"
    id="svg2"
    sodipodi:docname="rain_with_cloudy_dark.svg"
-   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   inkscape:version="1.4.3 (1:1.4.3+202512261035+0d15f75042)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -22,8 +22,8 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="16.285714"
-     inkscape:cx="24.530702"
-     inkscape:cy="24.5"
+     inkscape:cx="24.469299"
+     inkscape:cy="24.469299"
      inkscape:window-width="1920"
      inkscape:window-height="1011"
      inkscape:window-x="0"
@@ -38,14 +38,15 @@
      fill="#ff0000"
      stroke="none"
      data-bg="1"
-     id="rect1" />
+     id="rect1"
+     style="fill:#000000;fill-opacity:1" />
   <path
      d="M16.549 2.21a.2.2 0 0 0-.278 0l-9.538 9.218c-5.344 5.166-5.343 13.54.001 18.706 5.345 5.165 14.01 5.165 19.354 0 5.344-5.166 5.344-13.54 0-18.705a13.117 13.117 0 0 0-.086-.082L16.55 2.21Z"
      fill="#ff0000"
      stroke="white"
      stroke-width="1px"
      id="path1"
-     style="fill:#ffffff;fill-opacity:1;stroke:none" />
+     style="fill:#3ccdff;fill-opacity:1;stroke:none" />
   <path
      fill-rule="evenodd"
      d="M19.803 37.18c-.556.9-.876 1.96-.876 3.093 0 3.274 2.672 5.927 5.968 5.927a2.245 2.245 0 0 1 .086 0h12.714v-.007c5.048-.191 9.082-4.316 9.082-9.377 0-5.182-4.23-9.384-9.45-9.384-2.636 0-7.622 1.545-9.312 7.789 0 0-1.133-.575-1.767-.721a17.334 17.334 0 0 1-6.445 2.68Z"
@@ -53,5 +54,6 @@
      fill="#ff0000"
      stroke="white"
      stroke-width="1px"
-     id="path2" />
+     id="path2"
+     style="fill:#8e8e8e;fill-opacity:1" />
 </svg>

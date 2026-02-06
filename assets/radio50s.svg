@@ -11,9 +11,16 @@
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg"><defs
    id="defs1" />
+  <rect
+   style="fill:#000000;fill-opacity:1"
+   id="background"
+   width="128"
+   height="64"
+   x="0"
+   y="0" />
    <path
    id="rect77"
-   style="fill:#000000;fill-opacity:1;stroke-width:0.6;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
+   style="fill:#001d79;fill-opacity:1;stroke-width:0.6;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
    d="M 9.5951991,10.798569 H 63.352736 L 68.110828,52.662368 5.7422286,53.416443 5.5485244,48.670419 Z" /><path
    id="rect2"
    style="fill:#ffffff;fill-opacity:1;stroke-width:0.6;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
@@ -49,7 +56,7 @@
    style="fill:#ffffff;fill-opacity:1;stroke-width:0.6;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
    d="m 26,38 v 9 h 1 v -8 h 19 v 8 h 1 v -9 z" /><path
    id="progress-linear"
-   style="fill:#00ff03;fill-opacity:1;stroke-width:0.6;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
+   style="fill:#89ff8a;fill-opacity:1;stroke-width:0.6;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
    d="m 28,40 v 2 5 h 1 v -5 h 1 z" /><path
    id="path59"
    style="fill:#ff8500;fill-opacity:1;stroke-width:0.6;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"

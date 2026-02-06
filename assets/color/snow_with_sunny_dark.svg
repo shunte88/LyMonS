@@ -5,7 +5,7 @@
    version="1.1"
    id="svg3"
    sodipodi:docname="snow_with_sunny_dark.svg"
-   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   inkscape:version="1.4.3 (1:1.4.3+202512261035+0d15f75042)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -20,8 +20,8 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="16.285714"
-     inkscape:cx="24.530702"
-     inkscape:cy="24.5"
+     inkscape:cx="24.469299"
+     inkscape:cy="24.469299"
      inkscape:window-width="1920"
      inkscape:window-height="1011"
      inkscape:window-x="0"
@@ -36,21 +36,22 @@
      fill="#ff0000"
      stroke="none"
      data-bg="1"
-     id="rect1" />
+     id="rect1"
+     style="fill:#000000;fill-opacity:1" />
   <path
      d="m 23.233,37.106 a 0.026,0.026 0 0 0 -0.013,0.042 4.64,4.64 0 0 1 1.133,2.737 4.64,4.64 0 0 0 4.317,4.315 4.64,4.64 0 0 1 2.736,1.134 4.64,4.64 0 0 0 6.103,0 4.64,4.64 0 0 1 2.737,-1.134 4.64,4.64 0 0 0 4.315,-4.315 4.64,4.64 0 0 1 1.134,-2.737 4.64,4.64 0 0 0 0,-6.103 4.64,4.64 0 0 1 -1.134,-2.736 4.64,4.64 0 0 0 -4.315,-4.316 4.64,4.64 0 0 1 -2.737,-1.133 c -0.103,-0.09 -0.262,-0.035 -0.297,0.098 A 20.038,20.038 0 0 1 23.234,37.106 Z"
      fill="#ff0000"
      stroke="white"
      stroke-width="1px"
      id="path1"
-     style="clip-rule:evenodd;fill:#ffffff;fill-opacity:1;fill-rule:evenodd;stroke:none" />
+     style="clip-rule:evenodd;fill:#ffb800;fill-opacity:1;fill-rule:evenodd;stroke:none" />
   <path
      d="m 24.88,23.78 1.495,5.58 3.188,-0.854 -1.245,-4.646 4.647,-1.245 -0.854,-3.188 -5.581,1.496 -2.637,-1.522 a 6.255,6.255 0 0 0 0.003,-3.14 l 2.634,-1.52 5.58,1.495 0.855,-3.187 -4.648,-1.245 1.245,-4.647 -3.188,-0.854 -1.495,5.58 -2.625,1.516 a 6.239,6.239 0 0 0 -2.73,-1.591 V 8.793 L 23.61,4.708 21.277,2.374 17.874,5.777 14.471,2.374 12.138,4.708 16.224,8.793 v 3.001 a 6.237,6.237 0 0 0 -2.761,1.586 l -2.595,-1.497 -1.495,-5.58 -3.188,0.854 1.245,4.647 -4.647,1.245 0.855,3.188 5.581,-1.496 2.59,1.495 a 6.255,6.255 0 0 0 0.003,3.19 l -2.594,1.497 -5.58,-1.495 -0.854,3.187 4.646,1.245 -1.245,4.647 3.188,0.854 1.495,-5.58 2.604,-1.503 a 6.237,6.237 0 0 0 2.751,1.576 v 3.017 l -4.086,4.085 2.333,2.334 3.403,-3.402 3.403,3.402 2.333,-2.334 -4.086,-4.085 v -3.03 a 6.238,6.238 0 0 0 2.72,-1.581 l 2.636,1.52 z m -7.03,-8.9 a 2.9445002,2.9445002 0 1 0 -0.002,5.889 2.944,2.944 0 0 0 0.001,-5.888 z"
      fill="#ff0000"
      stroke="white"
      stroke-width="1px"
      id="path2"
-     style="clip-rule:evenodd;fill:#ffffff;fill-opacity:1;fill-rule:evenodd;stroke:none" />
+     style="clip-rule:evenodd;fill:#37fdff;fill-opacity:1;fill-rule:evenodd;stroke:none" />
   <defs
      id="defs3" />
 </svg>

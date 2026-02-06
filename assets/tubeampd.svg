@@ -128,12 +128,12 @@
    cx="10.847917"
    cy="13.758333"
    r="0.26458332" /><circle
-   style="fill:#ffff00;fill-opacity:1;stroke-width:0.264583;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
+   style="fill:#ffff00;fill-opacity:{{level-onoff-02}};stroke-width:0.264583;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
    id="level-02-onoff"
    cx="11.641666"
    cy="13.758333"
    r="0.26458332" /><circle
-   style="fill:#ffff00;fill-opacity:1;stroke-width:0.264583;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
+   style="fill:#ffff00;fill-opacity:{{level-onoff-03}};stroke-width:0.264583;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:0"
    id="level-03-onoff"
    cx="12.435416"
    cy="13.758333"

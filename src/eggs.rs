@@ -111,7 +111,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 88.0,
                 false,
                 Rectangle::new(Point::new(48,26), Size::new(48,12)),
-                true,
+                false,
             )
         },
         "cassette" => {
@@ -190,7 +190,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
         "radio50" => {
             Eggs::new(
                 EGGS_TYPE_RADIO50,
-                "./assets/radio502.svg", 
+                "./assets/radio50s.svg", 
                 Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(74,3), Size::new(46,58)), 
                 Rectangle::new(Point::zero(), Size::new(0,0)),
@@ -246,7 +246,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
         "tvtime" => {
             Eggs::new(
                 EGGS_TYPE_TVTIME,
-                "./assets/tvtime2.svg",
+                "./assets/tvtime.svg",
                 Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(85,3), Size::new(43,58)),
                 Rectangle::new(Point::zero(), Size::new(0,0)),
@@ -268,7 +268,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 false, // should replace clock
                 Rectangle::new(Point::new(30,16), Size::new(48,12)),
-                true,
+                false,
             )
             },
         _ => {

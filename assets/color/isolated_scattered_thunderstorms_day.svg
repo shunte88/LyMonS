@@ -5,7 +5,7 @@
    version="1.1"
    id="svg4"
    sodipodi:docname="isolated_scattered_thunderstorms_day.svg"
-   inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
+   inkscape:version="1.4.3 (1:1.4.3+202512261035+0d15f75042)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -23,7 +23,7 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="16.625"
      inkscape:cx="24.030075"
-     inkscape:cy="24"
+     inkscape:cy="24.030075"
      inkscape:window-width="1920"
      inkscape:window-height="1011"
      inkscape:window-x="0"
@@ -38,14 +38,15 @@
      fill="#ff0000"
      stroke="none"
      data-bg="1"
-     id="rect1" />
+     id="rect1"
+     style="fill:#000000;fill-opacity:1" />
   <path
      d="M20.761 4.944a4.617 4.617 0 0 1 4.295 4.295 4.62 4.62 0 0 0 1.13 2.724 4.62 4.62 0 0 1 0 6.074 4.622 4.622 0 0 0-1.13 2.724 4.616 4.616 0 0 1-4.295 4.295 4.622 4.622 0 0 0-2.724 1.129 4.618 4.618 0 0 1-6.074 0 4.622 4.622 0 0 0-2.724-1.129 4.617 4.617 0 0 1-4.295-4.295 4.622 4.622 0 0 0-1.129-2.724 4.62 4.62 0 0 1 0-6.074 4.62 4.62 0 0 0 1.13-2.724 4.618 4.618 0 0 1 4.294-4.295 4.622 4.622 0 0 0 2.724-1.129 4.62 4.62 0 0 1 6.074 0 4.622 4.622 0 0 0 2.724 1.129Z"
      fill="#ff0000"
      stroke="white"
      stroke-width="1px"
      id="path1"
-     style="fill:#ffffff;fill-opacity:1;stroke:none" />
+     style="fill:#ffff00;fill-opacity:1;stroke:none" />
   <path
      fill-rule="evenodd"
      d="m21.131 31 5.751-11.4c.588-1.425 1.317-2.35 2.876-2.35h17.178c.038-.413.064-.825.064-1.25 0-8.287-6.991-15-15.606-15-7.72 0-14.123 5.375-15.389 12.45a10.068 10.068 0 0 0-5.151-1.4C5.41 12.05 1 16.288 1 21.525c0 5.025 4.064 9.125 9.203 9.45V31h10.928Z"
@@ -53,12 +54,14 @@
      fill="#ff0000"
      stroke="white"
      stroke-width="1px"
-     id="path2" />
+     id="path2"
+     style="fill:#cacaca;fill-opacity:1" />
   <path
      d="m17 33-4.24 4.107a5.655 5.655 0 0 0 0 8.2c2.347 2.266 6.147 2.266 8.48 0a5.655 5.655 0 0 0 0-8.2l-.04-.04L17 33ZM7 22l-4.24 4.107a5.655 5.655 0 0 0 0 8.2c2.347 2.266 6.147 2.266 8.48 0a5.655 5.655 0 0 0 0-8.2l-.04-.04L7 22Z"
      fill="white"
      stroke="none"
-     id="path3" />
+     id="path3"
+     style="fill:#00ffff;fill-opacity:1" />
   <path
      fill-rule="evenodd"
      d="M30.667 21 24 34.754h6L29.253 47 44 30.958l-5.333-.026L44 21H30.667Z"
