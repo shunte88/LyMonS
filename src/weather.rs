@@ -54,6 +54,9 @@ pub enum WeatherCondition {
     ForecastDay1 = 1,
     ForecastDay2 = 2,
     ForecastDay3 = 3,
+    ForecastDay4 = 4,
+    ForecastDay5 = 5,
+    ForecastDay6 = 6,
 }
 
 #[derive(Debug)]
@@ -144,9 +147,11 @@ pub struct WeatherData {
     pub temperature_avg: f64,
     pub temperature_max: f64,
     pub temperature_min: f64,
+    pub temperature_units: String,
     pub weather_code: WeatherCode,
     pub wind_direction: String,
     pub wind_speed_avg: f64,
+    pub wind_speed_units: String,
 }
 
 // Main weather data struct
@@ -155,7 +160,7 @@ pub struct WeatherConditions {
     location_name: String,
     pub base_folder: String,
     pub temperature_units: String, // "C" or "F"
-    pub windspeed_units: String, // "km/h" or "mph"
+    pub wind_speed_units: String, // "km/h" or "mph"
     pub lat: f64,
     pub lng: f64,
     pub current: WeatherData,
@@ -188,11 +193,11 @@ impl WeatherConditions {
             location_name,
             base_folder,
             temperature_units: if units == "imperial" { "F" } else { "C" }.to_string(),
-            windspeed_units: if units == "imperial" { "mph" } else { "km/h" }.to_string(),
+            wind_speed_units: if units == "imperial" { "mph" } else { "km/h" }.to_string(),
             lat,
             lng,
             current: WeatherData::default(),
-            forecast: vec![WeatherData::default(); 7],
+            forecast: vec![WeatherData::default(); 8],
             last_updated: Local::now(),
         }
     }
@@ -202,6 +207,9 @@ impl WeatherConditions {
             WeatherCondition::ForecastDay1 => &self.forecast[0].weather_code.svg.clone(),
             WeatherCondition::ForecastDay2 => &self.forecast[1].weather_code.svg.clone(),
             WeatherCondition::ForecastDay3 => &self.forecast[2].weather_code.svg.clone(),
+            WeatherCondition::ForecastDay4 => &self.forecast[3].weather_code.svg.clone(),
+            WeatherCondition::ForecastDay5 => &self.forecast[4].weather_code.svg.clone(),
+            WeatherCondition::ForecastDay6 => &self.forecast[5].weather_code.svg.clone(),
         };
         let ret = format!("{}{}", &self.base_folder.clone(), 
             if svg.contains(".svg") {
@@ -215,7 +223,7 @@ impl WeatherConditions {
 
     pub fn get_weather_display(&self) -> WeatherDisplay {
         let temp_units = self.temperature_units.clone();
-        let wind_speed_units = self.windspeed_units.clone();
+        let wind_speed_units = self.wind_speed_units.clone();
         let current = self.current.clone();
         let forecasts = self.forecast.clone();
         let svg = self.get_svg_path(WeatherCondition::Current).clone();
@@ -263,8 +271,10 @@ impl Weather {
         for part in parts.iter().skip(1) {
             if part.starts_with("lat=") {
                 lat_str = Some(part.trim_start_matches("lat=").to_string());
-            } else if part.starts_with("lng=") {
+            } else if part.starts_with("lng="){
                 lng_str = Some(part.trim_start_matches("lng=").to_string());
+            } else if part.starts_with("long="){
+                lng_str = Some(part.trim_start_matches("long=").to_string());
             } else if part.starts_with("lang=") {
                 transl = part.trim_start_matches("lang=").to_string();
             } else if part.starts_with("units=") {
@@ -329,6 +339,7 @@ impl Weather {
         let base_folder = match icons {
             1 => "./assets/mono/".to_string(),
             2 => "./assets/basic/".to_string(),
+            3 => "./assets/color/".to_string(),
             _ => "./assets/basic/".to_string()
         };
         Ok(Weather {
@@ -341,7 +352,6 @@ impl Weather {
             translate: transl.to_string(),
             client,
             icons,
-            //base_folder,
             weather_data: WeatherConditions::new(location_name, conditions_units, base_folder, final_lat, final_lng),
             weather_tx: None,
             stop_sender: None,
@@ -350,7 +360,12 @@ impl Weather {
         })
     }
 
-    pub async fn get_forecast_data(&mut self, day: &Value) -> Result<WeatherData, JsonError> {
+    pub async fn get_forecast_data(
+        &mut self, 
+        day: &Value, 
+        temp_units: String, 
+        wind_speed_units: String,
+    ) -> Result<WeatherData, JsonError> {
 
         let values = day["values"].clone();
         let mut deg = values["windDirectionAvg"].as_f64().unwrap_or(-999.0);
@@ -443,9 +458,11 @@ impl Weather {
             temperature_avg: temp_avg,
             temperature_max: temp_max,
             temperature_min: temp_min,
+            temperature_units: temp_units.clone(),
             weather_code: wc,
             wind_direction: wind_dir,
             wind_speed_avg: wind_speed,
+            wind_speed_units: wind_speed_units.clone(),
         };
         Ok(wd)
 
@@ -496,6 +513,7 @@ impl Weather {
             "temperatureApparentAvg", 
             "temperatureMax", 
             "temperatureMin", 
+            "temperatureUnits", 
             "temperature", 
             "humidity", 
             "precipitationType",
@@ -506,6 +524,7 @@ impl Weather {
             "sunriseTime", 
             "sunsetTime", 
             "windSpeed",
+            "windSpeedUnits",
             "windDirection",
             "windGust",
             "weatherCode",
@@ -518,8 +537,8 @@ impl Weather {
             ("units", self.units.clone()),
             ("timesteps", "1h,1d".to_string()),
             ("startTime", "now".to_string()),
-            ("endTime", "nowPlus8d".to_string()),
-            ("dailyStartTime", "0".to_string()),
+            ("endTime", "nowPlus9d".to_string()),
+            ("dailyStartTime", "1".to_string()),
             ("apikey", self.api_key.clone()),
         ];
 
@@ -538,7 +557,11 @@ impl Weather {
                 for hour in hours.iter() {
                     let date_str = hour["time"].as_str().unwrap();
                     if DateTime::parse_from_rfc3339(date_str).unwrap().with_timezone(&Local) > now {
-                        self.weather_data.current = self.get_forecast_data(hour)
+                        self.weather_data.current = self.get_forecast_data(
+                            hour,
+                            self.weather_data.temperature_units.clone(),
+                            self.weather_data.wind_speed_units.clone(),
+                        )
                             .await
                             .map_err(|e| WeatherApiError::DeserializationError(e))?;
                         break;
@@ -550,7 +573,6 @@ impl Weather {
             let now_day = now.date_naive();
             if let Some(daily) = timelines.get("daily").and_then(|i| i.as_array()) {
                 for day in daily.iter().take(8) {
-                    //println!("{idx}");
                     if idx > 6 { // safe! 7 days (0-6)
                         break;
                     }
@@ -559,7 +581,11 @@ impl Weather {
                         continue;
                     }
                     //println!("Forecast {} for {} > {}", idx, date_str, now_day);
-                    self.weather_data.forecast[idx] = self.get_forecast_data(day)
+                    self.weather_data.forecast[idx] = self.get_forecast_data(
+                        day, 
+                        self.weather_data.temperature_units.clone(),
+                        self.weather_data.wind_speed_units.clone(),
+                    )
                         .await
                         .map_err(|e| WeatherApiError::DeserializationError(e))?;
                     idx += 1;

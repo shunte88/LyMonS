@@ -1300,41 +1300,74 @@ impl DisplayManager {
 
         // Format text strings
         let conditions_text = weather_data.weather_code.description.clone();
-        let temp_text = format!("{}({}) °F",
+        let temp_text = format!("{}({}) °{}",
             weather_data.temperature_avg.round() as i32,
-            weather_data.temperature_apparent_avg.round() as i32
+            weather_data.temperature_apparent_avg.round() as i32,
+            weather_data.temperature_units.clone()
         );
         let humidity_text = format!("{}%", weather_data.humidity_avg);
-        let wind_text = format!("{} mph {}",
+        let wind_text = format!("{} {} {}",
             weather_data.wind_speed_avg.round() as i32,
+            weather_data.wind_speed_units.clone(),
             weather_data.wind_direction
         );
         let precip_text = format!("{}%", weather_data.precipitation_probability_avg.round() as i32);
 
         // Wide display fields (sunrise, sunset, moon phase)
         let sunrise_text = if let Some(sunrise) = weather_data.sunrise_time {
-            format!("Sunrise: {}", sunrise.format("%l:%M %p"))
+            format!("{}", sunrise.format("%l:%M %p"))
         } else {
-            "Sunrise: --:--".to_string()
+            "--:--".to_string()
         };
         let sunset_text = if let Some(sunset) = weather_data.sunset_time {
-            format!("Sunset: {}", sunset.format("%l:%M %p"))
+            format!("{}", sunset.format("%l:%M %p"))
         } else {
-            "Sunset: --:--".to_string()
+            "--:--".to_string()
         };
-        let moon_text = if let Some(moonrise) = weather_data.moonrise_time {
-            format!("Moon: {}", moonrise.format("%l:%M %p"))
+        let moonrise_text = if let Some(moonrise) = weather_data.moonrise_time {
+            format!("{}", moonrise.format("%l:%M %p"))
         } else {
-            "Moon: --:--".to_string()
+            "--:--".to_string()
+        };
+        let moonset_text = if let Some(moonset) = weather_data.moonrise_time {
+            format!("{}", moonset.format("%l:%M %p"))
+        } else {
+            "--:--".to_string()
         };
 
         // Dispatch rendering based on framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                Self::render_weather_fields_mono(fb, &page, &svg_path, &conditions_text, &temp_text, &humidity_text, &wind_text, &precip_text, &sunrise_text, &sunset_text, &moon_text)?;
+                Self::render_weather_fields_mono(
+                    fb, 
+                    &page, 
+                    &svg_path, 
+                    &conditions_text, 
+                    &temp_text, 
+                    &humidity_text, 
+                    &wind_text, 
+                    &precip_text, 
+                    &sunrise_text, 
+                    &sunset_text, 
+                    &moonrise_text,
+                    &moonset_text,
+                )?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                Self::render_weather_fields_gray4(fb, &page, &svg_path, &conditions_text, &temp_text, &humidity_text, &wind_text, &precip_text, &sunrise_text, &sunset_text, &moon_text)?;
+                Self::render_weather_fields_gray4(
+                    fb, 
+                    &page, 
+                    &svg_path, 
+                    &conditions_text, 
+                    &temp_text, 
+                    &humidity_text, 
+                    &wind_text, 
+                    &precip_text, 
+                    &sunrise_text, 
+                    &sunset_text, 
+                    &moonrise_text,
+                    &moonset_text,
+                )?;
             }
         }
 
@@ -1353,7 +1386,8 @@ impl DisplayManager {
         precip_text: &str,
         sunrise_text: &str,
         sunset_text: &str,
-        moon_text: &str,
+        moonrise_text: &str,
+        moonset_text: &str, // and moon phase idx
     ) -> Result<(), DisplayError> {
         use embedded_graphics::prelude::*;
         use embedded_graphics::Pixel;
@@ -1445,7 +1479,7 @@ impl DisplayManager {
                     Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, field.fg_color.to_binary())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
                 }
-                "sunrise" => {
+                "sunrise_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
                     Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
@@ -1457,26 +1491,33 @@ impl DisplayManager {
                     Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, field.fg_color.to_binary())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
                 }
-                "moonrise_glyph" => {
-                    use crate::weather_glyph::GLYPH_MOONRISE;
-                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_binary())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
-                }
-                "moonset_glyph" => {
-                    use crate::weather_glyph::GLYPH_MOONSET;
-                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_binary())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
-                }
-                "sunset" => {
+                "sunset_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
                     Text::with_baseline(sunset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset".to_string()))?;
                 }
-                "moon_phase" => {
+                "moonrise_glyph" => {
+                    use crate::weather_glyph::GLYPH_MOONRISE;
+                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_binary())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
+                }
+                "moonrise_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
-                    Text::with_baseline(moon_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    Text::with_baseline(moonrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                        .draw(target)
+                        .map(|_| ())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
+                }
+                "moonset_glyph" => {
+                    use crate::weather_glyph::GLYPH_MOONSET;
+                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_binary())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
+                }
+                "moonset_text" => {
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
+                    Text::with_baseline(moonset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
@@ -1500,7 +1541,8 @@ impl DisplayManager {
         precip_text: &str,
         sunrise_text: &str,
         sunset_text: &str,
-        moon_text: &str,
+        moonrise_text: &str,
+        moonset_text: &str, // and moon phase idx
     ) -> Result<(), DisplayError> {
         use embedded_graphics::prelude::*;
         use embedded_graphics::Pixel;
@@ -1592,7 +1634,7 @@ impl DisplayManager {
                     Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, field.fg_color.to_gray4())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
                 }
-                "sunrise" => {
+                "sunrise_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
                     Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
@@ -1604,26 +1646,33 @@ impl DisplayManager {
                     Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, field.fg_color.to_gray4())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
                 }
-                "moonrise_glyph" => {
-                    use crate::weather_glyph::GLYPH_MOONRISE;
-                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
-                }
-                "moonset_glyph" => {
-                    use crate::weather_glyph::GLYPH_MOONSET;
-                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
-                }
-                "sunset" => {
+                "sunset_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
                     Text::with_baseline(sunset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset".to_string()))?;
                 }
-                "moon_phase" => {
+                "moonrise_glyph" => {
+                    use crate::weather_glyph::GLYPH_MOONRISE;
+                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_gray4())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
+                }
+                "moonrise_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
-                    Text::with_baseline(moon_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    Text::with_baseline(moonrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                        .draw(target)
+                        .map(|_| ())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
+                }
+                "moonset_glyph" => {
+                    use crate::weather_glyph::GLYPH_MOONSET;
+                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_gray4())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
+                }
+                "moonset_text" => {
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
+                    Text::with_baseline(moonset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;

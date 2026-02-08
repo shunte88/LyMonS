@@ -1,6 +1,6 @@
 # LyMonS
 An LMS Monitor For The Future
-LyMonS version 0.1.35 - August 2nd 2025
+LyMonS version 0.2.4 - February 2026
 OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
 
 <img width="800" src="assets/lymons.webp" align="center" />

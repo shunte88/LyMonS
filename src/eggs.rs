@@ -123,9 +123,9 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 Rectangle::new(Point::new(18,6), Size::new(90,6)), 
                 Rectangle::new(Point::new(18,11), Size::new(90,6)), 
                 // 13.5=0%, 0=100%
-                // reversed these
-                0.0, 
-                13.5, 
+                // scale in play here for tape reels
+                25.000,  // 25.000 small right
+                48.578, // 48.578 large left
                 false,
                 // empty time rect
                 Rectangle::new(Point::zero(), Size::new(0,0)),
@@ -400,19 +400,21 @@ impl Eggs {
         let seconds = now.second() as f64;
         let seconds_angle =  (
             now.second() as f64 + now.timestamp_subsec_nanos() as f64 / 1_000_000_000.0) * 12.0;
-        data = data.replace("{{seconds-angle}}", seconds_angle.to_string().as_str());
+                data = data.replace("{{seconds-angle}}", seconds_angle.to_string().as_str());
         if seconds%2.0 == 0.0 {
             data = data.replace("{{flip}}", "1");
             data = data.replace("{{flip-odd}}", "-1");
             data = data.replace("{{flip-even}}", "1");
             data = data.replace("{{blink-even}}", "1.0");
-            data = data.replace("{{ripple-even}}", "-1.0");
+            data = data.replace("{{blink-odd}}", "0.0");
+            data = data.replace("{{ripple-even}}", "1.0");
             data = data.replace("{{ripple-odd}}", "0.0");
         } else {
             data = data.replace("{{flip}}", "-1");
             data = data.replace("{{flip-odd}}", "1");
             data = data.replace("{{flip-even}}", "-1");
             data = data.replace("{{blink-even}}", "0.0");
+            data = data.replace("{{blink-odd}}", "1.0");
             data = data.replace("{{ripple-even}}", "0.0");
             data = data.replace("{{ripple-odd}}", "1.0");
         }
@@ -420,6 +422,12 @@ impl Eggs {
         data = data.replace("{{track-percent}}", track_percent.to_string().as_str());
         let track_percent_whole = (track_percent * 100.0).floor() as u8;
         data = data.replace("{{track-percent-whole}}", track_percent_whole.to_string().as_str());
+
+        // scaler (drink me) logic - grow and shrink SVG objects
+        let grow = 1.0 + track_percent;
+        data = data.replace("{{scale-grow-progress}}", grow.to_string().as_str());
+        let shrink = 1.0 - track_percent;
+        data = data.replace("{{scale-shrink-progress}}", shrink.to_string().as_str());
         
         // note that right->left (-ve) and left->right (+ve) is defined via -ve , -{{progress}}, in the SVG
         let linear_pct = self.calc_progress_angle_linear(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
