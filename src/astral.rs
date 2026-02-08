@@ -152,6 +152,8 @@ impl AstralService {
         let mut cache = self.cached_data.write().unwrap();
         *cache = None;
     }
+
+
 }
 
 #[cfg(test)]

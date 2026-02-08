@@ -135,7 +135,7 @@ impl LayoutManager {
 
         // Start clock at top of display (no offset)
         let clock_y_start = border_adj;
-        let progress_bar_y = clock_y_start + CLOCK_DIGIT_HEIGHT + CLOCK_PROGRESS_BAR_GAP - 1;
+        let progress_bar_y = clock_y_start + CLOCK_DIGIT_HEIGHT + CLOCK_PROGRESS_BAR_GAP;
         let date_y = progress_bar_y + PROGRESS_BAR_HEIGHT + PROGRESS_BAR_DATE_GAP - 2;
 
         PageLayout::new("clock")
@@ -166,7 +166,7 @@ impl LayoutManager {
                     "seconds_progress",
                     Rectangle::new(
                         Point::new(border_adj, progress_bar_y), 
-                        Size::new(width_adj, PROGRESS_BAR_HEIGHT as u32))
+                        Size::new(width_adj, 4))
                 )
             )
             // Date at bottom (centered, cyan color)

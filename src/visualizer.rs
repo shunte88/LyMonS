@@ -77,6 +77,11 @@ pub enum VizPayload {
     VuStereoWithCenterPeak { l_db: f32, r_db: f32, peak_level: u8, peak_hold: u8 },
     AioVuMono { db: f32 },
     AioHistMono { bands: Vec<u8> },
+    WaveformSpectrum {
+        waveform_l: Vec<i16>,    // Downsampled waveform data (L channel)
+        waveform_r: Vec<i16>,    // Downsampled waveform data (R channel)
+        spectrum_column: Vec<u8>, // Current FFT frequency bands for this frame
+    },
     NoVisualization {},
 }
 
@@ -213,7 +218,7 @@ async fn visualizer_worker(
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::VuStereo { l_db, r_db });
                 }
-                Visualization::VuMono | Visualization::AioVuMono => {
+                Visualization::VuMono => {
                     let (_pk_l, rms_l) = peak_and_rms(left);
                     let (_pk_r, rms_r) = peak_and_rms(right);
                     // downmix RMS ≈ sqrt((L^2 + R^2)/2)
@@ -221,6 +226,15 @@ async fn visualizer_worker(
                     let db = dbfs::dbfs_to_vudb(dbfs(mono_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::VuMono { db });
+                }
+                Visualization::AioVuMono => {
+                    let (_pk_l, rms_l) = peak_and_rms(left);
+                    let (_pk_r, rms_r) = peak_and_rms(right);
+                    // downmix RMS ≈ sqrt((L^2 + R^2)/2)
+                    let mono_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
+                    let db = dbfs::dbfs_to_vudb(dbfs(mono_rms)); // includes VU meter adj.
+                    publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
+                        VizPayload::AioVuMono { db });
                 }
                 Visualization::PeakStereo => {
                     // Peaks in dBFS → level
@@ -262,7 +276,7 @@ async fn visualizer_worker(
                             VizPayload::HistStereo { bands_l, bands_r });
                     }
                 }
-                Visualization::HistMono | Visualization::AioHistMono => {
+                Visualization::HistMono => {
                     if let Some(e) = &mut eng {
                         let (l, r) = e.compute_levels(left, right);
                         // downmix = max(L,R) per band (punchier than mean)
@@ -271,6 +285,17 @@ async fn visualizer_worker(
                                      .collect::<Vec<u8>>();
                         publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                             VizPayload::HistMono { bands });
+                    }
+                }
+                Visualization::AioHistMono => {
+                    if let Some(e) = &mut eng {
+                        let (l, r) = e.compute_levels(left, right);
+                        // downmix = max(L,R) per band (punchier than mean)
+                        let bands = l.iter().zip(r.iter())
+                                     .map(|(a,b)| (*a).max(*b))
+                                     .collect::<Vec<u8>>();
+                        publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
+                            VizPayload::AioHistMono { bands });
                     }
                 }
                 Visualization::VuStereoWithCenterPeak => {
@@ -288,6 +313,25 @@ async fn visualizer_worker(
                         VizPayload::VuStereoWithCenterPeak {
                             l_db, r_db, peak_level: level, peak_hold: peak_hold_m
                         });
+                }
+                Visualization::WaveformSpectrum => {
+                    // Downsample waveform to display width (assume 256px max)
+                    const TARGET_WIDTH: usize = 256;
+                    let step = (left.len() / TARGET_WIDTH).max(1);
+                    let waveform_l: Vec<i16> = left.iter().step_by(step).take(TARGET_WIDTH).copied().collect();
+                    let waveform_r: Vec<i16> = right.iter().step_by(step).take(TARGET_WIDTH).copied().collect();
+
+                    // Compute FFT for spectrogram column
+                    let spectrum_column = if let Some(e) = &mut eng {
+                        let (l, r) = e.compute_levels(left, right);
+                        // downmix spectrum for single column
+                        l.iter().zip(r.iter()).map(|(a,b)| (*a).max(*b)).collect::<Vec<u8>>()
+                    } else {
+                        vec![0; SPECTRUM_BANDS_COUNT as usize]
+                    };
+
+                    publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
+                        VizPayload::WaveformSpectrum { waveform_l, waveform_r, spectrum_column });
                 }
                 Visualization::NoVisualization => {}
             }

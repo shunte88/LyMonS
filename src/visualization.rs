@@ -36,6 +36,7 @@ pub enum Visualization {
     VuStereoWithCenterPeak,   // L/R VU with a central mono peak meter
     AioVuMono,                // All In One with downmix VU
     AioHistMono,              // All In One with downmix histogram
+    WaveformSpectrum,         // Waveform + Spectrogram (oscilloscope + waterfall)
     NoVisualization,          // no visualization
 }
 
@@ -50,6 +51,7 @@ pub fn transpose_kind(kind: &str) -> Visualization {
         "vu_stereo_with_center_peak" | "combination" => Visualization::VuStereoWithCenterPeak,
         "aio_vu_mono" => Visualization::AioVuMono,
         "aio_hist_mono" => Visualization::AioHistMono,
+        "waveform_spectrum" => Visualization::WaveformSpectrum,
         "no_viz" => Visualization::NoVisualization,
         &_ => Visualization::NoVisualization,
     }
@@ -71,6 +73,7 @@ pub fn get_visualizer_panel_with_layout(kind: Visualization, layout: &LayoutConf
         Visualization::AioHistMono => format!("{}histaio.svg", folder),
         Visualization::HistStereo |
         Visualization::HistMono |
+        Visualization::WaveformSpectrum |
         Visualization::NoVisualization => "".to_string(),
     };
     panel
@@ -92,6 +95,7 @@ pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
         Visualization::AioHistMono => format!("{folder}histaio.svg"),
         Visualization::HistStereo |
         Visualization::HistMono |
+        Visualization::WaveformSpectrum |
         Visualization::NoVisualization => "".to_string(),
     };
     panel.clone()

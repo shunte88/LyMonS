@@ -2249,6 +2249,46 @@ impl DisplayManager {
                         viz_state.last_db_l = l_db;
                         viz_state.last_db_r = r_db;
                     }
+                    VizPayload::AioVuMono { db } => {
+                        let viz_state = self.visualizer.viz_state_mut();
+                        viz_state.last_db_m = db;
+                        // Update track info for AIO display
+                        let track_info = if !self.artist.is_empty() && !self.title.is_empty() {
+                            format!("{} - {}", self.artist, self.title)
+                        } else if !self.artist.is_empty() {
+                            self.artist.clone()
+                        } else if !self.title.is_empty() {
+                            self.title.clone()
+                        } else {
+                            String::from("No track playing")
+                        };
+                        viz_state.last_artist = track_info;
+                    }
+                    VizPayload::AioHistMono { bands } => {
+                        let viz_state = self.visualizer.viz_state_mut();
+                        viz_state.last_bands_m = bands;
+                        // Update track info for AIO display
+                        let track_info = if !self.artist.is_empty() && !self.title.is_empty() {
+                            format!("{} - {}", self.artist, self.title)
+                        } else if !self.artist.is_empty() {
+                            self.artist.clone()
+                        } else if !self.title.is_empty() {
+                            self.title.clone()
+                        } else {
+                            String::from("No track playing")
+                        };
+                        viz_state.last_artist = track_info;
+                    }
+                    VizPayload::WaveformSpectrum { waveform_l, waveform_r, spectrum_column } => {
+                        let viz_state = self.visualizer.viz_state_mut();
+                        viz_state.last_waveform_l = waveform_l;
+                        viz_state.last_waveform_r = waveform_r;
+                        // spectrum_column is handled inside the drawing function via spectrum_history
+                        viz_state.spectrum_history.push_back(spectrum_column);
+                        if viz_state.spectrum_history.len() > viz_state.spectrum_max_cols {
+                            viz_state.spectrum_history.pop_front();
+                        }
+                    }
                     _ => {
                         // TODO: Handle other visualization types (combi modes, AIO, etc.)
                     }
@@ -3041,7 +3081,7 @@ impl DisplayManager {
         use crate::eggs::set_easter_egg;
 
         let egg_names = [
-            "bass", "cassette", "ibmpc", "moog", "reel2reel",
+            "bass", "cassette", "ibmpc", "moog", "pipboy", "reel2reel",
             "radio40", "radio50", "scope", "technics", "tubeamp",
             "tvtime", "vcr", "none"
         ];

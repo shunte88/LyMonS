@@ -2,7 +2,7 @@
  *  main.rs
  *
  *  LyMonS - worth the squeeze
- *	(c) 2020-25 Stuart Hunter
+ *	(c) 2020-26 Stuart Hunter
  *
  *	TODO:
  *
@@ -840,6 +840,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "cassette",
             "ibmpc",
             "moog",
+            "pipboy",
             "radio40",
             "radio50",
             "reel2reel",
@@ -886,17 +887,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .long("viz")
         .help("Visualization, meters, VU, Peak, Histograms, and more")
         .value_parser(
-            ["vu_stereo",    // two VU meters (L/R)
-            "vu_mono",       // downmix to mono VU
-            "peak_stereo",   // two peak meters with hold/decay
-            "peak_mono",     // mono peak meter with hold/decay
-            "hist_stereo",   // two freq. histogram "bars" (L/R)
-            "hist_mono",     // mono freq. histogram "bars" (downmix)
-            "combination",   // L/R VU with a central mono peak meter
-            "aio_vu_mono",   // All In One with downmix VU
-            "aio_hist_mono", // All In One with downmix histogram,
-            "no_viz"]
-            )
+            [
+            "aio_hist_mono",     // All In One with downmix histogram
+            "aio_vu_mono",       // All In One with downmix VU
+            "combination",       // L/R VU with a central mono peak meter
+            "hist_mono",         // mono freq. histogram "bars" (downmix)
+            "hist_stereo",       // two freq. histogram "bars" (L/R)
+            "peak_mono",         // mono peak meter with hold/decay
+            "peak_stereo",       // two peak meters with hold/decay
+            "vu_mono",           // downmix to mono VU
+            "waveform_spectrum", // oscilloscope waveform + spectrogram waterfall
+            "vu_stereo",         // two VU meters (L/R)
+            "no_viz"                                                                                                               ]
+        )
         .default_value("no_viz")
         .required(false))
         .after_help("LyMonS:\
@@ -936,15 +939,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let easter_egg = matches.get_one::<String>("eggs").unwrap();
     let viz_type = matches.get_one::<String>("viz").unwrap();
     
-    /*
-	let args = Cli::parse();
-	let config = Config::get();
-	let params = Params::merge(&config, &args).await?;
-
-	run(&params).await?.render(&params)?;
-	params.handle_next(args, &config)?;
-    */
-
     // Initialize the logger with the appropriate level based on debug flag
     env_logger::Builder::from_env(Env::default().default_filter_or(if debug_enabled {"debug"}else{"info"}))
         .format_timestamp_secs()

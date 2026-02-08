@@ -83,10 +83,10 @@ pub use mode_controller::{DisplayModeController, ModeControllerConfig};
 /// Display mode enum - controls what content is shown on the display
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum DisplayMode {
-    Visualizer,      // Visualizations - meters, meters, meters
-    EasterEggs,      // Easter Eggs
-    Scrolling,       // Now Playing mode
     Clock,           // Clock mode
+    Scrolling,       // Now Playing mode
+    Visualizer,      // Visualizations - meters, meters, meters
+    EasterEggs,      // Easter Eggs - just for fun eye-candy
     WeatherCurrent,  // Current Weather mode
     WeatherForecast, // Weather Forecast mode
 }

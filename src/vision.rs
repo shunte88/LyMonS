@@ -131,6 +131,12 @@ pub struct LastVizState {
 
     pub last_tick: Instant,
 
+    // Waveform + Spectrogram state
+    pub spectrum_history: std::collections::VecDeque<Vec<u8>>, // Rolling buffer of spectrum columns
+    pub spectrum_max_cols: usize, // Maximum history columns (display width)
+    pub last_waveform_l: Vec<i16>, // Last waveform data (left channel)
+    pub last_waveform_r: Vec<i16>, // Last waveform data (right channel)
+
 }
 
 impl Default for LastVizState {
@@ -213,6 +219,12 @@ impl Default for LastVizState {
             ),
 
             last_tick: Instant::now(),
+
+            // Waveform + Spectrogram
+            spectrum_history: std::collections::VecDeque::new(),
+            spectrum_max_cols: 128, // Default to narrow display width
+            last_waveform_l: Vec::new(),
+            last_waveform_r: Vec::new(),
 
         }
 

@@ -42,6 +42,7 @@ pub const EGGS_TYPE_BASS: u8 = 10;
 pub const EGGS_TYPE_CASSETTE: u8 = 20;
 pub const EGGS_TYPE_IBMPC: u8 = 30;
 pub const EGGS_TYPE_MOOG: u8 = 40;
+pub const EGGS_TYPE_PIPBOY: u8 = 45;
 pub const EGGS_TYPE_RADIO40: u8 = 50;
 pub const EGGS_TYPE_RADIO50: u8 = 60;
 pub const EGGS_TYPE_REEL2REEL: u8 = 70;
@@ -157,6 +158,20 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 true,
                 Rectangle::new(Point::new(83,52), Size::new(41,12)),
                 true,
+            )
+        },
+        "pipboy" => {
+            Eggs::new(
+                EGGS_TYPE_PIPBOY,
+                "./assets/pipboy.svg", 
+                Rectangle::new(Point::zero(), Size::new(128,64)),
+                Rectangle::new(Point::zero(), Size::new(0,0)), 
+                Rectangle::new(Point::zero(), Size::new(0,0)),
+                0.0, 
+                0.0, 
+                false,
+                Rectangle::new(Point::new(72,52), Size::new(52,12)),
+                false,
             )
         },
         "reel2reel" => {

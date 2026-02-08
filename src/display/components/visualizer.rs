@@ -24,13 +24,16 @@
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
 use embedded_graphics::primitives::{PrimitiveStyle, PrimitiveStyleBuilder};
-use embedded_graphics::mono_font::iso_8859_13::FONT_5X8;
+use embedded_graphics::mono_font::iso_8859_13::{FONT_4X6, FONT_5X8};
+use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
+use embedded_text::{TextBox, style::TextBoxStyleBuilder};
 use crate::display::color_proxy::{ConvertColor};
 use crate::display::layout::LayoutConfig;
 use crate::visualizer::Visualizer;
 use crate::visualization::Visualization;
 use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX};
+use crate::draw::draw_circle;
 use std::time::{Duration, Instant};
 
 /// Visualizer component state
@@ -56,6 +59,30 @@ impl Default for VisualizerState {
     }
 }
 
+/// AIO Layout helper: right side for visualization
+#[inline]
+pub fn aio_meter_attributes(meter_area_start: i32, w: i32, h: i32) -> (i32, i32, i32, i32)
+{
+    // Layout: left side, half width for text, right side for visualization
+        let mx = 3;
+        let my = 6;
+        let meter_width = w - meter_area_start - (2 * mx);
+        let meter_height = h - (2 * my);
+    (mx, my, meter_width, meter_height)
+}
+
+/// AIO Layout helper: left side, half width for text, right side for visualization
+#[inline]
+pub fn aio_text_attributes(w: i32) -> (i32, i32, i32)
+{
+    // Layout: left side, half width for text, right side for visualization
+    let text_area_width = w/2;
+    let text_margin = 2;
+    let text_usable_width = text_area_width - (2 * text_margin);
+    let meter_area_start = text_area_width+1;
+    (text_margin, text_usable_width, meter_area_start)
+}
+
 /// Visualizer component wrapper
 pub struct VisualizerComponent {
     visualizer: Option<Visualizer>,
@@ -71,6 +98,8 @@ impl VisualizerComponent {
         let mut viz_state = crate::vision::LastVizState::default();
         // Set wide flag based on layout - critical for correct SVG loading
         viz_state.wide = layout.visualizer.is_wide;
+        // Set spectrum history buffer size to match display width
+        viz_state.spectrum_max_cols = layout.width as usize;
 
         Self {
             visualizer: None,
@@ -113,8 +142,14 @@ impl VisualizerComponent {
     }
 
     /// Set visualization type
+    /// Note: On wide displays, VuMono (downmix) is automatically converted to VuStereo
     pub fn set_visualization_type(&mut self, viz_type: Visualization) {
-        self.visualization_type = viz_type;
+        // Rule: vu_mono (downmix) is not supported on wide screens
+        // Automatically switch to vu_stereo instead
+        self.visualization_type = match (self.viz_state.wide, viz_type) {
+            (true, Visualization::VuMono) => Visualization::VuStereo,
+            (_, other) => other,
+        };
     }
 
     /// Render the visualizer (monochrome version)
@@ -137,13 +172,60 @@ impl VisualizerComponent {
                 Self::draw_hist_pair(target, self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone(), self.visualization_type, &mut self.viz_state)
             }
             Visualization::VuMono => {
-                let _db = self.viz_state.last_db_m;
-                Ok(false) // TODO: Implement VU meters
+                Self::draw_vu_mono(
+                    target,
+                    self.viz_state.last_db_m,
+                    self.visualization_type,
+                    &mut self.viz_state,
+                )
             }
             Visualization::VuStereo => {
-                let _l_db = self.viz_state.last_db_l;
-                let _r_db = self.viz_state.last_db_r;
-                Ok(false) // TODO: Implement VU meters
+                Self::draw_vu_stereo(
+                    target,
+                    self.viz_state.last_db_l,
+                    self.viz_state.last_db_r,
+                    self.visualization_type,
+                    &mut self.viz_state,
+                )
+            }
+            Visualization::AioVuMono => {
+                let track_info = self.viz_state.last_artist.clone();
+                Self::draw_aio_vu_mono(
+                    target,
+                    self.viz_state.last_db_m,
+                    &track_info,
+                    &mut self.viz_state,
+                )
+            }
+            Visualization::AioHistMono => {
+                let track_info = self.viz_state.last_artist.clone();
+                Self::draw_aio_hist_mono(
+                    target,
+                    self.viz_state.last_bands_m.clone(),
+                    &track_info,
+                    &mut self.viz_state,
+                )
+            }
+            Visualization::WaveformSpectrum => {
+                Self::draw_waveform_spectrum_mono(
+                    target,
+                    self.viz_state.last_waveform_l.clone(),
+                    self.viz_state.last_waveform_r.clone(),
+                    Vec::new(), // spectrum_column already in history
+                    &mut self.viz_state,
+                    &self.layout,
+                )
+            }
+            Visualization::VuStereoWithCenterPeak => {
+                Self::draw_vu_combi(
+                    target,
+                    self.viz_state.last_db_l,
+                    self.viz_state.last_db_r,
+                    self.viz_state.last_peak_m,
+                    self.viz_state.last_hold_m,
+                    self.visualization_type,
+                    &mut self.viz_state,
+                )
             }
             _ => Ok(false) // Other types not yet implemented
         }
@@ -169,13 +251,60 @@ impl VisualizerComponent {
                 Self::draw_hist_pair_gray4(target, self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone(), self.visualization_type, &mut self.viz_state)
             }
             Visualization::VuMono => {
-                let _db = self.viz_state.last_db_m;
-                Ok(false) // TODO: Implement VU meters
+                Self::draw_vu_mono_gray4(
+                    target,
+                    self.viz_state.last_db_m,
+                    self.visualization_type,
+                    &mut self.viz_state,
+                )
             }
             Visualization::VuStereo => {
-                let _l_db = self.viz_state.last_db_l;
-                let _r_db = self.viz_state.last_db_r;
-                Ok(false) // TODO: Implement VU meters
+                Self::draw_vu_stereo_gray4(
+                    target,
+                    self.viz_state.last_db_l,
+                    self.viz_state.last_db_r,
+                    self.visualization_type,
+                    &mut self.viz_state,
+                )
+            }
+            Visualization::AioVuMono => {
+                let track_info = self.viz_state.last_artist.clone();
+                Self::draw_aio_vu_gray4(
+                    target,
+                    self.viz_state.last_db_m,
+                    &track_info,
+                    &mut self.viz_state,
+                )
+            }
+            Visualization::AioHistMono => {
+                let track_info = self.viz_state.last_artist.clone();
+                Self::draw_aio_hist_gray4(
+                    target,
+                    self.viz_state.last_bands_m.clone(),
+                    &track_info,
+                    &mut self.viz_state,
+                )
+            }
+            Visualization::WaveformSpectrum => {
+                Self::draw_waveform_spectrum_gray4(
+                    target,
+                    self.viz_state.last_waveform_l.clone(),
+                    self.viz_state.last_waveform_r.clone(),
+                    Vec::new(), // spectrum_column already in history
+                    &mut self.viz_state,
+                    &self.layout,
+                )
+            }
+            Visualization::VuStereoWithCenterPeak => {
+                Self::draw_vu_combi_gray4(
+                    target,
+                    self.viz_state.last_db_l,
+                    self.viz_state.last_db_r,
+                    self.viz_state.last_peak_m,
+                    self.viz_state.last_hold_m,
+                    self.visualization_type,
+                    &mut self.viz_state,
+                )
             }
             _ => Ok(false) // Other types not yet implemented
         }
@@ -725,6 +854,1208 @@ impl VisualizerComponent {
         let title_pos = h - title_base; let pane_w = inner_w;
 
         Self::draw_hist_panel_gray4(display, "Downmix", title_base as u32, title_pos, Point::new(mx, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_m, &state.cap_m)?;
+
+        Ok(true)
+    }
+
+    /// Draw waveform + spectrogram visualization (monochrome)
+    fn draw_waveform_spectrum_mono<D>(
+        display: &mut D,
+        waveform_l: Vec<i16>,
+        waveform_r: Vec<i16>,
+        _spectrum_column: Vec<u8>,
+        state: &mut crate::vision::LastVizState,
+        _layout: &LayoutConfig,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::Rectangle;
+
+        let Size { width, height } = display.size();
+        let display_width = width as usize;
+        let display_height = height as usize;
+
+        // Split screen: top half for waveform, bottom half for spectrogram
+        let waveform_height = display_height / 2;
+        let spectrogram_height = display_height - waveform_height;
+
+        // Draw waveforms (oscilloscope style)
+        let l_offset = waveform_height / 4;
+        let r_offset = (waveform_height * 3) / 4;
+
+        for (x, (&l, &r)) in waveform_l.iter().zip(waveform_r.iter()).enumerate() {
+            if x >= display_width { break; }
+
+            // Map i16 (-32768..32767) to screen coordinates
+            let l_y = l_offset as i32 + (l as i32 * l_offset as i32 / 32768);
+            let r_y = r_offset as i32 + (r as i32 * r_offset as i32 / 32768);
+
+            // Draw sample points
+            let l_point = Point::new(x as i32, l_y.clamp(0, waveform_height as i32 - 1));
+            let r_point = Point::new(x as i32, r_y.clamp(0, waveform_height as i32 - 1));
+
+            embedded_graphics::Pixel(l_point, BinaryColor::On).draw(display)?;
+            embedded_graphics::Pixel(r_point, BinaryColor::On).draw(display)?;
+        }
+
+        // Draw spectrogram (waterfall) - history is managed by the display manager
+        let spec_y_offset = waveform_height as i32;
+
+        if let Some(first_col) = state.spectrum_history.front() {
+            let band_height = if first_col.is_empty() { 1 } else {
+                (spectrogram_height / first_col.len()).max(1)
+            };
+
+            for (col_idx, column) in state.spectrum_history.iter().enumerate() {
+                let x = col_idx as i32;
+                if x >= display_width as i32 { break; }
+
+                for (band_idx, &intensity) in column.iter().enumerate() {
+                    let y = spec_y_offset + (band_idx * band_height) as i32;
+
+                    // Threshold for monochrome display
+                    if intensity > 128 {
+                        let rect = Rectangle::new(
+                            Point::new(x, y),
+                            Size::new(1, band_height as u32)
+                        );
+                        rect.into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+                            .draw(display)?;
+                    }
+                }
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Draw waveform + spectrogram visualization (Gray4)
+    /// a thing of beauty to behold
+    fn draw_waveform_spectrum_gray4<D>(
+        display: &mut D,
+        waveform_l: Vec<i16>,
+        waveform_r: Vec<i16>,
+        _spectrum_column: Vec<u8>,
+        state: &mut crate::vision::LastVizState,
+        _layout: &LayoutConfig,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = Gray4> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::Rectangle;
+
+        let Size { width, height } = display.size();
+        let display_width = width as usize;
+        let display_height = height as usize;
+
+        // Split screen: top half for waveform, bottom half for spectrogram
+        let waveform_height = display_height / 2;
+        let spectrogram_height = display_height - waveform_height;
+
+        // Draw waveforms (oscilloscope style) - L in cyan, R in yellow
+        let l_offset = waveform_height / 4;
+        let r_offset = (waveform_height * 3) / 4;
+
+        for (x, (&l, &r)) in waveform_l.iter().zip(waveform_r.iter()).enumerate() {
+            if x >= display_width { break; }
+
+            // Map i16 (-32768..32767) to screen coordinates
+            let l_y = l_offset as i32 + (l as i32 * l_offset as i32 / 32768);
+            let r_y = r_offset as i32 + (r as i32 * r_offset as i32 / 32768);
+
+            // Draw sample points with color differentiation
+            let l_point = Point::new(x as i32, l_y.clamp(0, waveform_height as i32 - 1));
+            let r_point = Point::new(x as i32, r_y.clamp(0, waveform_height as i32 - 1));
+
+            embedded_graphics::Pixel(l_point, Gray4::new(11)).draw(display)?; // cyan
+            embedded_graphics::Pixel(r_point, Gray4::WHITE).draw(display)?;     // yellow
+        }
+
+        // Draw spectrogram (waterfall) - history is managed by the display manager
+        let spec_y_offset = waveform_height as i32;
+
+        if let Some(first_col) = state.spectrum_history.front() {
+            let band_height = if first_col.is_empty() { 1 } else {
+                (spectrogram_height / first_col.len()).max(1)
+            };
+
+            for (col_idx, column) in state.spectrum_history.iter().enumerate() {
+                let x = col_idx as i32;
+                if x >= display_width as i32 { break; }
+
+                for (band_idx, &intensity) in column.iter().enumerate() {
+                    let y = spec_y_offset + (band_idx * band_height) as i32;
+
+                    // Map intensity (0-255) to Gray4 (0-15)
+                    let gray_value = (intensity as u32 * 15 / 255) as u8;
+
+                    if gray_value > 0 {
+                        let rect = Rectangle::new(
+                            Point::new(x, y),
+                            Size::new(1, band_height as u32)
+                        );
+                        rect.into_styled(PrimitiveStyle::with_fill(Gray4::new(gray_value)))
+                            .draw(display)?;
+                    }
+                }
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Draw AIO VU visualization (monochrome) - combines track info with meter
+    /// TODO: Replace simple meter with VU needle once VU color support is added
+    fn draw_aio_vu_mono<D>(
+        display: &mut D,
+        db: f32,
+        track_info: &str,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::Rectangle;
+        use crate::vision::{LEVEL_FLOOR_DB, LEVEL_CEIL_DB};
+
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+
+        // Layout: left side (64px) for text, right side for simple meter
+        let (text_margin, text_usable_width, meter_area_start) = aio_text_attributes(w);        
+
+        // Convert dB to level for simple vertical meter
+        let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
+        let level = (x * PEAK_METER_LEVELS_MAX as f32).round() as u8;
+        let mut changed = state.last_peak_m != level;
+        changed |= state.last_artist != track_info;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+        state.last_peak_m = level;
+
+        // Draw track info text on left side if changed
+        if state.last_artist != track_info {
+            state.last_artist = track_info.to_string();
+
+            let character_style = MonoTextStyle::new(&FONT_4X6, BinaryColor::On);
+            let textbox_style = TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Left)
+                .vertical_alignment(VerticalAlignment::Top)
+                .build();
+
+            let text_rect = Rectangle::new(
+                Point::new(text_margin, 3),
+                Size::new(text_usable_width as u32, (h - 6) as u32)
+            );
+
+            let text_box = TextBox::with_textbox_style(
+                track_info,
+                text_rect,
+                character_style,
+                textbox_style
+            );
+            text_box.draw(display)?;
+        }
+
+        // Draw simple vertical meter on right side
+        let (mx, my, meter_width, meter_height) = aio_meter_attributes(meter_area_start, w, h);
+
+        // Calculate fill height based on level
+        let fill_height = (level as i32 * meter_height) / PEAK_METER_LEVELS_MAX as i32;
+
+        // Draw meter bar
+        if fill_height > 0 {
+            Rectangle::new(
+                Point::new(meter_area_start + mx, my + (meter_height - fill_height)),
+                Size::new(meter_width as u32, fill_height as u32)
+            )
+            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+            .draw(display)?;
+        }
+
+        Ok(true)
+    }
+
+    /// Draw AIO VU visualization (Gray4) - combines track info with meter
+    /// TODO: Replace simple meter with VU needle once VU color support is added
+    fn draw_aio_vu_gray4<D>(
+        display: &mut D,
+        db: f32,
+        track_info: &str,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = Gray4> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::Rectangle;
+        use crate::vision::{LEVEL_FLOOR_DB, LEVEL_CEIL_DB};
+
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+
+        // Layout: left side (64px) for text, right side for simple meter
+        let (text_margin, text_usable_width, meter_area_start) = aio_text_attributes(w);        
+
+        // Convert dB to level for simple vertical meter
+        let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
+        let level = (x * PEAK_METER_LEVELS_MAX as f32).round() as u8;
+        let mut changed = state.last_peak_m != level;
+        changed |= state.last_artist != track_info;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+        state.last_peak_m = level;
+
+        // Draw track info text on left side if changed
+        if state.last_artist != track_info {
+            state.last_artist = track_info.to_string();
+
+            let character_style = MonoTextStyle::new(&FONT_4X6, Gray4::WHITE);
+            let textbox_style = TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Left)
+                .vertical_alignment(VerticalAlignment::Top)
+                .build();
+
+            let text_rect = Rectangle::new(
+                Point::new(text_margin, 3),
+                Size::new(text_usable_width as u32, (h - 6) as u32)
+            );
+
+            let text_box = TextBox::with_textbox_style(
+                track_info,
+                text_rect,
+                character_style,
+                textbox_style
+            );
+            text_box.draw(display)?;
+        }
+
+        // Draw simple vertical meter on right side - cyan colored
+        let (mx, my, meter_width, meter_height) = aio_meter_attributes(meter_area_start, w, h);
+
+        // Calculate fill height based on level
+        let fill_height = (level as i32 * meter_height) / PEAK_METER_LEVELS_MAX as i32;
+
+        // Draw meter bar in cyan
+        if fill_height > 0 {
+            Rectangle::new(
+                Point::new(meter_area_start + mx, my + (meter_height - fill_height)),
+                Size::new(meter_width as u32, fill_height as u32)
+            )
+            .into_styled(PrimitiveStyle::with_fill(Gray4::new(11))) // Cyan
+            .draw(display)?;
+        }
+
+        Ok(true)
+    }
+
+    /// Draw AIO Histogram visualization (monochrome) - combines track info with histogram
+    fn draw_aio_hist_mono<D>(
+        display: &mut D,
+        bands: Vec<u8>,
+        track_info: &str,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::Rectangle;
+        use crate::vision::ensure_band_state;
+
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+
+        // Ensure state buffers match band count
+        ensure_band_state(state, 0, 0, bands.len(), Visualization::AioHistMono, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        state.last_bands_m.copy_from_slice(&bands);
+
+        // Compute body decay and peak caps
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(state.last_tick);
+        state.last_tick = now;
+
+        let mut changed = Self::update_body_decay(&mut state.draw_bands_m, &state.last_bands_m, elapsed);
+        changed |= Self::update_caps(&mut state.cap_m, &mut state.cap_hold_until_m, &mut state.cap_last_update_m, &state.draw_bands_m, now);
+        changed |= state.last_artist != track_info;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // Layout: left side (64px) for text, right side for histogram
+        let (text_margin, text_usable_width, meter_area_start) = aio_text_attributes(w);        
+
+        // Draw track info text on left side if changed
+        if state.last_artist != track_info {
+            state.last_artist = track_info.to_string();
+
+            let character_style = MonoTextStyle::new(&FONT_4X6, BinaryColor::On);
+            let textbox_style = TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Left)
+                .vertical_alignment(VerticalAlignment::Top)
+                .build();
+
+            let text_rect = Rectangle::new(
+                Point::new(text_margin, 3),
+                Size::new(text_usable_width as u32, (h - 6) as u32)
+            );
+
+            let text_box = TextBox::with_textbox_style(
+                track_info,
+                text_rect,
+                character_style,
+                textbox_style
+            );
+            text_box.draw(display)?;
+        }
+
+        // Draw histogram on right side
+        let (mx, my, meter_width, meter_height) = aio_meter_attributes(meter_area_start, w, h);
+
+        Self::draw_hist_panel_mono(
+            display,
+            "Downmix",
+            10,
+            h - 10,
+            Point::new(meter_area_start + mx, my),
+            Size::new(meter_width as u32, meter_height as u32),
+            &state.draw_bands_m,
+            &state.cap_m
+        )?;
+
+        Ok(true)
+    }
+
+    /// Draw AIO Histogram visualization (Gray4) - combines track info with histogram
+    fn draw_aio_hist_gray4<D>(
+        display: &mut D,
+        bands: Vec<u8>,
+        track_info: &str,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = Gray4> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::Rectangle;
+        use crate::vision::ensure_band_state;
+
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+
+        // Ensure state buffers match band count
+        ensure_band_state(state, 0, 0, bands.len(), Visualization::AioHistMono, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        state.last_bands_m.copy_from_slice(&bands);
+
+        // Compute body decay and peak caps
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(state.last_tick);
+        state.last_tick = now;
+
+        let mut changed = Self::update_body_decay(&mut state.draw_bands_m, &state.last_bands_m, elapsed);
+        changed |= Self::update_caps(&mut state.cap_m, &mut state.cap_hold_until_m, &mut state.cap_last_update_m, &state.draw_bands_m, now);
+        changed |= state.last_artist != track_info;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // Layout: left side, half width for text, right side for visualization
+        let (text_margin, text_usable_width, meter_area_start) = aio_text_attributes(w);        
+
+        // Draw track info text on left side if changed
+        if state.last_artist != track_info {
+            state.last_artist = track_info.to_string();
+
+            let character_style = MonoTextStyle::new(&FONT_4X6, Gray4::WHITE);
+            let textbox_style = TextBoxStyleBuilder::new()
+                .alignment(HorizontalAlignment::Left)
+                .vertical_alignment(VerticalAlignment::Top)
+                .build();
+
+            let text_rect = Rectangle::new(
+                Point::new(text_margin, 3),
+                Size::new(text_usable_width as u32, (h - 6) as u32)
+            );
+
+            let text_box = TextBox::with_textbox_style(
+                track_info,
+                text_rect,
+                character_style,
+                textbox_style
+            );
+            text_box.draw(display)?;
+        }
+
+        // Draw histogram on right side with cyan bars and yellow caps
+        let (mx, my, meter_width, meter_height) = aio_meter_attributes(meter_area_start, w, h);
+
+        Self::draw_hist_panel_gray4(
+            display,
+            "Downmix",
+            10,
+            h - 10,
+            Point::new(meter_area_start + mx, my),
+            Size::new(meter_width as u32, meter_height as u32),
+            &state.draw_bands_m,
+            &state.cap_m
+        )?;
+
+        Ok(true)
+    }
+
+    /// Draw VU mono visualization (monochrome) - single VU meter with needle
+    fn draw_vu_mono<D>(
+        display: &mut D,
+        db: f32,
+        vk: Visualization,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
+    {
+        use embedded_graphics::primitives::Rectangle;
+        use embedded_graphics::image::{Image, ImageRaw};
+        use crate::vision::ensure_band_state;
+
+        // Ensure state is initialized with VU physics parameters
+        ensure_band_state(state, 0, 0, 0, vk, true, -46.0, 46.0, -21.0, 4.8, 10, 73);
+
+        // Draw SVG background on init
+        if state.init {
+            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
+            Image::new(&raw, Point::new(0, 0)).draw(display)?;
+        }
+
+        // Update VU physics
+        let (_disp, over) = state.vu_m.update_drive(db);
+        let mut changed = state.last_db_m != db || state.last_disp_m != _disp;
+
+        state.last_db_m = db;
+        state.last_disp_m = _disp;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // Layout
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        let mx = 3;
+        let my = 6;
+        let title_base = 10;
+        let inner_w = w - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+
+        // Draw VU needle
+        state.vus_m.draw_vu_needle(
+            display,
+            Rectangle::new(
+                Point::new(mx, my),
+                Size::new(inner_w as u32, inner_h as u32)
+            ),
+            db,
+            2,
+            BinaryColor::On,
+            BinaryColor::Off,
+        )?;
+
+        // Draw over-limit LED
+        let led_fill = if over { BinaryColor::On } else { BinaryColor::Off };
+        draw_circle(
+            display,
+            Point::new(116, 27),
+            8,
+            BinaryColor::On,
+            1,
+            led_fill
+        )?;
+
+        Ok(true)
+    }
+
+    /// Draw VU mono visualization (Gray4) - single VU meter with red needle
+    fn draw_vu_mono_gray4<D>(
+        display: &mut D,
+        db: f32,
+        vk: Visualization,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = Gray4> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::{Rectangle, Line};
+        use embedded_graphics::image::{Image, ImageRaw};
+        use crate::vision::ensure_band_state;
+
+        // Ensure state is initialized
+        ensure_band_state(state, 0, 0, 0, vk, true, -46.0, 46.0, -21.0, 4.8, 10, 73);
+
+        // Always redraw Gray4 SVG background (colorized with red VU meter face)
+        let svg_path = crate::visualization::get_visualizer_panel(vk, state.wide);
+        if !svg_path.is_empty() {
+            let width = display.size().width;
+            let height = display.size().height;
+            let _ = crate::drawsvg::get_svg_gray4(&svg_path, width, height, &mut state.buffer);
+            let raw = ImageRaw::<Gray4>::new(&state.buffer, width);
+            Image::new(&raw, Point::new(0, 0)).draw(display)?;
+        }
+
+        // Update VU physics (using BinaryColor VU physics, just for angle calculations)
+        let (_disp, over) = state.vu_m.update_drive(db);
+        let mut changed = state.last_db_m != db || state.last_disp_m != _disp;
+
+        state.last_db_m = db;
+        state.last_disp_m = _disp;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // Layout
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        let mx = 3;
+        let my = 6;
+        let title_base = 10;
+        let inner_w = w - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+
+        // VU meter parameters (hardcoded since Scale fields are private)
+        const SWEEP_MIN: f64 = -46.0;
+        const SWEEP_MAX: f64 = 46.0;
+        const SCALE_MIN: f64 = -21.0;
+        const SCALE_MAX: f64 = 4.8;
+        const TOP_Y: i32 = 10;
+        const BOTTOM_Y: i32 = 73;
+
+        // Calculate needle position manually (Scale::map_value_to_angle logic)
+        let cx = mx + inner_w / 2;
+        let cy = BOTTOM_Y;
+        let r_arc = BOTTOM_Y - TOP_Y;
+
+        // Map dB to angle
+        let mut value = db as f64;
+        if value < SCALE_MIN {
+            value = SCALE_MIN;
+        } else if value > SCALE_MAX {
+            value = SCALE_MAX;
+        }
+        let normalized = (value - SCALE_MIN) / (SCALE_MAX - SCALE_MIN);
+        let ang_deg = SWEEP_MIN + normalized * (SWEEP_MAX - SWEEP_MIN);
+        let ang_rad = ang_deg.to_radians();
+
+        // Calculate needle endpoints
+        let p0 = Point::new(cx, cy);
+        let p1 = Point::new(
+            cx + (r_arc as f32 * ang_rad.cos() as f32) as i32,
+            cy - (r_arc as f32 * ang_rad.sin() as f32) as i32
+        );
+
+        // Draw needle in red (Gray4::new(10) represents red in grayscale)
+        Line::new(p0, p1)
+            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 2))
+            .draw(display)?;
+
+        // Draw over-limit LED in red
+        let led_fill = if over { Gray4::new(10) } else { Gray4::new(0) };
+        draw_circle(
+            display,
+            Point::new(116, 27),
+            8,
+            Gray4::WHITE,  // LED border
+            1,
+            led_fill       // Red when over
+        )?;
+
+        Ok(true)
+    }
+
+    /// Draw VU stereo visualization (monochrome) - dual VU meters with needles
+    fn draw_vu_stereo<D>(
+        display: &mut D,
+        l_db: f32,
+        r_db: f32,
+        vk: Visualization,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
+    {
+        use embedded_graphics::primitives::Rectangle;
+        use embedded_graphics::image::{Image, ImageRaw};
+        use crate::vision::ensure_band_state;
+
+        // Ensure state is initialized with VU physics parameters (different from mono)
+        ensure_band_state(state, 0, 0, 0, vk, true, -45.27, 45.27, -21.0, 5.0, 8, 48);
+
+        // Draw SVG background on init
+        if state.init {
+            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
+            Image::new(&raw, Point::new(0, 0)).draw(display)?;
+        }
+
+        // Update VU physics for both channels
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+
+        let mut changed = state.last_db_l != l_db || state.last_db_r != r_db;
+        changed |= state.last_disp_l != _disp_l || state.last_disp_r != _disp_r;
+
+        state.last_db_l = l_db;
+        state.last_db_r = r_db;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // Layout - split horizontally
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        if w <= 6 || h <= 4 {
+            return Ok(false);
+        }
+
+        let mx = 3;
+        let my = 6;
+        let title_base = 10;
+        let gap = 2;
+        let inner_w = w / 2 - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+        let over_y = my + 6;
+
+        // Draw left VU needle
+        if state.last_disp_l != _disp_l {
+            state.last_disp_l = _disp_l;
+            state.vus_l.draw_vu_needle(
+                display,
+                Rectangle::new(
+                    Point::new(mx, my),
+                    Size::new(inner_w as u32, inner_h as u32)
+                ),
+                state.last_disp_l,
+                1,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )?;
+        }
+
+        // Draw right VU needle
+        if state.last_disp_r != _disp_r {
+            state.last_disp_r = _disp_r;
+            state.vus_r.draw_vu_needle(
+                display,
+                Rectangle::new(
+                    Point::new(3 * mx + inner_w + gap, my),
+                    Size::new(inner_w as u32, inner_h as u32)
+                ),
+                state.last_disp_r,
+                1,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )?;
+        }
+
+        // Draw over-limit LEDs
+        if over_l {
+            draw_circle(
+                display,
+                Point::new(mx + inner_w - 9, over_y),
+                10,
+                BinaryColor::On,
+                0,
+                BinaryColor::On
+            )?;
+        }
+        if over_r {
+            draw_circle(
+                display,
+                Point::new(2 * (mx + inner_w) + gap - 9, over_y),
+                10,
+                BinaryColor::On,
+                0,
+                BinaryColor::On
+            )?;
+        }
+
+        Ok(true)
+    }
+
+    /// Draw VU stereo visualization (Gray4) - dual VU meters with red needles
+    fn draw_vu_stereo_gray4<D>(
+        display: &mut D,
+        l_db: f32,
+        r_db: f32,
+        vk: Visualization,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = Gray4> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::{Rectangle, Line};
+        use embedded_graphics::image::{Image, ImageRaw};
+        use crate::vision::ensure_band_state;
+
+        // Ensure state is initialized
+        ensure_band_state(state, 0, 0, 0, vk, true, -45.27, 45.27, -21.0, 5.0, 8, 48);
+
+        // Always redraw Gray4 SVG background (colorized with red VU meter faces)
+        let svg_path = crate::visualization::get_visualizer_panel(vk, state.wide);
+        if !svg_path.is_empty() {
+            let width = display.size().width;
+            let height = display.size().height;
+            let _ = crate::drawsvg::get_svg_gray4(&svg_path, width, height, &mut state.buffer);
+            let raw = ImageRaw::<Gray4>::new(&state.buffer, width);
+            Image::new(&raw, Point::new(0, 0)).draw(display)?;
+        }
+
+        // Update VU physics for both channels
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+
+        let mut changed = state.last_db_l != l_db || state.last_db_r != r_db;
+        changed |= state.last_disp_l != _disp_l || state.last_disp_r != _disp_r;
+
+        state.last_db_l = l_db;
+        state.last_db_r = r_db;
+        state.last_disp_l = _disp_l;
+        state.last_disp_r = _disp_r;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // Layout - split horizontally
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        if w <= 6 || h <= 4 {
+            return Ok(false);
+        }
+
+        let mx = 3;
+        let my = 6;
+        let title_base = 10;
+        let gap = 2;
+        let inner_w = w / 2 - 2 * mx;
+        let inner_h = h - my - title_base - 1;
+        let over_y = my + 6;
+
+        // VU meter parameters for stereo (different from mono)
+        const SWEEP_MIN: f64 = -45.27;
+        const SWEEP_MAX: f64 = 45.27;
+        const SCALE_MIN: f64 = -21.0;
+        const SCALE_MAX: f64 = 5.0;
+        const TOP_Y: i32 = 8;
+        const BOTTOM_Y: i32 = 48;
+
+        // Helper to calculate needle angle
+        let map_db_to_angle = |db: f32| {
+            let mut value = db as f64;
+            if value < SCALE_MIN {
+                value = SCALE_MIN;
+            } else if value > SCALE_MAX {
+                value = SCALE_MAX;
+            }
+            let normalized = (value - SCALE_MIN) / (SCALE_MAX - SCALE_MIN);
+            SWEEP_MIN + normalized * (SWEEP_MAX - SWEEP_MIN)
+        };
+
+        // Draw left VU needle
+        let cx_l = mx + inner_w / 2;
+        let cy = BOTTOM_Y;
+        let r_arc = BOTTOM_Y - TOP_Y;
+
+        let ang_deg_l = map_db_to_angle(l_db);
+        let ang_rad_l = ang_deg_l.to_radians();
+
+        let p0_l = Point::new(cx_l, cy);
+        let p1_l = Point::new(
+            cx_l + (r_arc as f32 * ang_rad_l.cos() as f32) as i32,
+            cy - (r_arc as f32 * ang_rad_l.sin() as f32) as i32
+        );
+
+        Line::new(p0_l, p1_l)
+            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 1))
+            .draw(display)?;
+
+        // Draw right VU needle
+        let cx_r = 3 * mx + inner_w + gap + inner_w / 2;
+
+        let ang_deg_r = map_db_to_angle(r_db);
+        let ang_rad_r = ang_deg_r.to_radians();
+
+        let p0_r = Point::new(cx_r, cy);
+        let p1_r = Point::new(
+            cx_r + (r_arc as f32 * ang_rad_r.cos() as f32) as i32,
+            cy - (r_arc as f32 * ang_rad_r.sin() as f32) as i32
+        );
+
+        Line::new(p0_r, p1_r)
+            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 1))
+            .draw(display)?;
+
+        // Draw over-limit LEDs
+        if over_l {
+            draw_circle(
+                display,
+                Point::new(mx + inner_w - 9, over_y),
+                10,
+                Gray4::WHITE,
+                0,
+                Gray4::new(10)  // Red fill
+            )?;
+        }
+        if over_r {
+            draw_circle(
+                display,
+                Point::new(2 * (mx + inner_w) + gap - 9, over_y),
+                10,
+                Gray4::WHITE,
+                0,
+                Gray4::new(10)  // Red fill
+            )?;
+        }
+
+        Ok(true)
+    }
+
+    /// Draw VU stereo with center peak visualization (monochrome) - combination mode
+    fn draw_vu_combi<D>(
+        display: &mut D,
+        l_db: f32,
+        r_db: f32,
+        peak_level: u8,
+        peak_hold: u8,
+        vk: Visualization,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
+    {
+        use embedded_graphics::primitives::Rectangle;
+        use embedded_graphics::image::{Image, ImageRaw};
+        use crate::vision::ensure_band_state;
+        use crate::draw::draw_rectangle;
+
+        // Ensure state is initialized with combination VU physics parameters
+        ensure_band_state(state, 0, 0, 0, vk, true, -33.69, 33.69, -21.0, 4.8, 16, 40);
+
+        // Draw SVG background on init
+        if state.init {
+            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
+            Image::new(&raw, Point::new(0, 0)).draw(display)?;
+        }
+
+        // Update VU physics for both channels
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+
+        let mut changed = state.last_db_l != l_db || state.last_db_r != r_db;
+        changed |= state.last_disp_l != _disp_l || state.last_disp_r != _disp_r;
+        changed |= state.last_peak_m != peak_level || state.last_hold_m != peak_hold;
+
+        state.last_db_l = l_db;
+        state.last_db_r = r_db;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // Layout
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        if w <= 6 || h <= 4 {
+            return Ok(false);
+        }
+
+        let mx = 10;
+        let my = 8;
+        let title_base = 24;
+        let gap = 6;
+        let inner_w = w / 2 - 2 * mx - gap / 2;
+        let inner_h = h - my - title_base - 1;
+        let over_y = 51;
+
+        // Draw center peak meter
+        if state.last_peak_m != peak_level || state.last_hold_m != peak_hold {
+            let level_brackets: [i16; 19] = [
+                -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
+                -4, -3, -2, -1, 0, 2, 3, 5, 8
+            ];
+            state.last_peak_m = peak_level;
+            state.last_hold_m = peak_hold;
+
+            let top_meter = my + 1;
+            let bottom_meter = h - 2 * my - 1;
+            let nodeh = (bottom_meter as u32 - top_meter as u32) / (level_brackets.len() as u32 + 1);
+            let nodew = 2 * gap as u32;
+            let xpos = w / 2 - gap;
+            let mut ypos = bottom_meter + nodeh as i32;
+
+            for l in level_brackets {
+                let mv = level_brackets[0] + state.last_peak_m as i16;
+                let color = if mv >= l {
+                    BinaryColor::On
+                } else {
+                    BinaryColor::Off
+                };
+                draw_rectangle(
+                    display,
+                    Point::new(xpos, ypos),
+                    nodew,
+                    nodeh,
+                    color,
+                    Some(0),
+                    Some(BinaryColor::Off)
+                )?;
+                ypos -= nodeh as i32;
+            }
+        }
+
+        // Draw left VU needle
+        if state.last_disp_l != _disp_l {
+            state.last_disp_l = _disp_l;
+            state.vus_l.draw_vu_needle(
+                display,
+                Rectangle::new(
+                    Point::new(mx, my),
+                    Size::new(inner_w as u32, inner_h as u32)
+                ),
+                l_db,
+                1,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )?;
+        }
+
+        // Draw right VU needle
+        if state.last_disp_r != _disp_r {
+            state.last_disp_r = _disp_r;
+            state.vus_r.draw_vu_needle(
+                display,
+                Rectangle::new(
+                    Point::new(3 * mx + inner_w + gap, my),
+                    Size::new(inner_w as u32, inner_h as u32)
+                ),
+                r_db,
+                1,
+                BinaryColor::On,
+                BinaryColor::Off,
+            )?;
+        }
+
+        // Draw over-limit LEDs
+        if over_l {
+            draw_circle(
+                display,
+                Point::new(mx + mx + inner_w - 6, over_y),
+                10,
+                BinaryColor::On,
+                0,
+                BinaryColor::On
+            )?;
+        }
+        if over_r {
+            draw_circle(
+                display,
+                Point::new(2 * (mx + inner_w) + gap - 6, over_y),
+                10,
+                BinaryColor::On,
+                0,
+                BinaryColor::On
+            )?;
+        }
+
+        Ok(true)
+    }
+
+    /// Draw VU stereo with center peak visualization (Gray4) - combination mode
+    fn draw_vu_combi_gray4<D>(
+        display: &mut D,
+        l_db: f32,
+        r_db: f32,
+        peak_level: u8,
+        peak_hold: u8,
+        vk: Visualization,
+        state: &mut crate::vision::LastVizState,
+    ) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = Gray4> + OriginDimensions,
+    {
+        use embedded_graphics::primitives::{Rectangle, Line};
+        use embedded_graphics::image::{Image, ImageRaw};
+        use crate::vision::ensure_band_state;
+        use crate::draw::draw_rectangle;
+
+        // Ensure state is initialized
+        ensure_band_state(state, 0, 0, 0, vk, true, -33.69, 33.69, -21.0, 4.8, 16, 40);
+
+        // Always redraw Gray4 SVG background
+        let svg_path = crate::visualization::get_visualizer_panel(vk, state.wide);
+        if !svg_path.is_empty() {
+            let width = display.size().width;
+            let height = display.size().height;
+            let _ = crate::drawsvg::get_svg_gray4(&svg_path, width, height, &mut state.buffer);
+            let raw = ImageRaw::<Gray4>::new(&state.buffer, width);
+            Image::new(&raw, Point::new(0, 0)).draw(display)?;
+        }
+
+        // Update VU physics for both channels
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+
+        let mut changed = state.last_db_l != l_db || state.last_db_r != r_db;
+        changed |= state.last_disp_l != _disp_l || state.last_disp_r != _disp_r;
+        changed |= state.last_peak_m != peak_level || state.last_hold_m != peak_hold;
+
+        state.last_db_l = l_db;
+        state.last_db_r = r_db;
+        state.last_disp_l = _disp_l;
+        state.last_disp_r = _disp_r;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
+        state.init = false;
+
+        // Layout
+        let Size { width, height } = display.size();
+        let (w, h) = (width as i32, height as i32);
+        if w <= 6 || h <= 4 {
+            return Ok(false);
+        }
+
+        let mx = 10;
+        let my = 8;
+        let title_base = 24;
+        let gap = 6;
+        let inner_w = w / 2 - 2 * mx - gap / 2;
+        let inner_h = h - my - title_base - 1;
+        let over_y = 51;
+
+        // VU meter parameters for combination mode
+        const SWEEP_MIN: f64 = -33.69;
+        const SWEEP_MAX: f64 = 33.69;
+        const SCALE_MIN: f64 = -21.0;
+        const SCALE_MAX: f64 = 4.8;
+        const TOP_Y: i32 = 16;
+        const BOTTOM_Y: i32 = 40;
+
+        // Draw center peak meter with cyan bars
+        if state.last_peak_m != peak_level || state.last_hold_m != peak_hold {
+            let level_brackets: [i16; 19] = [
+                -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
+                -4, -3, -2, -1, 0, 2, 3, 5, 8
+            ];
+            state.last_peak_m = peak_level;
+            state.last_hold_m = peak_hold;
+
+            let top_meter = my + 1;
+            let bottom_meter = h - 2 * my - 1;
+            let nodeh = (bottom_meter as u32 - top_meter as u32) / (level_brackets.len() as u32 + 1);
+            let nodew = 2 * gap as u32;
+            let xpos = w / 2 - gap;
+            let mut ypos = bottom_meter + nodeh as i32;
+
+            for l in level_brackets {
+                let mv = level_brackets[0] + state.last_peak_m as i16;
+                let color = if mv >= l {
+                    Gray4::new(11)  // Cyan
+                } else {
+                    Gray4::new(0)   // Off
+                };
+                draw_rectangle(
+                    display,
+                    Point::new(xpos, ypos),
+                    nodew,
+                    nodeh,
+                    color,
+                    Some(0),
+                    Some(Gray4::new(0))
+                )?;
+                ypos -= nodeh as i32;
+            }
+        }
+
+        // Helper to calculate needle angle
+        let map_db_to_angle = |db: f32| {
+            let mut value = db as f64;
+            if value < SCALE_MIN {
+                value = SCALE_MIN;
+            } else if value > SCALE_MAX {
+                value = SCALE_MAX;
+            }
+            let normalized = (value - SCALE_MIN) / (SCALE_MAX - SCALE_MIN);
+            SWEEP_MIN + normalized * (SWEEP_MAX - SWEEP_MIN)
+        };
+
+        // Draw left VU needle
+        let cx_l = mx + inner_w / 2;
+        let cy = BOTTOM_Y;
+        let r_arc = BOTTOM_Y - TOP_Y;
+
+        let ang_deg_l = map_db_to_angle(l_db);
+        let ang_rad_l = ang_deg_l.to_radians();
+
+        let p0_l = Point::new(cx_l, cy);
+        let p1_l = Point::new(
+            cx_l + (r_arc as f32 * ang_rad_l.cos() as f32) as i32,
+            cy - (r_arc as f32 * ang_rad_l.sin() as f32) as i32
+        );
+
+        Line::new(p0_l, p1_l)
+            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 1))
+            .draw(display)?;
+
+        // Draw right VU needle
+        let cx_r = 3 * mx + inner_w + gap + inner_w / 2;
+
+        let ang_deg_r = map_db_to_angle(r_db);
+        let ang_rad_r = ang_deg_r.to_radians();
+
+        let p0_r = Point::new(cx_r, cy);
+        let p1_r = Point::new(
+            cx_r + (r_arc as f32 * ang_rad_r.cos() as f32) as i32,
+            cy - (r_arc as f32 * ang_rad_r.sin() as f32) as i32
+        );
+
+        Line::new(p0_r, p1_r)
+            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 1))
+            .draw(display)?;
+
+        // Draw over-limit LEDs in red
+        if over_l {
+            draw_circle(
+                display,
+                Point::new(mx + mx + inner_w - 6, over_y),
+                10,
+                Gray4::WHITE,
+                0,
+                Gray4::new(10)  // Red fill
+            )?;
+        }
+        if over_r {
+            draw_circle(
+                display,
+                Point::new(2 * (mx + inner_w) + gap - 6, over_y),
+                10,
+                Gray4::WHITE,
+                0,
+                Gray4::new(10)  // Red fill
+            )?;
+        }
 
         Ok(true)
     }
