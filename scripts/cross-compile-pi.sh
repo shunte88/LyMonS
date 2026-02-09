@@ -19,26 +19,26 @@ if ! command -v cross &> /dev/null; then
     cargo install cross --git https://github.com/cross-rs/cross
 fi
 
-# Build main binary using cross
+# Build main binary using cross (with vendored openssl)
 echo "Building main binary..."
-cross build --release --target="${TARGET}"
+OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cross build --release --target="${TARGET}"
 
 # Build plugins
 echo "Building plugins..."
 cd drivers/lymons-driver-ssd1306
-cross build --release --target="${TARGET}"
+OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cross build --release --target="${TARGET}"
 cd ../..
 
 cd drivers/lymons-driver-ssd1309
-cross build --release --target="${TARGET}"
+OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cross build --release --target="${TARGET}"
 cd ../..
 
 cd drivers/lymons-driver-sh1106
-cross build --release --target="${TARGET}"
+OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cross build --release --target="${TARGET}"
 cd ../..
 
 cd drivers/lymons-driver-ssd1322
-cross build --release --target="${TARGET}"
+OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cross build --release --target="${TARGET}"
 cd ../..
 
 # Organize plugins
