@@ -85,12 +85,46 @@ jobs:
         path: lymons-*-pcp-${{ steps.package_info.outputs.arch }}.tgz
         retention-days: 30
 
+    - name: Create release (on tag push)
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: lymons-*-pcp-${{ steps.package_info.outputs.arch }}.tgz
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-binaries:
+    name: Publish to Binaries Branch
+    runs-on: ubuntu-latest
+    needs: build-pi
+    if: success() && github.event_name == 'push'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download armv7 artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: lymons-pcp-armv7
+        path: ./artifacts/armv7
+
+    - name: Download aarch64 artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: lymons-pcp-aarch64
+        path: ./artifacts/aarch64
+
+    - name: Get version
+      id: version
+      run: |
+        VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
     - name: Publish to binaries branch
       run: |
-        # Save package file to temp location
-        PACKAGE_FILE="lymons-${{ steps.package_info.outputs.version }}-pcp-${{ steps.package_info.outputs.arch }}.tgz"
-        cp "${PACKAGE_FILE}" "/tmp/${PACKAGE_FILE}"
-
         # Configure git with token authentication
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -106,17 +140,18 @@ jobs:
         git rm -rf . 2>/dev/null || true
 
         # Create directory structure
-        mkdir -p latest ${{ steps.package_info.outputs.arch }}
+        mkdir -p latest armv7 aarch64
 
-        # Copy versioned file from temp
-        cp "/tmp/${PACKAGE_FILE}" ${{ steps.package_info.outputs.arch }}/
+        # Copy armv7 files
+        cp artifacts/armv7/lymons-${{ steps.version.outputs.version }}-pcp-armv7.tgz armv7/
+        cp artifacts/armv7/lymons-${{ steps.version.outputs.version }}-pcp-armv7.tgz latest/lymons-latest-pcp-armv7.tgz
 
-        # Copy as "latest" for easy access
-        cp "/tmp/${PACKAGE_FILE}" latest/lymons-latest-pcp-${{ steps.package_info.outputs.arch }}.tgz
+        # Copy aarch64 files
+        cp artifacts/aarch64/lymons-${{ steps.version.outputs.version }}-pcp-aarch64.tgz aarch64/
+        cp artifacts/aarch64/lymons-${{ steps.version.outputs.version }}-pcp-aarch64.tgz latest/lymons-latest-pcp-aarch64.tgz
 
-        # Create README if it doesn't exist
-        if [ ! -f README.md ]; then
-          cat > README.md << 'EOF'
+        # Create README
+        cat > README.md << 'EOF'
         # LyMonS Raspberry Pi Binaries
 
         Pre-compiled binaries for Raspberry Pi (TinyCore Linux / PiCorePlayer).
@@ -140,37 +175,27 @@ jobs:
         ---
         *Built automatically by GitHub Actions*
         EOF
-        fi
 
         # Add and commit
         git add .
-        git commit -m "Update binaries: ${{ steps.package_info.outputs.arch }} v${{ steps.package_info.outputs.version }}"
+        git commit -m "Update binaries: v${{ steps.version.outputs.version }}"
 
         # Push to binaries branch
         git push origin binaries
-      working-directory: ${{ github.workspace }}
-
-    - name: Create release (on tag push)
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: lymons-*-pcp-${{ steps.package_info.outputs.arch }}.tgz
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: build-pi
+    needs: [build-pi, publish-binaries]
     if: always()
     steps:
     - name: Check build status
       run: |
         if [ "${{ needs.build-pi.result }}" == "success" ]; then
           echo "✅ All Raspberry Pi builds completed successfully!"
+          if [ "${{ needs.publish-binaries.result }}" == "success" ]; then
+            echo "✅ Binaries published to binaries branch!"
+          fi
         else
           echo "❌ Some builds failed"
           exit 1
