@@ -229,9 +229,9 @@ impl PluginLoader {
         }
 
         // Extract plugin metadata
-        let mut name_buf = vec![0i8; LYMONS_PLUGIN_NAME_SIZE];
-        let mut version_buf = vec![0i8; LYMONS_PLUGIN_VERSION_SIZE];
-        let mut driver_type_buf = vec![0i8; LYMONS_PLUGIN_DRIVER_TYPE_SIZE];
+        let mut name_buf = vec![0 as std::ffi::c_char; LYMONS_PLUGIN_NAME_SIZE];
+        let mut version_buf = vec![0 as std::ffi::c_char; LYMONS_PLUGIN_VERSION_SIZE];
+        let mut driver_type_buf = vec![0 as std::ffi::c_char; LYMONS_PLUGIN_DRIVER_TYPE_SIZE];
 
         (vtable.plugin_info)(
             name_buf.as_mut_ptr(),
@@ -271,7 +271,7 @@ impl PluginLoader {
     }
 
     /// Extract a null-terminated string from a C buffer
-    fn extract_string(buffer: &[i8]) -> String {
+    fn extract_string(buffer: &[std::ffi::c_char]) -> String {
         let len = buffer.iter()
             .position(|&c| c == 0)
             .unwrap_or(buffer.len());
