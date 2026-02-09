@@ -202,26 +202,27 @@ jobs:
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
 
-    - name: Update README.md
+    - name: Update README and commit if changed
       run: |
+        # Configure git with token authentication
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
         # Update version line using sed
         sed -i "s/> LyMonS version .* | Built: .*/> LyMonS version ${{ steps.info.outputs.version }} | Built: ${{ steps.info.outputs.build_date }}/" README.md
 
         # Check if anything changed
         if git diff --quiet README.md; then
-          echo "No changes to README.md"
+          echo "✅ README.md already up to date (version ${{ steps.info.outputs.version }})"
           exit 0
         fi
 
-    - name: Commit and push changes
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
+        # Commit and push changes
         git add README.md
         git commit -m "docs: Update README version to ${{ steps.info.outputs.version }} (built ${{ steps.info.outputs.build_date }})"
         git push origin main
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        echo "✅ README.md updated with version ${{ steps.info.outputs.version }}"
 
   build-summary:
     name: Build Summary
