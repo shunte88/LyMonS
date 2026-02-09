@@ -1,7 +1,7 @@
 # LyMonS Makefile
 # Build targets for main binary and plugins
 
-.PHONY: all build plugins install-plugins clean help pcp
+.PHONY: all build plugins install-plugins clean help pcp cross_pi release_pi
 
 # Default target
 all: build plugins
@@ -76,6 +76,32 @@ clean:
 	cargo clean
 	@echo "Clean complete!"
 
+# Cross-compile for Raspberry Pi (armv7 - Pi 3/4 32-bit)
+cross_pi:
+	@echo "Cross-compiling for Raspberry Pi (armv7)..."
+	@./scripts/cross-compile-pi.sh armv7-unknown-linux-gnueabihf
+
+# Cross-compile for Raspberry Pi (aarch64 - Pi 4/5 64-bit)
+cross_pi64:
+	@echo "Cross-compiling for Raspberry Pi (aarch64)..."
+	@./scripts/cross-compile-pi.sh aarch64-unknown-linux-gnu
+
+# Create Raspberry Pi release package (armv7 - most compatible)
+release_pi: cross_pi
+	@echo "Creating Raspberry Pi deployment package..."
+	@./scripts/create-pi-package.sh armv7-unknown-linux-gnueabihf
+	@echo ""
+	@echo "Package created successfully!"
+	@ls -lh lymons-*-pcp-armv7.tgz 2>/dev/null || echo "Package file not found"
+
+# Create Raspberry Pi 64-bit release package
+release_pi64: cross_pi64
+	@echo "Creating Raspberry Pi 64-bit deployment package..."
+	@./scripts/create-pi-package.sh aarch64-unknown-linux-gnu
+	@echo ""
+	@echo "Package created successfully!"
+	@ls -lh lymons-*-pcp-aarch64.tgz 2>/dev/null || echo "Package file not found"
+
 # Show help
 help:
 	@echo "LyMonS Build System"
@@ -86,6 +112,10 @@ help:
 	@echo "  plugins              - Build all plugins"
 	@echo "  workspace            - Build everything using workspace"
 	@echo "  pcp                  - Create PiCorePlayer deployment package (.tgz)"
+	@echo "  cross_pi             - Cross-compile for Raspberry Pi (armv7 32-bit)"
+	@echo "  cross_pi64           - Cross-compile for Raspberry Pi (aarch64 64-bit)"
+	@echo "  release_pi           - Build and package for Raspberry Pi (armv7)"
+	@echo "  release_pi64         - Build and package for Raspberry Pi (aarch64)"
 	@echo "  install-plugins      - Install plugins system-wide (requires sudo)"
 	@echo "  install-plugins-user - Install plugins to user directory"
 	@echo "  build-minimal        - Build minimal binary (plugin-only mode)"
@@ -97,3 +127,7 @@ help:
 	@echo "  Development: ./target/release/drivers/"
 	@echo "  User:        ~/.local/lib/lymons/drivers/"
 	@echo "  System:      /usr/local/lib/lymons/drivers/"
+	@echo ""
+	@echo "Cross-compilation:"
+	@echo "  Raspberry Pi (armv7):  make release_pi"
+	@echo "  Raspberry Pi (aarch64): make release_pi64"
