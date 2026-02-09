@@ -1,0 +1,1 @@
+/target/armv7-unknown-linux-gnueabihf/release/liblymons_driver_ssd1306.so: /home/runner/work/LyMonS/LyMonS/drivers/lymons-driver-ssd1306/src/ffi.rs /home/runner/work/LyMonS/LyMonS/drivers/lymons-driver-ssd1306/src/lib.rs /home/runner/work/LyMonS/LyMonS/drivers/lymons-driver-ssd1306/src/plugin.rs

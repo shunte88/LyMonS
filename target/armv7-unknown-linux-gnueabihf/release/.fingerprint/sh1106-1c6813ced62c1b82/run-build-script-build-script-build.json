@@ -1,0 +1,1 @@
+{"rustc":5470738401306409665,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[179662209906738537,"build_script_build",false,3286047550843319743]],"local":[{"RerunIfChanged":{"output":"armv7-unknown-linux-gnueabihf/release/build/sh1106-1c6813ced62c1b82/output","paths":["build.rs","memory.x"]}}],"rustflags":[],"config":0,"compile_kind":0}
