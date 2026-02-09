@@ -1,1 +1,0 @@
-pub const BUILD_DATE: &str = "2026-02-09 03:00:46 UTC";

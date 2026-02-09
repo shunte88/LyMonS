@@ -1,3 +1,0 @@
-cargo:rustc-link-search=/target/armv7-unknown-linux-gnueabihf/release/build/sh1106-1c6813ced62c1b82/out
-cargo:rerun-if-changed=build.rs
-cargo:rerun-if-changed=memory.x
