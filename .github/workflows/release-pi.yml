@@ -16,6 +16,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
   build-pi:
     name: Build for Raspberry Pi
@@ -88,9 +91,10 @@ jobs:
         PACKAGE_FILE="lymons-${{ steps.package_info.outputs.version }}-pcp-${{ steps.package_info.outputs.arch }}.tgz"
         cp "${PACKAGE_FILE}" "/tmp/${PACKAGE_FILE}"
 
-        # Configure git
+        # Configure git with token authentication
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
         # Fetch binaries branch (or create if doesn't exist)
         git fetch origin binaries:binaries 2>/dev/null || git checkout --orphan binaries
