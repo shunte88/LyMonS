@@ -1,9 +1,42 @@
 # LyMonS
-An LMS Monitor For The Future
-LyMonS version 0.2.4 - February 2026
+
+[![Build Status](https://github.com/shunte88/LyMonS/actions/workflows/release-pi.yml/badge.svg)](https://github.com/shunte88/LyMonS/actions/workflows/release-pi.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red.svg)](https://www.raspberrypi.org/)
+
+**An LMS Monitor For The Future**
+
+> LyMonS version 0.2.4 | Built: 2026-02-09
+
 OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
 
 <img width="800" src="assets/lymons.webp" align="center" />
+
+## 📥 Download
+
+Pre-compiled binaries for Raspberry Pi are available on the [binaries branch](https://github.com/shunte88/LyMonS/tree/binaries):
+
+- **32-bit (armv7)** - Pi 3, 4, Zero 2 W: [lymons-latest-pcp-armv7.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv7.tgz)
+- **64-bit (aarch64)** - Pi 4, 5, 400: [lymons-latest-pcp-aarch64.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-aarch64.tgz)
+
+### Quick Install
+
+```bash
+# Download for your Pi (32-bit example)
+wget https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv7.tgz
+
+# Extract
+tar xzf lymons-latest-pcp-armv7.tgz
+
+# Install
+cd lymons-*-pcp-armv7
+sudo ./install.sh
+
+# Configure
+sudo nano /etc/lymons/lymons.yaml
+```
+
+**Building from source?** See [CROSS_COMPILE.md](CROSS_COMPILE.md) for cross-compilation instructions.
 
 ### Features
 - Oled drivers loaded on demand - delete the ones you don't use and save space

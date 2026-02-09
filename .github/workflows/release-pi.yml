@@ -183,10 +183,50 @@ jobs:
         # Push to binaries branch
         git push origin binaries
 
+  update-readme:
+    name: Update README Version Info
+    runs-on: ubuntu-latest
+    needs: publish-binaries
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout main branch
+      uses: actions/checkout@v4
+      with:
+        ref: main
+
+    - name: Get version and date
+      id: info
+      run: |
+        VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        BUILD_DATE=$(date -u +"%Y-%m-%d")
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+
+    - name: Update README.md
+      run: |
+        # Update version line using sed
+        sed -i "s/> LyMonS version .* | Built: .*/> LyMonS version ${{ steps.info.outputs.version }} | Built: ${{ steps.info.outputs.build_date }}/" README.md
+
+        # Check if anything changed
+        if git diff --quiet README.md; then
+          echo "No changes to README.md"
+          exit 0
+        fi
+
+    - name: Commit and push changes
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add README.md
+        git commit -m "docs: Update README version to ${{ steps.info.outputs.version }} (built ${{ steps.info.outputs.build_date }})"
+        git push origin main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [build-pi, publish-binaries]
+    needs: [build-pi, publish-binaries, update-readme]
     if: always()
     steps:
     - name: Check build status
@@ -195,6 +235,9 @@ jobs:
           echo "✅ All Raspberry Pi builds completed successfully!"
           if [ "${{ needs.publish-binaries.result }}" == "success" ]; then
             echo "✅ Binaries published to binaries branch!"
+          fi
+          if [ "${{ needs.update-readme.result }}" == "success" ]; then
+            echo "✅ README version info updated!"
           fi
         else
           echo "❌ Some builds failed"
