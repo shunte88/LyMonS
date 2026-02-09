@@ -82,6 +82,70 @@ jobs:
         path: lymons-*-pcp-${{ steps.package_info.outputs.arch }}.tgz
         retention-days: 30
 
+    - name: Publish to binaries branch
+      run: |
+        # Save package file to temp location
+        PACKAGE_FILE="lymons-${{ steps.package_info.outputs.version }}-pcp-${{ steps.package_info.outputs.arch }}.tgz"
+        cp "${PACKAGE_FILE}" "/tmp/${PACKAGE_FILE}"
+
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Fetch binaries branch (or create if doesn't exist)
+        git fetch origin binaries:binaries 2>/dev/null || git checkout --orphan binaries
+
+        # Switch to binaries branch
+        git checkout binaries 2>/dev/null || true
+
+        # Clean working directory but keep .git
+        git rm -rf . 2>/dev/null || true
+
+        # Create directory structure
+        mkdir -p latest ${{ steps.package_info.outputs.arch }}
+
+        # Copy versioned file from temp
+        cp "/tmp/${PACKAGE_FILE}" ${{ steps.package_info.outputs.arch }}/
+
+        # Copy as "latest" for easy access
+        cp "/tmp/${PACKAGE_FILE}" latest/lymons-latest-pcp-${{ steps.package_info.outputs.arch }}.tgz
+
+        # Create README if it doesn't exist
+        if [ ! -f README.md ]; then
+          cat > README.md << 'EOF'
+        # LyMonS Raspberry Pi Binaries
+
+        Pre-compiled binaries for Raspberry Pi (TinyCore Linux / PiCorePlayer).
+
+        ## Download Latest
+
+        - **32-bit (armv7)** - Raspberry Pi 3, 4, Zero 2 W: [lymons-latest-pcp-armv7.tgz](latest/lymons-latest-pcp-armv7.tgz)
+        - **64-bit (aarch64)** - Raspberry Pi 4, 5, 400: [lymons-latest-pcp-aarch64.tgz](latest/lymons-latest-pcp-aarch64.tgz)
+
+        ## Installation
+
+        1. Download the appropriate package for your Pi
+        2. Extract: `tar xzf lymons-latest-pcp-*.tgz`
+        3. Install: `cd lymons-*-pcp-* && sudo ./install.sh`
+        4. Configure: `sudo nano /etc/lymons/lymons.yaml`
+
+        ## Versioned Builds
+
+        See the `armv7/` and `aarch64/` directories for specific versions.
+
+        ---
+        *Built automatically by GitHub Actions*
+        EOF
+        fi
+
+        # Add and commit
+        git add .
+        git commit -m "Update binaries: ${{ steps.package_info.outputs.arch }} v${{ steps.package_info.outputs.version }}"
+
+        # Push to binaries branch
+        git push origin binaries
+      working-directory: ${{ github.workspace }}
+
     - name: Create release (on tag push)
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v1
