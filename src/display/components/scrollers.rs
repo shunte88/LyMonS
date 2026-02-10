@@ -23,6 +23,7 @@
 
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::text::TextStyle;
 use crate::display::layout::LayoutConfig;
 use crate::display::field::Field;
 use crate::textable::{TextScroller, ScrollMode};
@@ -58,10 +59,6 @@ impl ScrollState {
     }
 
     fn update(&mut self, display_width: u32, scroll_mode: ScrollMode) {
-        use embedded_graphics::mono_font::iso_8859_13::FONT_6X10;
-        use embedded_graphics::mono_font::MonoTextStyle;
-        use embedded_graphics::text::Text;
-        use embedded_graphics::geometry::Point;
 
         if self.text.is_empty() {
             return;
@@ -73,7 +70,8 @@ impl ScrollState {
 
         // If text fits on screen, no scrolling needed
         if text_width <= display_width {
-            self.offset = 0;
+            let cx: i32 = (display_width - text_width) / 2;
+            self.offset = cx;
             return;
         }
 
@@ -104,7 +102,9 @@ impl ScrollState {
                 }
             }
             ScrollMode::Static => {
-                self.offset = 0;
+                // center the text
+                let cx: i32 = if text_width < display_width {(display_width - text_width) / 2} else { 0 };
+                self.offset = cx;
             }
         }
     }
@@ -116,14 +116,17 @@ impl ScrollState {
 
 /// Scrolling text component for artist and title
 pub struct ScrollingText {
-    artist_scroller: Option<TextScroller>,
+    album_artist_scroller: Option<TextScroller>,
+    album_scroller: Option<TextScroller>,
     title_scroller: Option<TextScroller>,
+    artist_scroller: Option<TextScroller>,
     scroll_mode: ScrollMode,
     layout: LayoutConfig,
     // Simple synchronous scroll states
-    artist_scroll: ScrollState,
+    album_artist_scroll: ScrollState,
     album_scroll: ScrollState,
     title_scroll: ScrollState,
+    artist_scroll: ScrollState,
     display_width: u32,
 }
 
@@ -132,30 +135,38 @@ impl ScrollingText {
     pub fn new(layout: LayoutConfig, scroll_mode: ScrollMode) -> Self {
         let display_width = layout.width;
         Self {
-            artist_scroller: None,
+            album_artist_scroller: None,
+            album_scroller: None,
             title_scroller: None,
+            artist_scroller: None,
             scroll_mode,
             display_width,
             layout,
-            artist_scroll: ScrollState::new(),
+            album_artist_scroll: ScrollState::new(),
             album_scroll: ScrollState::new(),
             title_scroll: ScrollState::new(),
+            artist_scroll: ScrollState::new(),
         }
     }
 
-    /// Update artist text
-    pub fn set_artist(&mut self, artist: String) {
-        self.artist_scroll.set_text(artist);
+    /// Update album artist text
+    pub fn set_album_artist(&mut self, album_artist: String) {
+        self.album_artist_scroll.set_text(album_artist);
+    }
+
+    /// Update album text
+    pub fn set_album(&mut self, album: String) {
+        self.album_scroll.set_text(album);
     }
 
     /// Update title text
     pub fn set_title(&mut self, title: String) {
         self.title_scroll.set_text(title);
     }
-
-    /// Update album text
-    pub fn set_album(&mut self, album: String) {
-        self.album_scroll.set_text(album);
+ 
+    /// Update artist text
+    pub fn set_artist(&mut self, artist: String) {
+        self.artist_scroll.set_text(artist);
     }
 
     /// Update both artist and title
@@ -165,24 +176,39 @@ impl ScrollingText {
     }
 
     /// Update artist, title, and album
-    pub fn set_full_track_info(&mut self, artist: String, title: String, album: String) {
-        self.set_artist(artist);
-        self.set_title(title);
+    pub fn set_full_track_info(
+        &mut self, 
+        album_artist: String,
+        album: String, 
+        title: String, 
+        artist: String, 
+    ) {
+        self.set_album_artist(album_artist);
         self.set_album(album);
+        self.set_title(title);
+        self.set_artist(artist);
     }
 
     /// Update scroll position (called on each frame)
     pub fn update(&mut self) {
-        self.artist_scroll.update(self.display_width, self.scroll_mode);
+        self.album_artist_scroll.update(self.display_width, self.scroll_mode);
         self.album_scroll.update(self.display_width, self.scroll_mode);
         self.title_scroll.update(self.display_width, self.scroll_mode);
+        self.artist_scroll.update(self.display_width, self.scroll_mode);
     }
 
     /// Update scroll position using field widths
-    pub fn update_with_fields(&mut self, artist_field: &Field, album_field: &Field, title_field: &Field) {
-        self.artist_scroll.update(artist_field.width(), self.scroll_mode);
+    pub fn update_with_fields(
+        &mut self, 
+        album_artist_field: &Field, 
+        album_field: &Field, 
+        title_field: &Field, 
+        artist_field: &Field
+    ) {
+        self.album_artist_scroll.update(album_artist_field.width(), self.scroll_mode);
         self.album_scroll.update(album_field.width(), self.scroll_mode);
         self.title_scroll.update(title_field.width(), self.scroll_mode);
+        self.artist_scroll.update(artist_field.width(), self.scroll_mode);
     }
 
     /// Render the scrolling text
@@ -190,46 +216,66 @@ impl ScrollingText {
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        use embedded_graphics::mono_font::{iso_8859_13::FONT_6X10, MonoTextStyle};
+        use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
         use embedded_graphics::text::Text;
         use embedded_graphics::geometry::Point;
 
-        let text_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+        let text_style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
+        let char_width = 6;
+        let word_gap = 2 * char_width as i32;
+        let mut text_y = 15;
+        let text_height = 9;
 
-        // Artist at y=18 (below status bar at y=8)
-        if !self.artist_scroll.text.is_empty() {
-            let x = self.artist_scroll.get_offset();
-            Text::new(&self.artist_scroll.text, Point::new(x, 18), text_style).draw(target)?;
+        // Album Artist at field 1 (below status bar at y=8)
+        if !self.album_artist_scroll.text.is_empty() {
+            let x = self.album_artist_scroll.get_offset();
+            Text::new(&self.album_artist_scroll.text, Point::new(x, text_y), text_style).draw(target)?;
 
             // For continuous loop mode, draw the text again after a gap
             if self.scroll_mode == ScrollMode::ScrollLeft {
-                let text_width = (self.artist_scroll.text.len() * 6) as i32;
-                let loop_x = x + text_width + 12; // 12px gap
-                Text::new(&self.artist_scroll.text, Point::new(loop_x, 18), text_style).draw(target)?;
+                let text_width = (self.album_artist_scroll.text.len() * char_width) as i32;
+                let loop_x = x + text_width + word_gap; // 2 char gap
+                Text::new(&self.album_artist_scroll.text, Point::new(loop_x, text_y), text_style).draw(target)?;
             }
         }
 
+        text_y  += text_height;
         // Album at y=28 (below artist)
         if !self.album_scroll.text.is_empty() {
             let x = self.album_scroll.get_offset();
-            Text::new(&self.album_scroll.text, Point::new(x, 28), text_style).draw(target)?;
+            Text::new(&self.album_scroll.text, Point::new(x, text_y), text_style).draw(target)?;
 
             if self.scroll_mode == ScrollMode::ScrollLeft {
-                let text_width = (self.album_scroll.text.len() * 6) as i32;
-                let loop_x = x + text_width + 12;
-                Text::new(&self.album_scroll.text, Point::new(loop_x, 28), text_style).draw(target)?;
+                let text_width = (self.album_scroll.text.len() * char_width) as i32;
+                let loop_x = x + text_width + word_gap;
+                Text::new(&self.album_scroll.text, Point::new(loop_x, text_y), text_style).draw(target)?;
             }
         }
 
+        text_y += text_height;
         // Title at y=38 (below album)
         if !self.title_scroll.text.is_empty() {
             let x = self.title_scroll.get_offset();
-            Text::new(&self.title_scroll.text, Point::new(x, 38), text_style).draw(target)?;
+            Text::new(&self.title_scroll.text, Point::new(x, text_y), text_style).draw(target)?;
 
             if self.scroll_mode == ScrollMode::ScrollLeft {
-                let text_width = (self.title_scroll.text.len() * 6) as i32;
-                let loop_x = x + text_width + 12;
-                Text::new(&self.title_scroll.text, Point::new(loop_x, 38), text_style).draw(target)?;
+                let text_width = (self.title_scroll.text.len() * char_width) as i32;
+                let loop_x = x + text_width + word_gap;
+                Text::new(&self.title_scroll.text, Point::new(loop_x, text_y), text_style).draw(target)?;
+            }
+        }
+
+        text_y += text_height;
+        // Artist at y=18 (below status bar at y=8)
+        if !self.artist_scroll.text.is_empty() {
+            let x = self.artist_scroll.get_offset();
+            Text::new(&self.artist_scroll.text, Point::new(x, text_y), text_style).draw(target)?;
+
+            // For continuous loop mode, draw the text again after a gap
+            if self.scroll_mode == ScrollMode::ScrollLeft {
+                let text_width = (self.artist_scroll.text.len() * char_width) as i32;
+                let loop_x = x + text_width + word_gap; // 12px gap
+                Text::new(&self.artist_scroll.text, Point::new(loop_x, text_y), text_style).draw(target)?;
             }
         }
 
@@ -249,6 +295,7 @@ impl ScrollingText {
 
         // Get the scroll state based on field name
         let scroll_state = match field.name.as_str() {
+            "album_artist" => &self.album_artist_scroll,
             "artist" => &self.artist_scroll,
             "album" => &self.album_scroll,
             "title" => &self.title_scroll,
@@ -261,9 +308,11 @@ impl ScrollingText {
         }
 
         // Use field's font and colors (convert to appropriate color depth)
-        let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
+        let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X9);
         use crate::display::color_proxy::ConvertColor;
         let text_style = MonoTextStyle::new(font, field.fg_color.to_color());
+        let char_width = 6;
+        let word_gap = 2 * char_width as i32;
 
         // Get field position (baseline is at bottom of field)
         let field_pos = field.position();
@@ -277,8 +326,8 @@ impl ScrollingText {
 
         // For continuous loop mode, draw the text again after a gap
         if field.scrollable && self.scroll_mode == ScrollMode::ScrollLeft {
-            let text_width = (scroll_state.text.len() * 6) as i32;
-            let loop_x = x + text_width + 12; // 12px gap
+            let text_width = (scroll_state.text.len() * char_width) as i32;
+            let loop_x = x + text_width + word_gap;  // 2 character gap
             Text::new(&scroll_state.text, Point::new(loop_x, baseline_y), text_style).draw(target)?;
         }
 
@@ -287,8 +336,10 @@ impl ScrollingText {
 
     /// Stop scrolling
     pub fn stop(&mut self) {
-        self.artist_scroller = None;
+        self.album_artist_scroller = None;
         self.title_scroller = None;
+        self.artist_scroller = None;
+        self.album_scroller = None;
     }
 
     /// Get scroll mode

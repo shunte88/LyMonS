@@ -25,6 +25,7 @@ use super::field::{Field, FieldType};
 use super::page::PageLayout;
 use super::layout::LayoutConfig;
 use super::color::Color;
+use embedded_graphics::mono_font::ascii::FONT_6X9;
 use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::geometry::{Point, Size};
 use embedded_graphics::mono_font::iso_8859_13::{
@@ -52,6 +53,7 @@ impl LayoutManager {
         let height = self.layout_config.height;
         let width_adj = width-4;
         let border_adj = 2;
+        let y_height: i32 = 9;
 
         PageLayout::new("scrolling")
             // Status bar at top (y=0)
@@ -60,19 +62,19 @@ impl LayoutManager {
                     "status_bar",
                     Rectangle::new(
                         Point::new(border_adj, border_adj), 
-                        Size::new(width_adj, 10)),
-                    &FONT_6X10
+                        Size::new(width_adj, y_height as u32)),
+                    &FONT_6X9
                 )
             )
             // didn't we have album_artist too ??? so for v/a we would have performer etc?
-            // Artist (y=10)
+            // Album Artist (y=10)
             .add_field(
                 Field::new_text(
-                    "artist",
+                    "album_artist",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+10), 
-                        Size::new(width_adj, 10)),
-                    &FONT_6X10
+                        Point::new(border_adj, border_adj+y_height), 
+                        Size::new(width_adj, y_height as u32)),
+                    &FONT_6X9
                 )
                 .scrollable(true)
             )
@@ -81,9 +83,9 @@ impl LayoutManager {
                 Field::new_text(
                     "album",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+20), 
-                        Size::new(width_adj, 10)),
-                    &FONT_6X10
+                        Point::new(border_adj, border_adj+2*y_height), 
+                        Size::new(width_adj, y_height as u32)),
+                    &FONT_6X9
                 )
                 .scrollable(true)
             )
@@ -92,9 +94,19 @@ impl LayoutManager {
                 Field::new_text(
                     "title",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+30), 
-                        Size::new(width_adj, 10)),
-                    &FONT_6X10
+                        Point::new(border_adj, border_adj+3*y_height), 
+                        Size::new(width_adj, y_height as u32)),
+                    &FONT_6X9
+                )
+                .scrollable(true)
+            )
+            .add_field(
+                Field::new_text(
+                    "artist",
+                    Rectangle::new(
+                        Point::new(border_adj, border_adj+4*y_height), 
+                        Size::new(width_adj, y_height as u32)),
+                    &FONT_6X9
                 )
                 .scrollable(true)
             )
@@ -103,7 +115,7 @@ impl LayoutManager {
                 Field::new_custom(
                     "progress_bar",
                     Rectangle::new(
-                        Point::new(border_adj, height.saturating_sub(16) as i32), 
+                        Point::new(border_adj, height.saturating_sub(6 + y_height as u32) as i32), 
                         Size::new(width_adj, 4))
                 )
             )
@@ -112,9 +124,9 @@ impl LayoutManager {
                 Field::new_text(
                     "info_line",
                     Rectangle::new(
-                        Point::new(border_adj, height.saturating_sub(10) as i32), 
-                        Size::new(width_adj, 10)),
-                    &FONT_6X10
+                        Point::new(border_adj, height.saturating_sub(y_height as u32) as i32), 
+                        Size::new(width_adj, y_height as u32)),
+                    &FONT_6X9
                 )
             )
     }
@@ -303,7 +315,7 @@ impl LayoutManager {
         // we're going to want Moonrise, Moonset, and Moonphase
         if is_wide {
 
-            glyph_x = 133;
+            glyph_x = 130;
             text_x = glyph_x + 2 + glyph_w;
             let astral_field_width = 33;
 

@@ -556,12 +556,21 @@ impl DisplayManager {
         let page = self.layout_manager.create_scrolling_page();
 
         // Update scroll positions using field widths
-        if let (Some(artist_field), Some(album_field), Some(title_field)) = (
-            page.get_field("artist"),
+        if let (
+            Some(album_artist_field), 
+            Some(album_field), 
+            Some(title_field), 
+            Some(artist_field)) = (
+            page.get_field("album_artist"),
             page.get_field("album"),
-            page.get_field("title")
+            page.get_field("title"),
+            page.get_field("artist"),
         ) {
-            self.scrolling_text.update_with_fields(artist_field, album_field, title_field);
+            self.scrolling_text.update_with_fields(
+                album_artist_field, 
+                album_field, 
+                title_field, 
+                artist_field);
         }
 
         // Render each field - dispatch based on framebuffer type
@@ -573,7 +582,7 @@ impl DisplayManager {
                             self.status_bar.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
                         }
-                        "artist" | "album" | "title" => {
+                        "album_artist" | "album" | "title" | "artist" => {
                             self.scrolling_text.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
                         }
@@ -687,7 +696,7 @@ impl DisplayManager {
                             self.status_bar.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
                         }
-                        "artist" | "album" | "title" => {
+                        "album_artist" | "album" | "title" | "artist" => {
                             self.scrolling_text.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
                         }
@@ -2901,7 +2910,7 @@ impl DisplayManager {
     /// Set track details (artist, album, title, album_artist)
     pub async fn set_track_details(
         &mut self,
-        _album_artist: String,
+        album_artist: String,
         album: String,
         title: String,
         artist: String,
@@ -2912,7 +2921,12 @@ impl DisplayManager {
         self.title = title.clone();
 
         // Update scrolling text component
-        self.scrolling_text.set_full_track_info(artist, title, album);
+        self.scrolling_text.set_full_track_info(
+            album_artist, 
+            album, 
+            title, 
+            artist
+        );
         // Note: update() is called in render_scrolling() on each frame
     }
 
