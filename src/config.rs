@@ -187,11 +187,8 @@ fn validate(cfg: &Config) -> Result<(), ConfigError> {
                 _ => return Err(ConfigError::Validation("display rotate_deg must be 0|90|180|270".into()))
             }
         }
-        if let Some(b) = display.brightness {
-            if b > 255 {
-                return Err(ConfigError::Validation("display brightness must be 0..=255".into()));
-            }
-        }
+        //let Some(b) = display.brightness;
+        
     }
     Ok(())
 }

@@ -2,7 +2,7 @@
  *  visualization.rs
  *
  *  LyMonS - worth the squeeze
- *	(c) 2020-25 Stuart Hunter
+ *	(c) 2020-26 Stuart Hunter
  *
  *  Visualization selection and asset path management
  *  Updated to use the adaptive layout system
@@ -23,6 +23,17 @@
  */
 
 use crate::display::layout::LayoutConfig;
+use embedded_graphics::{
+    image::{ImageRaw},
+    pixelcolor::{BinaryColor, Gray4},
+    prelude::*,
+    primitives::{Rectangle},
+};
+use std::error::Error;
+use std::fmt;
+use std::fs;
+
+use crate::svgimage::SvgImageRenderer;
 
 /// Which visualization to produce.
 #[derive(Debug, Clone, Copy)]
@@ -38,6 +49,59 @@ pub enum Visualization {
     AioHistMono,              // All In One with downmix histogram
     WaveformSpectrum,         // Waveform + Spectrogram (oscilloscope + waterfall)
     NoVisualization,          // no visualization
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Visual {
+    pub kind: String,
+    rect: Rectangle,
+    svg_data: String,
+    modified_svg_data: String,
+    buffer: Vec<u8>,
+    low_limit: f64,
+    high_limit: f64,
+    low_limit_degree: f64,
+    high_limit_degree: f64,
+    over_support: bool,
+    can_widen: bool,
+}
+
+#[allow(dead_code)]
+impl Visual {
+
+    /// Creates a new `Visual` from SVG string data and target dimensions.
+    pub fn new(
+        kind: String,
+        path: String, 
+        rect: Rectangle, 
+        low_limit: f64, 
+        high_limit: f64,
+        low_limit_degree: f64,
+        high_limit_degree: f64,
+        over_support: bool,
+        can_widen: bool,
+    ) -> Self {
+
+        let width = rect.size.width as usize;
+        let height = rect.size.height as usize;
+        let svg_data = fs::read_to_string(path.as_str()).expect("load SVG file");
+        let buffer_size = height as usize * ((width + 7) / 8) as usize;
+
+        Self {
+            kind,
+            rect,
+            svg_data,
+            modified_svg_data: String::new(),
+            buffer: vec![0u8; buffer_size],
+            low_limit,
+            high_limit,
+            low_limit_degree,
+            high_limit_degree,
+            over_support,
+            can_widen,
+        }
+    }
+
 }
 
 pub fn transpose_kind(kind: &str) -> Visualization {
@@ -100,3 +164,155 @@ pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
     };
     panel.clone()
 }
+
+/// Loads/sets the active easter_egg
+pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
+    let folder = if wide {"./assets/ssd1322/"}else{"./assets/ssd1309/"};
+    let size = if wide { Size::new(128, 64) } else { Size::new(256, 64) };
+    let viz = match kind {
+        Visualization::VuStereo => {
+            Visual::new(
+                String::from("vu_stereo"),
+                String::from(format!("{folder}vu2up.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                -25.0,
+                5.0,
+                -44.01,
+                44.01,
+                true,
+                false,
+            )
+        },
+        Visualization::VuMono  => {
+            Visual::new(
+                String::from("vu_mono"),
+                String::from(format!("{folder}vu2up.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                -25.0,
+                5.0,
+                -44.01,
+                44.01,
+                true,
+                false,
+            )
+        },
+        Visualization::VuStereoWithCenterPeak => {
+            Visual::new(
+                String::from("combination"),
+                String::from(format!("{folder}vucombi.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                -25.0,
+                5.0,
+                -44.01,
+                44.01,
+                true,
+                false,
+            )},
+        Visualization::AioVuMono  => {
+            Visual::new(
+                String::from("aio_vu_mono"),
+                String::from(format!("{folder}vuaio.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                -25.0,
+                5.0,
+                -44.01,
+                44.01,
+                true,
+                false,
+            )
+        },
+        Visualization::PeakStereo  => {
+            Visual::new(
+                String::from("peak_stereo"),
+                String::from(format!("{folder}peak.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                false,
+                false,
+            )
+        },
+        Visualization::PeakMono   => {
+            Visual::new(
+                String::from("peak_mono"),
+                String::from(format!("{folder}peakmono.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                false,
+                false,
+            )
+        },
+        Visualization::AioHistMono  => {
+            Visual::new(
+                String::from("aio_hist_mono"),
+                String::from(format!("{folder}none.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                false,
+                false,
+            )
+        },
+        Visualization::HistStereo   => {
+            Visual::new(
+                String::from("hist_stereo"),
+                String::from(format!("{folder}none.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                false,
+                false,
+            )
+        },
+        Visualization::HistMono  => {
+            Visual::new(
+                String::from("hist_mono"),
+                String::from(format!("{folder}none.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                false,
+                false,
+            )
+        },
+        Visualization::WaveformSpectrum  => {
+            Visual::new(
+                String::from("waveform_spectrum"),
+                String::from(format!("{folder}none.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                false,
+                false,
+            )
+        },
+        Visualization::NoVisualization  => {
+            Visual::new(
+                String::from("no_viz"),
+                String::from(format!("{folder}none.svg")),
+                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                false,
+                false,
+            )
+        },
+    };
+    viz
+}
+

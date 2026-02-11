@@ -31,7 +31,7 @@ use embedded_text::{TextBox, style::TextBoxStyleBuilder};
 use crate::display::color_proxy::{ConvertColor};
 use crate::display::layout::LayoutConfig;
 use crate::visualizer::Visualizer;
-use crate::visualization::Visualization;
+use crate::visualization::{Visualization, Visual};
 use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX};
 use crate::draw::draw_circle;
 use std::time::{Duration, Instant};
@@ -87,6 +87,7 @@ pub fn aio_text_attributes(w: i32) -> (i32, i32, i32)
 pub struct VisualizerComponent {
     visualizer: Option<Visualizer>,
     state: VisualizerState,
+    viz: Visual,
     viz_state: crate::vision::LastVizState,
     layout: LayoutConfig,
     visualization_type: Visualization,
@@ -100,10 +101,11 @@ impl VisualizerComponent {
         viz_state.wide = layout.visualizer.is_wide;
         // Set spectrum history buffer size to match display width
         viz_state.spectrum_max_cols = layout.width as usize;
-
+        let viz = crate::visualization::get_visual(visualization_type, viz_state.wide);
         Self {
             visualizer: None,
             state: VisualizerState::default(),
+            viz,
             viz_state,
             layout,
             visualization_type,
@@ -160,20 +162,46 @@ impl VisualizerComponent {
         // Dispatch based on visualization type
         match self.visualization_type {
             Visualization::PeakMono => {
-                Self::draw_peak_mono(target, self.viz_state.last_peak_m, self.viz_state.last_hold_m, self.visualization_type, &mut self.viz_state)
+                Self::draw_peak_mono(
+                    target,  
+                    self.viz_state.last_peak_m, 
+                    self.viz_state.last_hold_m, 
+                    self.visualization_type, 
+                    &mut self.viz_state
+                )
             }
             Visualization::PeakStereo => {
-                Self::draw_peak_pair(target, self.viz_state.last_peak_l, self.viz_state.last_peak_r, self.viz_state.last_hold_l, self.viz_state.last_hold_r, self.visualization_type, &mut self.viz_state)
+                Self::draw_peak_pair(
+                    target,  
+                    self.viz_state.last_peak_l, 
+                    self.viz_state.last_peak_r, 
+                    self.viz_state.last_hold_l, 
+                    self.viz_state.last_hold_r, 
+                    self.visualization_type, 
+                    &mut self.viz_state
+                )
             }
             Visualization::HistMono => {
-                Self::draw_hist_mono(target, self.viz_state.last_bands_m.clone(), self.visualization_type, &mut self.viz_state)
+                Self::draw_hist_mono(
+                    target,  
+                    self.viz_state.last_bands_m.clone(), 
+                    self.visualization_type, 
+                    &mut self.viz_state
+                )
             }
             Visualization::HistStereo => {
-                Self::draw_hist_pair(target, self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone(), self.visualization_type, &mut self.viz_state)
+                Self::draw_hist_pair(
+                    target,  
+                    self.viz_state.last_bands_l.clone(), 
+                    self.viz_state.last_bands_r.clone(), 
+                    self.visualization_type, 
+                    &mut self.viz_state
+                )
             }
             Visualization::VuMono => {
                 Self::draw_vu_mono(
                     target,
+                    self.viz.clone(), 
                     self.viz_state.last_db_m,
                     self.visualization_type,
                     &mut self.viz_state,
@@ -182,6 +210,7 @@ impl VisualizerComponent {
             Visualization::VuStereo => {
                 Self::draw_vu_stereo(
                     target,
+                    self.viz.clone(), 
                     self.viz_state.last_db_l,
                     self.viz_state.last_db_r,
                     self.visualization_type,
@@ -192,6 +221,7 @@ impl VisualizerComponent {
                 let track_info = self.viz_state.last_artist.clone();
                 Self::draw_aio_vu_mono(
                     target,
+                    self.viz.clone(), 
                     self.viz_state.last_db_m,
                     &track_info,
                     &mut self.viz_state,
@@ -219,6 +249,7 @@ impl VisualizerComponent {
             Visualization::VuStereoWithCenterPeak => {
                 Self::draw_vu_combi(
                     target,
+                    self.viz.clone(), 
                     self.viz_state.last_db_l,
                     self.viz_state.last_db_r,
                     self.viz_state.last_peak_m,
@@ -239,20 +270,46 @@ impl VisualizerComponent {
         // Dispatch based on visualization type
         match self.visualization_type {
             Visualization::PeakMono => {
-                Self::draw_peak_mono_gray4(target, self.viz_state.last_peak_m, self.viz_state.last_hold_m, self.visualization_type, &mut self.viz_state)
+                Self::draw_peak_mono_gray4(
+                    target,  
+                    self.viz_state.last_peak_m, 
+                    self.viz_state.last_hold_m, 
+                    self.visualization_type, 
+                    &mut self.viz_state
+                )
             }
             Visualization::PeakStereo => {
-                Self::draw_peak_pair_gray4(target, self.viz_state.last_peak_l, self.viz_state.last_peak_r, self.viz_state.last_hold_l, self.viz_state.last_hold_r, self.visualization_type, &mut self.viz_state)
+                Self::draw_peak_pair_gray4(
+                    target,  
+                    self.viz_state.last_peak_l, 
+                    self.viz_state.last_peak_r, 
+                    self.viz_state.last_hold_l, 
+                    self.viz_state.last_hold_r, 
+                    self.visualization_type, 
+                    &mut self.viz_state
+                )
             }
             Visualization::HistMono => {
-                Self::draw_hist_mono_gray4(target, self.viz_state.last_bands_m.clone(), self.visualization_type, &mut self.viz_state)
+                Self::draw_hist_mono_gray4(
+                    target,  
+                    self.viz_state.last_bands_m.clone(), 
+                    self.visualization_type, 
+                    &mut self.viz_state
+                )
             }
             Visualization::HistStereo => {
-                Self::draw_hist_pair_gray4(target, self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone(), self.visualization_type, &mut self.viz_state)
+                Self::draw_hist_pair_gray4(
+                    target,  
+                    self.viz_state.last_bands_l.clone(), 
+                    self.viz_state.last_bands_r.clone(), 
+                    self.visualization_type, 
+                    &mut self.viz_state
+                )
             }
             Visualization::VuMono => {
                 Self::draw_vu_mono_gray4(
                     target,
+                    self.viz.clone(), 
                     self.viz_state.last_db_m,
                     self.visualization_type,
                     &mut self.viz_state,
@@ -261,6 +318,7 @@ impl VisualizerComponent {
             Visualization::VuStereo => {
                 Self::draw_vu_stereo_gray4(
                     target,
+                    self.viz.clone(), 
                     self.viz_state.last_db_l,
                     self.viz_state.last_db_r,
                     self.visualization_type,
@@ -271,6 +329,7 @@ impl VisualizerComponent {
                 let track_info = self.viz_state.last_artist.clone();
                 Self::draw_aio_vu_gray4(
                     target,
+                    self.viz.clone(), 
                     self.viz_state.last_db_m,
                     &track_info,
                     &mut self.viz_state,
@@ -287,7 +346,7 @@ impl VisualizerComponent {
             }
             Visualization::WaveformSpectrum => {
                 Self::draw_waveform_spectrum_gray4(
-                    target,
+                    target, 
                     self.viz_state.last_waveform_l.clone(),
                     self.viz_state.last_waveform_r.clone(),
                     Vec::new(), // spectrum_column already in history
@@ -298,6 +357,7 @@ impl VisualizerComponent {
             Visualization::VuStereoWithCenterPeak => {
                 Self::draw_vu_combi_gray4(
                     target,
+                    self.viz.clone(), 
                     self.viz_state.last_db_l,
                     self.viz_state.last_db_r,
                     self.viz_state.last_peak_m,
@@ -619,7 +679,16 @@ impl VisualizerComponent {
         changed
     }
 
-    fn draw_hist_panel_mono<D>(display: &mut D, label: &str, label_height: u32, label_pos: i32, origin: Point, panel_size: Size, bars: &[u8], caps: &[u8]) -> Result<(), D::Error>
+    fn draw_hist_panel_mono<D>(
+        display: &mut D, 
+        label: &str, 
+        label_height: u32, 
+        label_pos: i32, 
+        origin: Point, 
+        panel_size: Size, 
+        bars: &[u8], 
+        caps: &[u8]
+    ) -> Result<(), D::Error>
     where D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
         use embedded_graphics::primitives::Rectangle;
@@ -670,7 +739,16 @@ impl VisualizerComponent {
         Ok(())
     }
 
-    fn draw_hist_panel_gray4<D>(display: &mut D, label: &str, label_height: u32, label_pos: i32, origin: Point, panel_size: Size, bars: &[u8], caps: &[u8]) -> Result<(), D::Error>
+    fn draw_hist_panel_gray4<D>(
+        display: &mut D,
+        label: &str, 
+        label_height: u32, 
+        label_pos: i32, 
+        origin: Point, 
+        panel_size: Size, 
+        bars: &[u8], 
+        caps: &[u8]
+    ) -> Result<(), D::Error>
     where D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
         use embedded_graphics::primitives::Rectangle;
@@ -726,7 +804,13 @@ impl VisualizerComponent {
         Ok(())
     }
 
-    fn draw_hist_pair<D>(display: &mut D, bands_l: Vec<u8>, bands_r: Vec<u8>, vk: Visualization, state: &mut crate::vision::LastVizState) -> Result<bool, D::Error>
+    fn draw_hist_pair<D>(
+        display: &mut D, 
+        bands_l: Vec<u8>, 
+        bands_r: Vec<u8>, 
+        vk: Visualization, 
+        state: &mut crate::vision::LastVizState
+    ) -> Result<bool, D::Error>
     where D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
@@ -755,13 +839,38 @@ impl VisualizerComponent {
         let inner_w = w - 2 * mx; let inner_h = h - my - title_base - 1;
         let title_pos = h - title_base; let pane_w = (inner_w - gap) / 2;
 
-        Self::draw_hist_panel_mono(display, "Left", title_base as u32, title_pos, Point::new(mx, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_l, &state.cap_l)?;
-        Self::draw_hist_panel_mono(display, "Right", title_base as u32, title_pos, Point::new(mx + pane_w + gap, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_r, &state.cap_r)?;
+        Self::draw_hist_panel_mono(
+            display,
+            "Left", 
+            title_base as u32, 
+            title_pos, 
+            Point::new(mx, my), 
+            Size::new(pane_w as u32, inner_h as u32), 
+            &state.draw_bands_l, 
+            &state.cap_l
+        )?;
+        Self::draw_hist_panel_mono(
+            display, 
+            "Right", 
+            title_base as u32, 
+            title_pos, 
+            Point::new(mx + pane_w + gap, my), 
+            Size::new(pane_w as u32, 
+            inner_h as u32), 
+            &state.draw_bands_r, 
+            &state.cap_r
+            )?;
 
         Ok(true)
     }
 
-    fn draw_hist_pair_gray4<D>(display: &mut D, bands_l: Vec<u8>, bands_r: Vec<u8>, vk: Visualization, state: &mut crate::vision::LastVizState) -> Result<bool, D::Error>
+    fn draw_hist_pair_gray4<D>(
+        display: &mut D, 
+        bands_l: Vec<u8>, 
+        bands_r: Vec<u8>, 
+        vk: Visualization, 
+        state: &mut crate::vision::LastVizState
+    ) -> Result<bool, D::Error>
     where D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
@@ -790,8 +899,26 @@ impl VisualizerComponent {
         let inner_w = w - 2 * mx; let inner_h = h - my - title_base - 1;
         let title_pos = h - title_base; let pane_w = (inner_w - gap) / 2;
 
-        Self::draw_hist_panel_gray4(display, "Left", title_base as u32, title_pos, Point::new(mx, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_l, &state.cap_l)?;
-        Self::draw_hist_panel_gray4(display, "Right", title_base as u32, title_pos, Point::new(mx + pane_w + gap, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_r, &state.cap_r)?;
+        Self::draw_hist_panel_gray4(
+            display,
+            "Left", 
+            title_base as u32, 
+            title_pos, 
+            Point::new(mx, my), 
+            Size::new(pane_w as u32, inner_h as u32), 
+            &state.draw_bands_l, 
+            &state.cap_l
+        )?;
+        Self::draw_hist_panel_gray4(
+            display,
+            "Right", 
+            title_base as u32, 
+            title_pos, 
+            Point::new(mx + pane_w + gap, my), 
+            Size::new(pane_w as u32, inner_h as u32), 
+            &state.draw_bands_r, 
+            &state.cap_r
+        )?;
 
         Ok(true)
     }
@@ -1009,6 +1136,7 @@ impl VisualizerComponent {
     /// TODO: Replace simple meter with VU needle once VU color support is added
     fn draw_aio_vu_mono<D>(
         display: &mut D,
+        viz: Visual,
         db: f32,
         track_info: &str,
         state: &mut crate::vision::LastVizState,
@@ -1084,6 +1212,7 @@ impl VisualizerComponent {
     /// TODO: Replace simple meter with VU needle once VU color support is added
     fn draw_aio_vu_gray4<D>(
         display: &mut D,
+        viz: Visual,
         db: f32,
         track_info: &str,
         state: &mut crate::vision::LastVizState,
@@ -1314,6 +1443,7 @@ impl VisualizerComponent {
     /// Draw VU mono visualization (monochrome) - single VU meter with needle
     fn draw_vu_mono<D>(
         display: &mut D,
+        viz: Visual,
         db: f32,
         vk: Visualization,
         state: &mut crate::vision::LastVizState,
@@ -1385,6 +1515,7 @@ impl VisualizerComponent {
     /// Draw VU mono visualization (Gray4) - single VU meter with red needle
     fn draw_vu_mono_gray4<D>(
         display: &mut D,
+        viz: Visual,
         db: f32,
         vk: Visualization,
         state: &mut crate::vision::LastVizState,
@@ -1483,6 +1614,7 @@ impl VisualizerComponent {
     /// Draw VU stereo visualization (monochrome) - dual VU meters with needles
     fn draw_vu_stereo<D>(
         display: &mut D,
+        viz: Visual,
         l_db: f32,
         r_db: f32,
         vk: Visualization,
@@ -1594,6 +1726,7 @@ impl VisualizerComponent {
     /// Draw VU stereo visualization (Gray4) - dual VU meters with red needles
     fn draw_vu_stereo_gray4<D>(
         display: &mut D,
+        viz: Visual, 
         l_db: f32,
         r_db: f32,
         vk: Visualization,
@@ -1733,6 +1866,7 @@ impl VisualizerComponent {
     /// Draw VU stereo with center peak visualization (monochrome) - combination mode
     fn draw_vu_combi<D>(
         display: &mut D,
+        viz: Visual,
         l_db: f32,
         r_db: f32,
         peak_level: u8,
@@ -1884,6 +2018,7 @@ impl VisualizerComponent {
     /// Draw VU stereo with center peak visualization (Gray4) - combination mode
     fn draw_vu_combi_gray4<D>(
         display: &mut D,
+        viz: Visual,
         l_db: f32,
         r_db: f32,
         peak_level: u8,
