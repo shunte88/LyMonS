@@ -36,7 +36,7 @@ use std::fs;
 use crate::svgimage::SvgImageRenderer;
 
 /// Which visualization to produce.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Visualization {
     VuStereo,                 // two VU meters (L/R)
     VuMono,                   // downmix to mono VU
@@ -51,17 +51,39 @@ pub enum Visualization {
     NoVisualization,          // no visualization
 }
 
+/// Custom error type for SVG visualization rendering operations.
+#[derive(Debug)]
+pub enum VizError {
+    /// Error parsing egg configuration.
+    _VizParseError(String),
+    VizRenderError(String),
+    VizBufferError(String),
+}
+
+impl fmt::Display for VizError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VizError::_VizParseError(msg) => write!(f, "Visualization parse error: {}", msg),
+            VizError::VizRenderError(msg) => write!(f, "Visualization SVG render error: {}", msg),
+            VizError::VizBufferError(msg) => write!(f, "Visualization buffer render error: {}", msg),
+        }
+    }
+}
+
+impl Error for VizError {}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Visual {
-    pub kind: String,
+    kind: Visualization,
+    svg_supported: bool,
     rect: Rectangle,
     svg_data: String,
     modified_svg_data: String,
     buffer: Vec<u8>,
-    low_limit: f64,
-    high_limit: f64,
-    low_limit_degree: f64,
-    high_limit_degree: f64,
+    scale_min: f64,
+    scale_max: f64,
+    sweep_min: f64,
+    sweep_max: f64,
     over_support: bool,
     can_widen: bool,
 }
@@ -71,36 +93,129 @@ impl Visual {
 
     /// Creates a new `Visual` from SVG string data and target dimensions.
     pub fn new(
-        kind: String,
+        kind: Visualization,
         path: String, 
         rect: Rectangle, 
-        low_limit: f64, 
-        high_limit: f64,
-        low_limit_degree: f64,
-        high_limit_degree: f64,
+        scale_min: f64, 
+        scale_max: f64,
+        sweep_min: f64,
+        sweep_max: f64,
         over_support: bool,
         can_widen: bool,
     ) -> Self {
 
         let width = rect.size.width as usize;
         let height = rect.size.height as usize;
-        let svg_data = fs::read_to_string(path.as_str()).expect("load SVG file");
+        let svg_supported = visualizer_svg_supported(kind);
+        let svg_data = if svg_supported {fs::read_to_string(path.as_str()).expect("load SVG file")} else {String::from("")};
         let buffer_size = height as usize * ((width + 7) / 8) as usize;
 
         Self {
             kind,
+            svg_supported,
             rect,
             svg_data,
             modified_svg_data: String::new(),
             buffer: vec![0u8; buffer_size],
-            low_limit,
-            high_limit,
-            low_limit_degree,
-            high_limit_degree,
+            scale_min,
+            scale_max,
+            sweep_min,
+            sweep_max,
             over_support,
             can_widen,
         }
     }
+
+    pub fn update (
+        &mut self, 
+        metric: f64,
+        over: bool,
+    ) -> Result<(), VizError> {
+
+        if !self.svg_supported {
+            return Ok(());
+        }
+
+        let mut data = self.svg_data.clone();
+
+        // overage beacon
+        if over {
+            data = data.replace("{{overflow}}", "1");
+        }
+
+        // metric - clamp within bounds
+        let metric = metric.clamp(self.scale_min, self.scale_max);
+        let normalized = (metric - self.scale_min) / (self.scale_max - self.scale_min);
+        let arc_angle = self.sweep_min + normalized * (self.sweep_max - self.sweep_min);
+
+        data = data.replace("{{needle-arc}}", arc_angle.to_string().as_str());
+        self.modified_svg_data = data;
+        Ok(())
+
+    }
+
+    pub async fn update_and_render (
+        &mut self,
+        metric: f64,
+        over: bool,
+    ) -> Result<ImageRaw<BinaryColor>, VizError> {
+        // Delegate to blocking version (no actual async ops here)
+        self.update_and_render_blocking(metric, over)
+    }
+
+    pub fn update_and_render_blocking (
+        &mut self,
+        metric: f64,
+        over: bool,
+    ) -> Result<ImageRaw<BinaryColor>, VizError> {
+
+        let width = self.rect.size.width as u32;
+        let height = self.rect.size.height as u32;
+        if self.svg_supported {
+            self.update(metric, over)?;
+            let data = self.modified_svg_data.clone();
+            let svg_renderer = SvgImageRenderer::new(&data, width, height)
+                .map_err(|e| VizError::VizRenderError(e.to_string()))?;
+            svg_renderer.render_to_buffer(&mut self.buffer)
+                .map_err(|e| VizError::VizBufferError(e.to_string()))?;
+        }
+        let raw_image = ImageRaw::<BinaryColor>::new(&self.buffer, width);
+        Ok(raw_image)
+
+    }
+
+    /// Render to Gray4 format with full 16-level grayscale support for colorized SVGs
+    pub fn update_and_render_blocking_gray4 (
+        &mut self,
+        metric: f64,
+        over: bool,
+    ) -> Result<ImageRaw<Gray4>, VizError> {
+
+        let width = self.rect.size.width as u32;
+        let height = self.rect.size.height as u32;
+        if self.svg_supported {
+            self.update(metric, over)?;
+            let data = self.modified_svg_data.clone();
+            let svg_renderer = SvgImageRenderer::new(&data, width, height)
+                .map_err(|e| VizError::VizRenderError(e.to_string()))?;
+
+            // Resize buffer for Gray4 format (2 pixels per byte)
+            let buffer_size = (height as usize * width as usize + 1) / 2;
+            self.buffer.resize(buffer_size, 0);
+
+            svg_renderer.render_to_buffer_gray4(&mut self.buffer)
+                .map_err(|e| VizError::VizBufferError(e.to_string()))?;
+        }
+        let raw_image = ImageRaw::<Gray4>::new(&self.buffer, width);
+        Ok(raw_image)
+
+    }
+
+    pub fn get_svg_data(&self) -> &str {
+        &self.modified_svg_data
+    }
+
+
 
 }
 
@@ -143,6 +258,23 @@ pub fn get_visualizer_panel_with_layout(kind: Visualization, layout: &LayoutConf
     panel
 }
 
+pub fn visualizer_svg_supported(kind: Visualization) -> bool {
+    let supported = match kind {
+        Visualization::VuStereo |
+        Visualization::VuMono  |
+        Visualization::VuStereoWithCenterPeak |
+        Visualization::AioVuMono => true,
+        Visualization::PeakStereo |
+        Visualization::PeakMono  |
+        Visualization::AioHistMono |
+        Visualization::HistStereo |
+        Visualization::HistMono |
+        Visualization::WaveformSpectrum |
+        Visualization::NoVisualization => false,
+    };
+    supported
+}
+
 /// Get visualizer panel path (legacy function for backwards compatibility)
 ///
 /// This function maintains backwards compatibility with existing code.
@@ -165,14 +297,14 @@ pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
     panel.clone()
 }
 
-/// Loads/sets the active easter_egg
+/// Loads/sets the visualization
 pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
     let folder = if wide {"./assets/ssd1322/"}else{"./assets/ssd1309/"};
     let size = if wide { Size::new(128, 64) } else { Size::new(256, 64) };
     let viz = match kind {
         Visualization::VuStereo => {
             Visual::new(
-                String::from("vu_stereo"),
+                kind,
                 String::from(format!("{folder}vu2up.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 -25.0,
@@ -185,7 +317,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::VuMono  => {
             Visual::new(
-                String::from("vu_mono"),
+                kind,
                 String::from(format!("{folder}vu2up.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 -25.0,
@@ -198,7 +330,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::VuStereoWithCenterPeak => {
             Visual::new(
-                String::from("combination"),
+                kind,
                 String::from(format!("{folder}vucombi.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 -25.0,
@@ -210,7 +342,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
             )},
         Visualization::AioVuMono  => {
             Visual::new(
-                String::from("aio_vu_mono"),
+                kind,
                 String::from(format!("{folder}vuaio.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 -25.0,
@@ -223,7 +355,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::PeakStereo  => {
             Visual::new(
-                String::from("peak_stereo"),
+                kind,
                 String::from(format!("{folder}peak.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 0.0,
@@ -236,7 +368,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::PeakMono   => {
             Visual::new(
-                String::from("peak_mono"),
+                kind,
                 String::from(format!("{folder}peakmono.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 0.0,
@@ -249,7 +381,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::AioHistMono  => {
             Visual::new(
-                String::from("aio_hist_mono"),
+                kind,
                 String::from(format!("{folder}none.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 0.0,
@@ -262,7 +394,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::HistStereo   => {
             Visual::new(
-                String::from("hist_stereo"),
+                kind,
                 String::from(format!("{folder}none.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 0.0,
@@ -275,7 +407,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::HistMono  => {
             Visual::new(
-                String::from("hist_mono"),
+                kind,
                 String::from(format!("{folder}none.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 0.0,
@@ -288,7 +420,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::WaveformSpectrum  => {
             Visual::new(
-                String::from("waveform_spectrum"),
+                kind,
                 String::from(format!("{folder}none.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 0.0,
@@ -301,7 +433,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         },
         Visualization::NoVisualization  => {
             Visual::new(
-                String::from("no_viz"),
+                kind,
                 String::from(format!("{folder}none.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 0.0,
