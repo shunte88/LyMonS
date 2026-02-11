@@ -1,0 +1,4 @@
+git fetch origin
+git merge origin/main -m "bot maintained readme"
+git status
+push 
