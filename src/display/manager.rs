@@ -418,6 +418,7 @@ impl DisplayManager {
 
         let weather_display = WeatherComponent::new(layout.clone());
 
+        // init to NoVisualization
         let visualizer = VisualizerComponent::new(
             layout.clone(),
             crate::visualization::Visualization::NoVisualization,
@@ -641,7 +642,7 @@ impl DisplayManager {
                     let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
                     Text::with_baseline(
                         current_time_str,
-                        Point::new(field_pos.x + 2, info_y),
+                                            Point::new(field_pos.x + 2, info_y),
                         style,
                         Baseline::Top,
                     )
@@ -695,6 +696,19 @@ impl DisplayManager {
                         "status_bar" => {
                             self.status_bar.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
+
+                            // Draw horizontal line 1 pixel below status bar
+                            use embedded_graphics::primitives::{Line, PrimitiveStyle};
+                            use embedded_graphics::prelude::*;
+                            let line_y = field.position().y + field.height() as i32;
+                            let width = fb.size().width;
+                            Line::new(
+                                Point::new(2, line_y),
+                                Point::new(width as i32 - 4, line_y),
+                            )
+                            .into_styled(PrimitiveStyle::with_stroke(Gray4::WHITE, 1))
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw status line".to_string()))?;
                         }
                         "album_artist" | "album" | "title" | "artist" => {
                             self.scrolling_text.render_field(field, fb)
@@ -3109,6 +3123,7 @@ impl DisplayManager {
 
         // Set the visualization type on the component
         self.visualizer.set_visualization_type(viz_kind);
+        self.visualizer.update_visual();
 
         // Enable the visualizer
         if let Some(viz) = self.visualizer.visualizer() {
@@ -3117,6 +3132,7 @@ impl DisplayManager {
 
         info!("Visualizer setup complete: {} ({:?})", viz_type, viz_kind);
         Ok(())
+
     }
 
     /// Check if weather is active (configured and data available)
@@ -3196,6 +3212,7 @@ impl DisplayManager {
 
         info!("Cycling visualization: {:?} -> {:?}", current_type, next_viz);
         self.visualizer.set_visualization_type(next_viz);
+        //self.vizualizer.
 
         // Switch to visualizer mode
         self.current_mode = crate::display::DisplayMode::Visualizer;

@@ -2,7 +2,7 @@
  *  vision.rs
  * 
  *  LyMonS - worth the squeeze
- *	(c) 2020-25 Stuart Hunter
+ *	(c) 2020-26 Stuart Hunter
  *
  *	TODO:
  *
@@ -37,10 +37,12 @@ use std::thread::sleep;
 use crate::vuphysics::{VuNeedle};
 use crate::vuphysics::{Scale};
 
-use crate::visualization::{Visualization, get_visualizer_panel};
+use crate::visualization::{Visual, get_visualizer_panel};
+// for the "old" display calls
+use crate::visualization::{Visualization};
 use crate::drawsvg::{get_svg};
 
-// added for VuNeed in state - future color support
+// added for VuNeedle in state - future color support
 use embedded_graphics::{
     pixelcolor::{BinaryColor, PixelColor},
 };
@@ -281,7 +283,8 @@ impl LastVizState {
 
 }
 
-pub fn ensure_band_state(
+// needed for display_old - burn when done
+pub fn ensure_band_state_old(
     state: &mut LastVizState, 
     n_l: usize, 
     n_r: usize, 
@@ -317,6 +320,79 @@ pub fn ensure_band_state(
         );
         state.vus_l = state.vus_m.clone();
         state.vus_r = state.vus_m.clone();
+
+    } // init svg
+
+    ensure(&mut state.draw_bands_m, n_m);
+    ensure(&mut state.draw_bands_l, n_l);
+    ensure(&mut state.draw_bands_r, n_r);
+
+    ensure(&mut state.last_bands_m, n_m);
+    ensure(&mut state.last_bands_l, n_l);
+    ensure(&mut state.last_bands_r, n_r);
+
+    ensure(&mut state.cap_m, n_m);
+    ensure(&mut state.cap_l, n_l);
+    ensure(&mut state.cap_r, n_r);
+
+    ensure_t(&mut state.cap_hold_until_m, n_m);
+    ensure_t(&mut state.cap_hold_until_l, n_l);
+    ensure_t(&mut state.cap_hold_until_r, n_r);
+
+    ensure_t(&mut state.cap_last_update_m, n_m);
+    ensure_t(&mut state.cap_last_update_l, n_l);
+    ensure_t(&mut state.cap_last_update_r, n_r);
+
+}
+
+pub fn ensure_band_state(
+    state: &mut LastVizState, 
+    n_l: usize, 
+    n_r: usize, 
+    n_m: usize,
+    viz: &mut Visual,
+    top_scale: i32,
+    bottom_scale: i32, 
+) 
+{
+
+    let now = Instant::now();
+    let ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
+    let ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
+
+    if state.init_svg && viz.svg_supported {
+        let width = if state.wide {256}else{128}; // this needs to be smarter - the driver should providing properties
+        state.svg_file = viz.get_svg_filename().to_string();
+        let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
+        state.init_svg = false;
+        if viz.kind == Visualization::AioVuMono||viz.kind == Visualization::VuMono {
+            state.vus_m = Scale::init(
+                viz.sweep_min,
+                viz.sweep_max,
+                viz.scale_min,
+                viz.scale_max,
+                top_scale,
+                bottom_scale, 
+            );
+        } else if viz.kind == Visualization::VuStereo||viz.kind == Visualization::VuStereoWithCenterPeak {
+            state.vus_l = Scale::init(
+                viz.sweep_min,
+                viz.sweep_max,
+                viz.scale_min,
+                viz.scale_max,
+                top_scale,
+                bottom_scale, 
+            );
+            state.vus_r = Scale::init(
+                viz.sweep_min,
+                viz.sweep_max,
+                viz.scale_min,
+                viz.scale_max,
+                top_scale,
+                bottom_scale, 
+            );
+
+        }
 
     } // init svg
 

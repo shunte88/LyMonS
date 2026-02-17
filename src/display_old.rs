@@ -88,7 +88,7 @@ use crate::glyphs; // glyphs and support routines
 
 use crate::visualization::{Visualization};
 use crate::visualizer::{VizPayload, Visualizer, VizFrameOut};
-use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX, LastVizState, ensure_band_state};
+use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX, LastVizState, ensure_band_state_old};
 use crate::draw::{
     clear_region,
     draw_line,
@@ -1366,7 +1366,7 @@ impl OledDisplay {
         let mut need_flush = false;
     
         // resize state buffers if band count changed
-        ensure_band_state(
+        ensure_band_state_old(
             state, 
             0,
             0,
@@ -1503,7 +1503,7 @@ impl OledDisplay {
         let mut need_flush = false;
     
         // resize state buffers if band count changed
-        ensure_band_state(
+        ensure_band_state_old(
             state, 
             0, 
             0, 
@@ -1674,7 +1674,7 @@ impl OledDisplay {
         let mut need_flush = false;
     
         // resize state buffers if band count changed
-        ensure_band_state(
+        ensure_band_state_old(
             state, 
             0, 
             0, 
@@ -1767,7 +1767,7 @@ impl OledDisplay {
         let mut need_flush = false;
     
         // resize state buffers if band count changed
-        ensure_band_state(
+        ensure_band_state_old(
             state, 
             0, 
             0, 
@@ -1893,7 +1893,7 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        ensure_band_state(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state_old(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
         let mut need_flush = false;
 
         // we implement draw and erase, only initialize on first call
@@ -1963,7 +1963,7 @@ impl OledDisplay {
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
         let mut need_flush = false;
-        ensure_band_state(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state_old(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
 
         if state.init {
             // Blit to target
@@ -2027,7 +2027,7 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(
+        ensure_band_state_old(
             state, 
             bands_l.len(), 
             bands_r.len(), 
@@ -2124,7 +2124,7 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state_old(state, bands_l.len(), bands_r.len(), 0, vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
 
         // 2) Save the latest inputs (debug/inspection)
         state.last_bands_l.copy_from_slice(&bands_l);
@@ -2205,7 +2205,7 @@ impl OledDisplay {
     {
 
         // resize state buffers if band count changed
-        ensure_band_state(state, 0, 0, bands.len(), vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state_old(state, 0, 0, bands.len(), vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
 
         // store latest inputs
         state.last_bands_m.copy_from_slice(&bands);
@@ -2273,7 +2273,7 @@ impl OledDisplay {
         let mut need_flush = false;
 
         // resize state buffers if band count changed
-        ensure_band_state(
+        ensure_band_state_old(
             state, 
             0, 
             0, 

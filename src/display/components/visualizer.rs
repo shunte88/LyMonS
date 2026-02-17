@@ -117,6 +117,10 @@ impl VisualizerComponent {
         self.visualizer = Some(visualizer);
     }
 
+    pub fn update_visual(&mut self) {
+        self.viz = crate::visualization::get_visual(self.visualization_type, self.viz_state.wide);
+    }
+
     /// Get mutable reference to visualizer
     pub fn visualizer_mut(&mut self) -> Option<&mut Visualizer> {
         self.visualizer.as_mut()
@@ -159,61 +163,61 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
+        let viz_mut = &mut self.viz;
+
         // Dispatch based on visualization type
         match self.visualization_type {
             Visualization::PeakMono => {
                 Self::draw_peak_mono(
                     target,  
+                    viz_mut,
                     self.viz_state.last_peak_m, 
                     self.viz_state.last_hold_m, 
-                    self.visualization_type, 
                     &mut self.viz_state
                 )
             }
             Visualization::PeakStereo => {
                 Self::draw_peak_pair(
                     target,  
+                    viz_mut, 
                     self.viz_state.last_peak_l, 
                     self.viz_state.last_peak_r, 
                     self.viz_state.last_hold_l, 
                     self.viz_state.last_hold_r, 
-                    self.visualization_type, 
                     &mut self.viz_state
                 )
             }
             Visualization::HistMono => {
                 Self::draw_hist_mono(
                     target,  
+                    viz_mut,
                     self.viz_state.last_bands_m.clone(), 
-                    self.visualization_type, 
                     &mut self.viz_state
                 )
             }
             Visualization::HistStereo => {
                 Self::draw_hist_pair(
                     target,  
+                    viz_mut,
                     self.viz_state.last_bands_l.clone(), 
                     self.viz_state.last_bands_r.clone(), 
-                    self.visualization_type, 
                     &mut self.viz_state
                 )
             }
             Visualization::VuMono => {
                 Self::draw_vu_mono(
                     target,
-                    self.viz.clone(), 
+                    viz_mut,
                     self.viz_state.last_db_m,
-                    self.visualization_type,
                     &mut self.viz_state,
                 )
             }
             Visualization::VuStereo => {
                 Self::draw_vu_stereo(
                     target,
-                    self.viz.clone(), 
+                    viz_mut,
                     self.viz_state.last_db_l,
                     self.viz_state.last_db_r,
-                    self.visualization_type,
                     &mut self.viz_state,
                 )
             }
@@ -221,7 +225,7 @@ impl VisualizerComponent {
                 let track_info = self.viz_state.last_artist.clone();
                 Self::draw_aio_vu_mono(
                     target,
-                    self.viz.clone(), 
+                    viz_mut,
                     self.viz_state.last_db_m,
                     &track_info,
                     &mut self.viz_state,
@@ -231,6 +235,7 @@ impl VisualizerComponent {
                 let track_info = self.viz_state.last_artist.clone();
                 Self::draw_aio_hist_mono(
                     target,
+                    viz_mut,
                     self.viz_state.last_bands_m.clone(),
                     &track_info,
                     &mut self.viz_state,
@@ -249,12 +254,11 @@ impl VisualizerComponent {
             Visualization::VuStereoWithCenterPeak => {
                 Self::draw_vu_combi(
                     target,
-                    self.viz.clone(), 
+                    viz_mut,
                     self.viz_state.last_db_l,
                     self.viz_state.last_db_r,
                     self.viz_state.last_peak_m,
                     self.viz_state.last_hold_m,
-                    self.visualization_type,
                     &mut self.viz_state,
                 )
             }
@@ -267,61 +271,60 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions + 'static,
     {
+        let viz_mut = &mut self.viz;
         // Dispatch based on visualization type
         match self.visualization_type {
             Visualization::PeakMono => {
                 Self::draw_peak_mono_gray4(
-                    target,  
+                    target,
+                    viz_mut,
                     self.viz_state.last_peak_m, 
                     self.viz_state.last_hold_m, 
-                    self.visualization_type, 
                     &mut self.viz_state
                 )
             }
             Visualization::PeakStereo => {
                 Self::draw_peak_pair_gray4(
                     target,  
+                    viz_mut, 
                     self.viz_state.last_peak_l, 
                     self.viz_state.last_peak_r, 
                     self.viz_state.last_hold_l, 
                     self.viz_state.last_hold_r, 
-                    self.visualization_type, 
                     &mut self.viz_state
                 )
             }
             Visualization::HistMono => {
                 Self::draw_hist_mono_gray4(
                     target,  
-                    self.viz_state.last_bands_m.clone(), 
-                    self.visualization_type, 
+                    viz_mut,
+                    self.viz_state.last_bands_m.clone(),  
                     &mut self.viz_state
                 )
             }
             Visualization::HistStereo => {
                 Self::draw_hist_pair_gray4(
                     target,  
+                    viz_mut, 
                     self.viz_state.last_bands_l.clone(), 
                     self.viz_state.last_bands_r.clone(), 
-                    self.visualization_type, 
                     &mut self.viz_state
                 )
             }
             Visualization::VuMono => {
                 Self::draw_vu_mono_gray4(
                     target,
-                    self.viz.clone(), 
+                    viz_mut,
                     self.viz_state.last_db_m,
-                    self.visualization_type,
                     &mut self.viz_state,
                 )
             }
             Visualization::VuStereo => {
                 Self::draw_vu_stereo_gray4(
                     target,
-                    self.viz.clone(), 
+                    viz_mut,
                     self.viz_state.last_db_l,
                     self.viz_state.last_db_r,
-                    self.visualization_type,
                     &mut self.viz_state,
                 )
             }
@@ -329,7 +332,7 @@ impl VisualizerComponent {
                 let track_info = self.viz_state.last_artist.clone();
                 Self::draw_aio_vu_gray4(
                     target,
-                    self.viz.clone(), 
+                    viz_mut,
                     self.viz_state.last_db_m,
                     &track_info,
                     &mut self.viz_state,
@@ -339,6 +342,7 @@ impl VisualizerComponent {
                 let track_info = self.viz_state.last_artist.clone();
                 Self::draw_aio_hist_gray4(
                     target,
+                    viz_mut,
                     self.viz_state.last_bands_m.clone(),
                     &track_info,
                     &mut self.viz_state,
@@ -357,12 +361,11 @@ impl VisualizerComponent {
             Visualization::VuStereoWithCenterPeak => {
                 Self::draw_vu_combi_gray4(
                     target,
-                    self.viz.clone(), 
+                    viz_mut,
                     self.viz_state.last_db_l,
                     self.viz_state.last_db_r,
                     self.viz_state.last_peak_m,
                     self.viz_state.last_hold_m,
-                    self.visualization_type,
                     &mut self.viz_state,
                 )
             }
@@ -402,11 +405,11 @@ impl VisualizerComponent {
     /// Draw stereo peak meters (monochrome)
     fn draw_peak_pair<D>(
         display: &mut D,
+        viz: &mut Visual,
         l_level: u8,
         r_level: u8,
         l_hold: u8,
         r_hold: u8,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
@@ -417,7 +420,7 @@ impl VisualizerComponent {
         use embedded_graphics::primitives::Rectangle;
         use embedded_graphics::Drawable;
 
-        ensure_band_state(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, 0, 0, 0, viz, 0, 0);
         let mut need_flush = false;
 
         if state.init {
@@ -462,11 +465,11 @@ impl VisualizerComponent {
     /// Draw stereo peak meters (Gray4)
     fn draw_peak_pair_gray4<D>(
         display: &mut D,
+        viz: &mut Visual,
         l_level: u8,
         r_level: u8,
         l_hold: u8,
         r_hold: u8,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
@@ -478,7 +481,7 @@ impl VisualizerComponent {
         use embedded_graphics::primitives::Rectangle;
         use embedded_graphics::Drawable;
 
-        ensure_band_state(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, 0, 0, 0, viz, 0, 0);
         let mut need_flush = false;
 
         if state.init {
@@ -525,9 +528,9 @@ impl VisualizerComponent {
     /// Draw mono peak meter (monochrome)
     fn draw_peak_mono<D>(
         display: &mut D,
+        viz: &mut Visual,
         level: u8,
         hold: u8,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
@@ -538,7 +541,7 @@ impl VisualizerComponent {
         use embedded_graphics::primitives::Rectangle;
         use embedded_graphics::Drawable;
 
-        ensure_band_state(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, 0, 0, 0, viz, 0, 0);
         let mut need_flush = false;
 
         if state.init {
@@ -577,9 +580,9 @@ impl VisualizerComponent {
     /// Draw mono peak meter (Gray4)
     fn draw_peak_mono_gray4<D>(
         display: &mut D,
+        viz: &mut Visual,
         level: u8,
         hold: u8,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
@@ -591,9 +594,10 @@ impl VisualizerComponent {
         use embedded_graphics::primitives::Rectangle;
         use embedded_graphics::Drawable;
 
-        ensure_band_state(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, 0, 0, 0, viz, 0, 0);
         let mut need_flush = false;
 
+        // REVIEW IF WE GO THE SVG ANIMATION ROUTE
         if state.init {
             let width = display.size().width;
             let _ = get_svg_gray4(&state.svg_file, width, 64, &mut state.buffer);
@@ -806,15 +810,15 @@ impl VisualizerComponent {
 
     fn draw_hist_pair<D>(
         display: &mut D, 
+        viz: &mut Visual, 
         bands_l: Vec<u8>, 
         bands_r: Vec<u8>, 
-        vk: Visualization, 
         state: &mut crate::vision::LastVizState
     ) -> Result<bool, D::Error>
     where D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, viz, 0, 0);
         state.last_bands_l.copy_from_slice(&bands_l);
         state.last_bands_r.copy_from_slice(&bands_r);
 
@@ -866,15 +870,15 @@ impl VisualizerComponent {
 
     fn draw_hist_pair_gray4<D>(
         display: &mut D, 
+        viz: &mut Visual, 
         bands_l: Vec<u8>, 
         bands_r: Vec<u8>, 
-        vk: Visualization, 
         state: &mut crate::vision::LastVizState
     ) -> Result<bool, D::Error>
     where D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, viz,  0, 0);
         state.last_bands_l.copy_from_slice(&bands_l);
         state.last_bands_r.copy_from_slice(&bands_r);
 
@@ -923,11 +927,16 @@ impl VisualizerComponent {
         Ok(true)
     }
 
-    fn draw_hist_mono<D>(display: &mut D, bands: Vec<u8>, vk: Visualization, state: &mut crate::vision::LastVizState) -> Result<bool, D::Error>
+    fn draw_hist_mono<D>(
+        display: &mut D, 
+        viz: &mut Visual, 
+        bands: Vec<u8>, 
+        state: &mut crate::vision::LastVizState
+    ) -> Result<bool, D::Error>
     where D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
-        ensure_band_state(state, 0, 0, bands.len(), vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, 0, 0, bands.len(), viz, 0, 0);
         state.last_bands_m.copy_from_slice(&bands);
 
         let now = Instant::now();
@@ -954,11 +963,16 @@ impl VisualizerComponent {
         Ok(true)
     }
 
-    fn draw_hist_mono_gray4<D>(display: &mut D, bands: Vec<u8>, vk: Visualization, state: &mut crate::vision::LastVizState) -> Result<bool, D::Error>
+    fn draw_hist_mono_gray4<D>(
+        display: &mut D, 
+        viz: &mut Visual, 
+        bands: Vec<u8>, 
+        state: &mut crate::vision::LastVizState
+    ) -> Result<bool, D::Error>
     where D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
-        ensure_band_state(state, 0, 0, bands.len(), vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, 0, 0, bands.len(), viz, 0, 0);
         state.last_bands_m.copy_from_slice(&bands);
 
         let now = Instant::now();
@@ -1136,7 +1150,7 @@ impl VisualizerComponent {
     /// TODO: Replace simple meter with VU needle once VU color support is added
     fn draw_aio_vu_mono<D>(
         display: &mut D,
-        viz: Visual,
+        _viz: &mut Visual,
         db: f32,
         track_info: &str,
         state: &mut crate::vision::LastVizState,
@@ -1212,7 +1226,7 @@ impl VisualizerComponent {
     /// TODO: Replace simple meter with VU needle once VU color support is added
     fn draw_aio_vu_gray4<D>(
         display: &mut D,
-        viz: Visual,
+        viz: &mut Visual,
         db: f32,
         track_info: &str,
         state: &mut crate::vision::LastVizState,
@@ -1287,6 +1301,7 @@ impl VisualizerComponent {
     /// Draw AIO Histogram visualization (monochrome) - combines track info with histogram
     fn draw_aio_hist_mono<D>(
         display: &mut D,
+        viz: &mut Visual,
         bands: Vec<u8>,
         track_info: &str,
         state: &mut crate::vision::LastVizState,
@@ -1301,7 +1316,7 @@ impl VisualizerComponent {
         let (w, h) = (width as i32, height as i32);
 
         // Ensure state buffers match band count
-        ensure_band_state(state, 0, 0, bands.len(), Visualization::AioHistMono, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, 0, 0, bands.len(), viz, 0, 0);
         state.last_bands_m.copy_from_slice(&bands);
 
         // Compute body decay and peak caps
@@ -1365,6 +1380,7 @@ impl VisualizerComponent {
     /// Draw AIO Histogram visualization (Gray4) - combines track info with histogram
     fn draw_aio_hist_gray4<D>(
         display: &mut D,
+        viz: &mut Visual,
         bands: Vec<u8>,
         track_info: &str,
         state: &mut crate::vision::LastVizState,
@@ -1379,7 +1395,7 @@ impl VisualizerComponent {
         let (w, h) = (width as i32, height as i32);
 
         // Ensure state buffers match band count
-        ensure_band_state(state, 0, 0, bands.len(), Visualization::AioHistMono, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
+        ensure_band_state(state, 0, 0, bands.len(), viz, 0, 0);
         state.last_bands_m.copy_from_slice(&bands);
 
         // Compute body decay and peak caps
@@ -1443,30 +1459,21 @@ impl VisualizerComponent {
     /// Draw VU mono visualization (monochrome) - single VU meter with needle
     fn draw_vu_mono<D>(
         display: &mut D,
-        viz: Visual,
+        viz: &mut Visual,
         db: f32,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-        use embedded_graphics::primitives::Rectangle;
-        use embedded_graphics::image::{Image, ImageRaw};
         use crate::vision::ensure_band_state;
 
         // Ensure state is initialized with VU physics parameters
-        ensure_band_state(state, 0, 0, 0, vk, true, -46.0, 46.0, -21.0, 4.8, 10, 73);
-
-        // Draw SVG background on init
-        if state.init {
-            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-        }
+        ensure_band_state(state, 0, 0, 0, viz, 10, 73);
 
         // Update VU physics
         let (_disp, over) = state.vu_m.update_drive(db);
-        let mut changed = state.last_db_m != db || state.last_disp_m != _disp;
+        let changed = state.last_db_m != db || state.last_disp_m != _disp;
 
         state.last_db_m = db;
         state.last_disp_m = _disp;
@@ -1476,38 +1483,19 @@ impl VisualizerComponent {
         }
         state.init = false;
 
-        // Layout
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
-        let mx = 3;
-        let my = 6;
-        let title_base = 10;
-        let inner_w = w - 2 * mx;
-        let inner_h = h - my - title_base - 1;
+        // this is the only place we reference color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking(
+            state.last_disp_m as f64, 
+            over,
+            0.00, 
+            false,
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
-        // Draw VU needle
-        state.vus_m.draw_vu_needle(
-            display,
-            Rectangle::new(
-                Point::new(mx, my),
-                Size::new(inner_w as u32, inner_h as u32)
-            ),
-            db,
-            2,
-            BinaryColor::On,
-            BinaryColor::Off,
-        )?;
-
-        // Draw over-limit LED
-        let led_fill = if over { BinaryColor::On } else { BinaryColor::Off };
-        draw_circle(
-            display,
-            Point::new(116, 27),
-            8,
-            BinaryColor::On,
-            1,
-            led_fill
-        )?;
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)?;
 
         Ok(true)
     }
@@ -1515,126 +1503,63 @@ impl VisualizerComponent {
     /// Draw VU mono visualization (Gray4) - single VU meter with red needle
     fn draw_vu_mono_gray4<D>(
         display: &mut D,
-        viz: Visual,
+        viz: &mut Visual,
         db: f32,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
-        use embedded_graphics::primitives::{Rectangle, Line};
-        use embedded_graphics::image::{Image, ImageRaw};
         use crate::vision::ensure_band_state;
 
         // Ensure state is initialized
-        ensure_band_state(state, 0, 0, 0, vk, true, -46.0, 46.0, -21.0, 4.8, 10, 73);
-
-        // Always redraw Gray4 SVG background (colorized with red VU meter face)
-        let svg_path = crate::visualization::get_visualizer_panel(vk, state.wide);
-        if !svg_path.is_empty() {
-            let width = display.size().width;
-            let height = display.size().height;
-            let _ = crate::drawsvg::get_svg_gray4(&svg_path, width, height, &mut state.buffer);
-            let raw = ImageRaw::<Gray4>::new(&state.buffer, width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-        }
+        ensure_band_state(state, 0, 0, 0, viz, 10, 73);
 
         // Update VU physics (using BinaryColor VU physics, just for angle calculations)
         let (_disp, over) = state.vu_m.update_drive(db);
-        let mut changed = state.last_db_m != db || state.last_disp_m != _disp;
+        let changed = state.last_db_m != db || state.last_disp_m != _disp;
 
         state.last_db_m = db;
         state.last_disp_m = _disp;
 
         if !changed && !state.init {
-            return Ok(false);
+            return Ok(false)
         }
         state.init = false;
 
-        // Layout
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
-        let mx = 3;
-        let my = 6;
-        let title_base = 10;
-        let inner_w = w - 2 * mx;
-        let inner_h = h - my - title_base - 1;
+        // this is the only place we referce color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking_gray4(
+            state.last_disp_m as f64, 
+            over,
+            0.00, 
+            false,
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
-        // VU meter parameters (hardcoded since Scale fields are private)
-        const SWEEP_MIN: f64 = -46.0;
-        const SWEEP_MAX: f64 = 46.0;
-        const SCALE_MIN: f64 = -21.0;
-        const SCALE_MAX: f64 = 4.8;
-        const TOP_Y: i32 = 10;
-        const BOTTOM_Y: i32 = 73;
-
-        // Calculate needle position manually (Scale::map_value_to_angle logic)
-        let cx = mx + inner_w / 2;
-        let cy = BOTTOM_Y;
-        let r_arc = BOTTOM_Y - TOP_Y;
-
-        // Map dB to angle
-        let mut value = db as f64;
-        if value < SCALE_MIN {
-            value = SCALE_MIN;
-        } else if value > SCALE_MAX {
-            value = SCALE_MAX;
-        }
-        let normalized = (value - SCALE_MIN) / (SCALE_MAX - SCALE_MIN);
-        let ang_deg = SWEEP_MIN + normalized * (SWEEP_MAX - SWEEP_MIN);
-        let ang_rad = ang_deg.to_radians();
-
-        // Calculate needle endpoints
-        let p0 = Point::new(cx, cy);
-        let p1 = Point::new(
-            cx + (r_arc as f32 * ang_rad.cos() as f32) as i32,
-            cy - (r_arc as f32 * ang_rad.sin() as f32) as i32
-        );
-
-        // Draw needle in red (Gray4::new(10) represents red in grayscale)
-        Line::new(p0, p1)
-            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 2))
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
             .draw(display)?;
-
-        // Draw over-limit LED in red
-        let led_fill = if over { Gray4::new(10) } else { Gray4::new(0) };
-        draw_circle(
-            display,
-            Point::new(116, 27),
-            8,
-            Gray4::WHITE,  // LED border
-            1,
-            led_fill       // Red when over
-        )?;
-
+       
         Ok(true)
     }
 
     /// Draw VU stereo visualization (monochrome) - dual VU meters with needles
     fn draw_vu_stereo<D>(
         display: &mut D,
-        viz: Visual,
+        viz: &mut Visual,
         l_db: f32,
         r_db: f32,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-        use embedded_graphics::primitives::Rectangle;
-        use embedded_graphics::image::{Image, ImageRaw};
+
         use crate::vision::ensure_band_state;
 
         // Ensure state is initialized with VU physics parameters (different from mono)
-        ensure_band_state(state, 0, 0, 0, vk, true, -45.27, 45.27, -21.0, 5.0, 8, 48);
-
-        // Draw SVG background on init
-        if state.init {
-            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-        }
+        ensure_band_state(state, 0, 0, 0, viz,8, 48);
 
         // Update VU physics for both channels
         let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
@@ -1651,74 +1576,22 @@ impl VisualizerComponent {
         }
         state.init = false;
 
-        // Layout - split horizontally
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
-        if w <= 6 || h <= 4 {
-            return Ok(false);
-        }
+        state.last_disp_l = _disp_l;
+        state.last_disp_r = _disp_r;
 
-        let mx = 3;
-        let my = 6;
-        let title_base = 10;
-        let gap = 2;
-        let inner_w = w / 2 - 2 * mx;
-        let inner_h = h - my - title_base - 1;
-        let over_y = my + 6;
+        // this is the only place we reference color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking(
+            state.last_disp_l as f64, 
+            over_l,
+            state.last_disp_r as f64, 
+            over_r,
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
-        // Draw left VU needle
-        if state.last_disp_l != _disp_l {
-            state.last_disp_l = _disp_l;
-            state.vus_l.draw_vu_needle(
-                display,
-                Rectangle::new(
-                    Point::new(mx, my),
-                    Size::new(inner_w as u32, inner_h as u32)
-                ),
-                state.last_disp_l,
-                1,
-                BinaryColor::On,
-                BinaryColor::Off,
-            )?;
-        }
-
-        // Draw right VU needle
-        if state.last_disp_r != _disp_r {
-            state.last_disp_r = _disp_r;
-            state.vus_r.draw_vu_needle(
-                display,
-                Rectangle::new(
-                    Point::new(3 * mx + inner_w + gap, my),
-                    Size::new(inner_w as u32, inner_h as u32)
-                ),
-                state.last_disp_r,
-                1,
-                BinaryColor::On,
-                BinaryColor::Off,
-            )?;
-        }
-
-        // Draw over-limit LEDs
-        if over_l {
-            draw_circle(
-                display,
-                Point::new(mx + inner_w - 9, over_y),
-                10,
-                BinaryColor::On,
-                0,
-                BinaryColor::On
-            )?;
-        }
-        if over_r {
-            draw_circle(
-                display,
-                Point::new(2 * (mx + inner_w) + gap - 9, over_y),
-                10,
-                BinaryColor::On,
-                0,
-                BinaryColor::On
-            )?;
-        }
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)?;
 
         Ok(true)
     }
@@ -1726,31 +1599,18 @@ impl VisualizerComponent {
     /// Draw VU stereo visualization (Gray4) - dual VU meters with red needles
     fn draw_vu_stereo_gray4<D>(
         display: &mut D,
-        viz: Visual, 
+        viz: &mut Visual, 
         l_db: f32,
         r_db: f32,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
-        use embedded_graphics::primitives::{Rectangle, Line};
-        use embedded_graphics::image::{Image, ImageRaw};
         use crate::vision::ensure_band_state;
 
         // Ensure state is initialized
-        ensure_band_state(state, 0, 0, 0, vk, true, -45.27, 45.27, -21.0, 5.0, 8, 48);
-
-        // Always redraw Gray4 SVG background (colorized with red VU meter faces)
-        let svg_path = crate::visualization::get_visualizer_panel(vk, state.wide);
-        if !svg_path.is_empty() {
-            let width = display.size().width;
-            let height = display.size().height;
-            let _ = crate::drawsvg::get_svg_gray4(&svg_path, width, height, &mut state.buffer);
-            let raw = ImageRaw::<Gray4>::new(&state.buffer, width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-        }
+        ensure_band_state(state, 0, 0, 0, viz,8, 48);
 
         // Update VU physics for both channels
         let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
@@ -1769,127 +1629,46 @@ impl VisualizerComponent {
         }
         state.init = false;
 
-        // Layout - split horizontally
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
-        if w <= 6 || h <= 4 {
-            return Ok(false);
-        }
+        state.last_disp_l = _disp_l;
+        state.last_disp_r = _disp_r;
 
-        let mx = 3;
-        let my = 6;
-        let title_base = 10;
-        let gap = 2;
-        let inner_w = w / 2 - 2 * mx;
-        let inner_h = h - my - title_base - 1;
-        let over_y = my + 6;
+        // this is the only place we referce color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking_gray4(
+            state.last_disp_l as f64,
+            over_l,
+            state.last_disp_r as f64, 
+            over_r,
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
-        // VU meter parameters for stereo (different from mono)
-        const SWEEP_MIN: f64 = -45.27;
-        const SWEEP_MAX: f64 = 45.27;
-        const SCALE_MIN: f64 = -21.0;
-        const SCALE_MAX: f64 = 5.0;
-        const TOP_Y: i32 = 8;
-        const BOTTOM_Y: i32 = 48;
-
-        // Helper to calculate needle angle
-        let map_db_to_angle = |db: f32| {
-            let mut value = db as f64;
-            if value < SCALE_MIN {
-                value = SCALE_MIN;
-            } else if value > SCALE_MAX {
-                value = SCALE_MAX;
-            }
-            let normalized = (value - SCALE_MIN) / (SCALE_MAX - SCALE_MIN);
-            SWEEP_MIN + normalized * (SWEEP_MAX - SWEEP_MIN)
-        };
-
-        // Draw left VU needle
-        let cx_l = mx + inner_w / 2;
-        let cy = BOTTOM_Y;
-        let r_arc = BOTTOM_Y - TOP_Y;
-
-        let ang_deg_l = map_db_to_angle(l_db);
-        let ang_rad_l = ang_deg_l.to_radians();
-
-        let p0_l = Point::new(cx_l, cy);
-        let p1_l = Point::new(
-            cx_l + (r_arc as f32 * ang_rad_l.cos() as f32) as i32,
-            cy - (r_arc as f32 * ang_rad_l.sin() as f32) as i32
-        );
-
-        Line::new(p0_l, p1_l)
-            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 1))
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
             .draw(display)?;
-
-        // Draw right VU needle
-        let cx_r = 3 * mx + inner_w + gap + inner_w / 2;
-
-        let ang_deg_r = map_db_to_angle(r_db);
-        let ang_rad_r = ang_deg_r.to_radians();
-
-        let p0_r = Point::new(cx_r, cy);
-        let p1_r = Point::new(
-            cx_r + (r_arc as f32 * ang_rad_r.cos() as f32) as i32,
-            cy - (r_arc as f32 * ang_rad_r.sin() as f32) as i32
-        );
-
-        Line::new(p0_r, p1_r)
-            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 1))
-            .draw(display)?;
-
-        // Draw over-limit LEDs
-        if over_l {
-            draw_circle(
-                display,
-                Point::new(mx + inner_w - 9, over_y),
-                10,
-                Gray4::WHITE,
-                0,
-                Gray4::new(10)  // Red fill
-            )?;
-        }
-        if over_r {
-            draw_circle(
-                display,
-                Point::new(2 * (mx + inner_w) + gap - 9, over_y),
-                10,
-                Gray4::WHITE,
-                0,
-                Gray4::new(10)  // Red fill
-            )?;
-        }
 
         Ok(true)
+
     }
 
     /// Draw VU stereo with center peak visualization (monochrome) - combination mode
     fn draw_vu_combi<D>(
         display: &mut D,
-        viz: Visual,
+        viz: &mut Visual,
         l_db: f32,
         r_db: f32,
         peak_level: u8,
         peak_hold: u8,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-        use embedded_graphics::primitives::Rectangle;
-        use embedded_graphics::image::{Image, ImageRaw};
+
         use crate::vision::ensure_band_state;
         use crate::draw::draw_rectangle;
 
         // Ensure state is initialized with combination VU physics parameters
-        ensure_band_state(state, 0, 0, 0, vk, true, -33.69, 33.69, -21.0, 4.8, 16, 40);
-
-        // Draw SVG background on init
-        if state.init {
-            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-        }
+        ensure_band_state(state, 0, 0, 0, viz,  16, 40);
 
         // Update VU physics for both channels
         let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
@@ -1907,20 +1686,32 @@ impl VisualizerComponent {
         }
         state.init = false;
 
-        // Layout
+        state.last_disp_l = _disp_l;
+        state.last_disp_r = _disp_r;
+
+        // this is the only place we reference color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking(
+            state.last_disp_l as f64, 
+            over_l,
+            state.last_disp_r as f64, 
+            over_r,
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
+
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)?;
+
+            // Layout
         let Size { width, height } = display.size();
         let (w, h) = (width as i32, height as i32);
         if w <= 6 || h <= 4 {
             return Ok(false);
         }
 
-        let mx = 10;
         let my = 8;
-        let title_base = 24;
         let gap = 6;
-        let inner_w = w / 2 - 2 * mx - gap / 2;
-        let inner_h = h - my - title_base - 1;
-        let over_y = 51;
 
         // Draw center peak meter
         if state.last_peak_m != peak_level || state.last_hold_m != peak_hold {
@@ -1958,87 +1749,32 @@ impl VisualizerComponent {
             }
         }
 
-        // Draw left VU needle
-        if state.last_disp_l != _disp_l {
-            state.last_disp_l = _disp_l;
-            state.vus_l.draw_vu_needle(
-                display,
-                Rectangle::new(
-                    Point::new(mx, my),
-                    Size::new(inner_w as u32, inner_h as u32)
-                ),
-                l_db,
-                1,
-                BinaryColor::On,
-                BinaryColor::Off,
-            )?;
-        }
-
-        // Draw right VU needle
-        if state.last_disp_r != _disp_r {
-            state.last_disp_r = _disp_r;
-            state.vus_r.draw_vu_needle(
-                display,
-                Rectangle::new(
-                    Point::new(3 * mx + inner_w + gap, my),
-                    Size::new(inner_w as u32, inner_h as u32)
-                ),
-                r_db,
-                1,
-                BinaryColor::On,
-                BinaryColor::Off,
-            )?;
-        }
-
-        // Draw over-limit LEDs
-        if over_l {
-            draw_circle(
-                display,
-                Point::new(mx + mx + inner_w - 6, over_y),
-                10,
-                BinaryColor::On,
-                0,
-                BinaryColor::On
-            )?;
-        }
-        if over_r {
-            draw_circle(
-                display,
-                Point::new(2 * (mx + inner_w) + gap - 6, over_y),
-                10,
-                BinaryColor::On,
-                0,
-                BinaryColor::On
-            )?;
-        }
-
         Ok(true)
     }
 
     /// Draw VU stereo with center peak visualization (Gray4) - combination mode
     fn draw_vu_combi_gray4<D>(
         display: &mut D,
-        viz: Visual,
+        viz: &mut Visual,
         l_db: f32,
         r_db: f32,
         peak_level: u8,
         peak_hold: u8,
-        vk: Visualization,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
-        use embedded_graphics::primitives::{Rectangle, Line};
         use embedded_graphics::image::{Image, ImageRaw};
         use crate::vision::ensure_band_state;
         use crate::draw::draw_rectangle;
 
         // Ensure state is initialized
-        ensure_band_state(state, 0, 0, 0, vk, true, -33.69, 33.69, -21.0, 4.8, 16, 40);
+        ensure_band_state(state, 0, 0, 0, viz,  16, 40);
 
         // Always redraw Gray4 SVG background
-        let svg_path = crate::visualization::get_visualizer_panel(vk, state.wide);
+        // THIS IS NOW REDUNDANT
+        let svg_path = crate::visualization::get_visualizer_panel(viz.kind, state.wide);
         if !svg_path.is_empty() {
             let width = display.size().width;
             let height = display.size().height;
@@ -2065,6 +1801,20 @@ impl VisualizerComponent {
         }
         state.init = false;
 
+        // this is the only place we referce color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking_gray4(
+            state.last_disp_l as f64, 
+            over_l,
+            state.last_disp_r as f64, 
+            over_r,
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
+
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)?;
+
         // Layout
         let Size { width, height } = display.size();
         let (w, h) = (width as i32, height as i32);
@@ -2072,21 +1822,8 @@ impl VisualizerComponent {
             return Ok(false);
         }
 
-        let mx = 10;
         let my = 8;
-        let title_base = 24;
         let gap = 6;
-        let inner_w = w / 2 - 2 * mx - gap / 2;
-        let inner_h = h - my - title_base - 1;
-        let over_y = 51;
-
-        // VU meter parameters for combination mode
-        const SWEEP_MIN: f64 = -33.69;
-        const SWEEP_MAX: f64 = 33.69;
-        const SCALE_MIN: f64 = -21.0;
-        const SCALE_MAX: f64 = 4.8;
-        const TOP_Y: i32 = 16;
-        const BOTTOM_Y: i32 = 40;
 
         // Draw center peak meter with cyan bars
         if state.last_peak_m != peak_level || state.last_hold_m != peak_hold {
@@ -2124,74 +1861,7 @@ impl VisualizerComponent {
             }
         }
 
-        // Helper to calculate needle angle
-        let map_db_to_angle = |db: f32| {
-            let mut value = db as f64;
-            if value < SCALE_MIN {
-                value = SCALE_MIN;
-            } else if value > SCALE_MAX {
-                value = SCALE_MAX;
-            }
-            let normalized = (value - SCALE_MIN) / (SCALE_MAX - SCALE_MIN);
-            SWEEP_MIN + normalized * (SWEEP_MAX - SWEEP_MIN)
-        };
-
-        // Draw left VU needle
-        let cx_l = mx + inner_w / 2;
-        let cy = BOTTOM_Y;
-        let r_arc = BOTTOM_Y - TOP_Y;
-
-        let ang_deg_l = map_db_to_angle(l_db);
-        let ang_rad_l = ang_deg_l.to_radians();
-
-        let p0_l = Point::new(cx_l, cy);
-        let p1_l = Point::new(
-            cx_l + (r_arc as f32 * ang_rad_l.cos() as f32) as i32,
-            cy - (r_arc as f32 * ang_rad_l.sin() as f32) as i32
-        );
-
-        Line::new(p0_l, p1_l)
-            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 1))
-            .draw(display)?;
-
-        // Draw right VU needle
-        let cx_r = 3 * mx + inner_w + gap + inner_w / 2;
-
-        let ang_deg_r = map_db_to_angle(r_db);
-        let ang_rad_r = ang_deg_r.to_radians();
-
-        let p0_r = Point::new(cx_r, cy);
-        let p1_r = Point::new(
-            cx_r + (r_arc as f32 * ang_rad_r.cos() as f32) as i32,
-            cy - (r_arc as f32 * ang_rad_r.sin() as f32) as i32
-        );
-
-        Line::new(p0_r, p1_r)
-            .into_styled(PrimitiveStyle::with_stroke(Gray4::new(10), 1))
-            .draw(display)?;
-
-        // Draw over-limit LEDs in red
-        if over_l {
-            draw_circle(
-                display,
-                Point::new(mx + mx + inner_w - 6, over_y),
-                10,
-                Gray4::WHITE,
-                0,
-                Gray4::new(10)  // Red fill
-            )?;
-        }
-        if over_r {
-            draw_circle(
-                display,
-                Point::new(2 * (mx + inner_w) + gap - 6, over_y),
-                10,
-                Gray4::WHITE,
-                0,
-                Gray4::new(10)  // Red fill
-            )?;
-        }
-
         Ok(true)
     }
+
 }

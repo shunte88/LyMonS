@@ -148,7 +148,7 @@ impl LayoutManager {
         // Start clock at top of display (no offset)
         let clock_y_start = border_adj;
         let progress_bar_y = clock_y_start + CLOCK_DIGIT_HEIGHT + CLOCK_PROGRESS_BAR_GAP;
-        let date_y = progress_bar_y + PROGRESS_BAR_HEIGHT + PROGRESS_BAR_DATE_GAP - 2;
+        let date_y = progress_bar_y + PROGRESS_BAR_HEIGHT + PROGRESS_BAR_DATE_GAP - 3;
 
         PageLayout::new("clock")
             // metrics if requested (centered)

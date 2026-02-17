@@ -366,7 +366,9 @@ impl<C: PixelColor + Clone + Default> VuNeedle<C> {
         let mut dt_ms = now.saturating_duration_since(self.last_t).as_millis() as u32;
         self.last_t = now;
         if dt_ms > 50 { dt_ms = 50; }
-        let x = step_ms(&mut self.n, u, self.x_min, self.x_max, dt_ms);
+        let force = get_force(u);
+        //let x = step_ms(&mut self.n, u, self.x_min, self.x_max, dt_ms);
+        let x = step_ms(&mut self.n, force, self.x_min, self.x_max, dt_ms);
         (x, self.n.over > 4)
     }
 

@@ -30,6 +30,7 @@ dependencies = [
  "mini-moka",
  "pixels",
  "rand",
+ "regex",
  "reqwest",
  "resvg",
  "rppal",

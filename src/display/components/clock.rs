@@ -92,6 +92,7 @@ impl ClockDisplay {
         }
     }
 
+    // rework so we pass color generic and DRY this up
     /// Render the clock display with specified color
     pub fn render<D>(&self, target: &mut D, color: BinaryColor) -> Result<(), D::Error>
     where

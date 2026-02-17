@@ -338,13 +338,13 @@ async fn signal_handler() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 /// Demo mode render loop (when LMS is not available) - shows clock
 #[cfg(feature = "emulator")]
 async fn emulator_demo_loop(
     driver: std::sync::Arc<tokio::sync::Mutex<display::drivers::emulator::EmulatorDriver>>,
     clock_font: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    println!("++++++++++++++++++++++ emulator_demo_loop ++++++++++++++++++++++");
     use embedded_graphics::prelude::*;
     use embedded_graphics::pixelcolor::BinaryColor;
     use embedded_graphics::mono_font::{MonoTextStyle, ascii::{FONT_5X8, FONT_6X10, FONT_9X18_BOLD}};
@@ -896,8 +896,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "peak_mono",         // mono peak meter with hold/decay
             "peak_stereo",       // two peak meters with hold/decay
             "vu_mono",           // downmix to mono VU
-            "waveform_spectrum", // oscilloscope waveform + spectrogram waterfall
             "vu_stereo",         // two VU meters (L/R)
+            "waveform_spectrum", // oscilloscope waveform + spectrogram waterfall
             "no_viz"                                                                                                               ]
         )
         .default_value("no_viz")

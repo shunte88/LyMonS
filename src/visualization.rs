@@ -34,6 +34,7 @@ use std::fmt;
 use std::fs;
 
 use crate::svgimage::SvgImageRenderer;
+use regex::Regex;
 
 /// Which visualization to produce.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -74,18 +75,20 @@ impl Error for VizError {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Visual {
-    kind: Visualization,
-    svg_supported: bool,
+    pub kind: Visualization,
+    pub svg_supported: bool,
     rect: Rectangle,
+    svg_name: String,
     svg_data: String,
     modified_svg_data: String,
     buffer: Vec<u8>,
-    scale_min: f64,
-    scale_max: f64,
-    sweep_min: f64,
-    sweep_max: f64,
-    over_support: bool,
-    can_widen: bool,
+    pub scale_min: f64,
+    pub scale_max: f64,
+    pub sweep_min: f64,
+    pub sweep_max: f64,
+    pub over_support: bool,
+    pub can_widen: bool,
+    re: String,
 }
 
 #[allow(dead_code)]
@@ -104,16 +107,18 @@ impl Visual {
         can_widen: bool,
     ) -> Self {
 
+        let re = r"\{\{.*?\}\}".to_string();
         let width = rect.size.width as usize;
         let height = rect.size.height as usize;
         let svg_supported = visualizer_svg_supported(kind);
+        let svg_name = path.clone();
         let svg_data = if svg_supported {fs::read_to_string(path.as_str()).expect("load SVG file")} else {String::from("")};
         let buffer_size = height as usize * ((width + 7) / 8) as usize;
-
         Self {
             kind,
             svg_supported,
             rect,
+            svg_name,
             svg_data,
             modified_svg_data: String::new(),
             buffer: vec![0u8; buffer_size],
@@ -123,13 +128,16 @@ impl Visual {
             sweep_max,
             over_support,
             can_widen,
+            re,
         }
     }
 
     pub fn update (
-        &mut self, 
-        metric: f64,
-        over: bool,
+        &mut self,
+        metric_left: f64,
+        over_left: bool,
+        metric_right: f64,
+        over_right: bool,
     ) -> Result<(), VizError> {
 
         if !self.svg_supported {
@@ -138,41 +146,88 @@ impl Visual {
 
         let mut data = self.svg_data.clone();
 
+        if data.is_empty() {println!("Empty SVG????")};
+
         // overage beacon
-        if over {
-            data = data.replace("{{overflow}}", "1");
+        if over_left {
+            //println!("LED LEFT ON");
+            data = data.replace("{{overflow}}", "1"); // downmix
+            data = data.replace("{{overflow_left}}", "1");
+        } else {
+            data = data.replace("{{overflow_left}}", "0");
+        }
+        if over_right {
+            //println!("LED RIGHT ON");
+            data = data.replace("{{overflow_right}}", "1");
+        } else {
+            data = data.replace("{{overflow_right}}", "0");
         }
 
         // metric - clamp within bounds
-        let metric = metric.clamp(self.scale_min, self.scale_max);
-        let normalized = (metric - self.scale_min) / (self.scale_max - self.scale_min);
-        let arc_angle = self.sweep_min + normalized * (self.sweep_max - self.sweep_min);
+        println!{"metric left .......: {metric_left:<10}"};
+        println!{"metric right ......: {metric_right:<10}"};
 
-        data = data.replace("{{needle-arc}}", arc_angle.to_string().as_str());
-        self.modified_svg_data = data;
+        let metric_left = metric_left.clamp(self.scale_min, self.scale_max);
+        let normalized_left = (metric_left - self.scale_min) / (self.scale_max - self.scale_min);
+        let arc_angle_left = self.sweep_min + normalized_left * (self.sweep_max - self.sweep_min);
+
+        let metric_right = metric_right.clamp(self.scale_min, self.scale_max);
+        let normalized_right = (metric_right - self.scale_min) / (self.scale_max - self.scale_min);
+        let arc_angle_right = self.sweep_min + normalized_right * (self.sweep_max - self.sweep_min);
+
+        data = data.replace("{{needle}}", arc_angle_left.to_string().as_str());
+        data = data.replace("{{needle_left}}", arc_angle_left.to_string().as_str());
+        data = data.replace("{{needle_right}}", arc_angle_right.to_string().as_str());
+
+        // patch any missed replacement tags
+        let re = Regex::new(self.re.as_str()).unwrap();
+        let replace = "0";
+        data = re.replace_all(data.clone().as_str(), replace).to_string();
+
+        println!{"needle left .......: {arc_angle_left:<10}"};
+        println!{"needle right ......: {arc_angle_right:<10}"};
+
+        self.modified_svg_data = data.clone();
         Ok(())
 
     }
 
     pub async fn update_and_render (
         &mut self,
-        metric: f64,
-        over: bool,
+        metric_left: f64,
+        over_left: bool,
+        metric_right: f64,
+        over_right: bool,
     ) -> Result<ImageRaw<BinaryColor>, VizError> {
         // Delegate to blocking version (no actual async ops here)
-        self.update_and_render_blocking(metric, over)
+        self.update_and_render_blocking(        
+            metric_left,
+            over_left,
+            metric_right,
+            over_right,
+        )
     }
 
     pub fn update_and_render_blocking (
         &mut self,
-        metric: f64,
-        over: bool,
+        metric_left: f64,
+        over_left: bool,
+        metric_right: f64,
+        over_right: bool,
     ) -> Result<ImageRaw<BinaryColor>, VizError> {
 
         let width = self.rect.size.width as u32;
         let height = self.rect.size.height as u32;
+
+        println!("svg_supported ...: {}", self.svg_supported);
+
         if self.svg_supported {
-            self.update(metric, over)?;
+            self.update(
+                metric_left,
+                over_left,
+                metric_right,
+                over_right,
+            )?;
             let data = self.modified_svg_data.clone();
             let svg_renderer = SvgImageRenderer::new(&data, width, height)
                 .map_err(|e| VizError::VizRenderError(e.to_string()))?;
@@ -187,15 +242,24 @@ impl Visual {
     /// Render to Gray4 format with full 16-level grayscale support for colorized SVGs
     pub fn update_and_render_blocking_gray4 (
         &mut self,
-        metric: f64,
-        over: bool,
+        metric_left: f64,
+        over_left: bool,
+        metric_right: f64,
+        over_right: bool,
     ) -> Result<ImageRaw<Gray4>, VizError> {
 
         let width = self.rect.size.width as u32;
         let height = self.rect.size.height as u32;
+
         if self.svg_supported {
-            self.update(metric, over)?;
+            self.update(
+                metric_left,
+                over_left,
+                metric_right,
+                over_right,
+            )?;
             let data = self.modified_svg_data.clone();
+            
             let svg_renderer = SvgImageRenderer::new(&data, width, height)
                 .map_err(|e| VizError::VizRenderError(e.to_string()))?;
 
@@ -211,11 +275,13 @@ impl Visual {
 
     }
 
+    pub fn get_svg_filename(&self) -> &str {
+        &self.svg_name.as_str()
+    }
+
     pub fn get_svg_data(&self) -> &str {
         &self.modified_svg_data
     }
-
-
 
 }
 
@@ -261,7 +327,7 @@ pub fn get_visualizer_panel_with_layout(kind: Visualization, layout: &LayoutConf
 pub fn visualizer_svg_supported(kind: Visualization) -> bool {
     let supported = match kind {
         Visualization::VuStereo |
-        Visualization::VuMono  |
+        Visualization::VuMono |
         Visualization::VuStereoWithCenterPeak |
         Visualization::AioVuMono => true,
         Visualization::PeakStereo |
@@ -279,6 +345,7 @@ pub fn visualizer_svg_supported(kind: Visualization) -> bool {
 ///
 /// This function maintains backwards compatibility with existing code.
 /// New code should use `get_visualizer_panel_with_layout` instead.
+/// THIS NEEDS TO COME FROM Visual configurator
 pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
     let folder = if wide {"./assets/ssd1322/"}else{"./assets/ssd1309/"};
     let panel = match kind {
@@ -300,7 +367,7 @@ pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
 /// Loads/sets the visualization
 pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
     let folder = if wide {"./assets/ssd1322/"}else{"./assets/ssd1309/"};
-    let size = if wide { Size::new(128, 64) } else { Size::new(256, 64) };
+    let size = if wide { Size::new(256, 64) } else { Size::new(128, 64) };
     let viz = match kind {
         Visualization::VuStereo => {
             Visual::new(
@@ -318,7 +385,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         Visualization::VuMono  => {
             Visual::new(
                 kind,
-                String::from(format!("{folder}vu2up.svg")),
+                String::from(format!("{folder}vudownmix.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 -25.0,
                 5.0,
