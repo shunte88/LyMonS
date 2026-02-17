@@ -400,7 +400,8 @@ impl Eggs {
         let seconds = now.second() as f64;
         let seconds_angle =  (
             now.second() as f64 + now.timestamp_subsec_nanos() as f64 / 1_000_000_000.0) * 12.0;
-                data = data.replace("{{seconds-angle}}", seconds_angle.to_string().as_str());
+        data = data.replace("{{seconds-angle}}", seconds_angle.to_string().as_str());
+        data = data.replace("{{anticlockwise-seconds-angle}}", format!("-{seconds_angle}").as_str());
         if seconds%2.0 == 0.0 {
             data = data.replace("{{flip}}", "1");
             data = data.replace("{{flip-odd}}", "-1");

@@ -228,8 +228,8 @@ async fn unified_display_loop(
 
         // Get mode name for logging
         let this_mode = match mode {
-            display::DisplayMode::Visualizer => "vizzy",
-            display::DisplayMode::EasterEggs => "eggy",
+            display::DisplayMode::Visualizer => "visualizer",
+            display::DisplayMode::EasterEggs => "easter_eggs",
             display::DisplayMode::Scrolling => "scrolling",
             display::DisplayMode::Clock => "clock",
             display::DisplayMode::WeatherCurrent => "weather_current",
@@ -1160,6 +1160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let inet =  local_ip().unwrap();
     let mac_addr = get_mac_addr();
+    // specific to Pi nomenclature
     let eth0_mac_addr = get_mac_addr_for("eth0").unwrap_or_else(|_| "00:00:00:00:00:00".to_string());
     let wlan0_mac_addr = get_mac_addr_for("wlan0").unwrap_or_else(|_| "00:00:00:00:00:00".to_string());
 
@@ -1308,8 +1309,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Get mode name for logging
                 let this_mode = match mode {
-                    display::DisplayMode::Visualizer => "vizzy",
-                    display::DisplayMode::EasterEggs => "eggy",
+                    display::DisplayMode::Visualizer => "visualizer",
+                    display::DisplayMode::EasterEggs => "easter_eggs",
                     display::DisplayMode::Scrolling => "scrolling",
                     display::DisplayMode::Clock => "clock",
                     display::DisplayMode::WeatherCurrent => "weather_current",
