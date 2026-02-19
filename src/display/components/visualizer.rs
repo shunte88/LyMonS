@@ -148,7 +148,7 @@ impl VisualizerComponent {
     }
 
     /// Set visualization type
-    /// Note: On wide displays, VuMono (downmix) is automatically converted to VuStereo
+    /// Note: On wide displays, VuMono (downmix) is automatically shifted to VuStereo
     pub fn set_visualization_type(&mut self, viz_type: Visualization) {
         // Rule: vu_mono (downmix) is not supported on wide screens
         // Automatically switch to vu_stereo instead
@@ -156,6 +156,9 @@ impl VisualizerComponent {
             (true, Visualization::VuMono) => Visualization::VuStereo,
             (_, other) => other,
         };
+        // Reset init flag when switching visualizations
+        self.viz_state.init = true;  // prime
+
     }
 
     /// Render the visualizer (monochrome version)
@@ -171,8 +174,8 @@ impl VisualizerComponent {
                 Self::draw_peak_mono(
                     target,  
                     viz_mut,
-                    self.viz_state.last_peak_m, 
-                    self.viz_state.last_hold_m, 
+                    self.viz_state.this.peak_m, 
+                    self.viz_state.this.hold_m, 
                     &mut self.viz_state
                 )
             }
@@ -180,10 +183,10 @@ impl VisualizerComponent {
                 Self::draw_peak_pair(
                     target,  
                     viz_mut, 
-                    self.viz_state.last_peak_l, 
-                    self.viz_state.last_peak_r, 
-                    self.viz_state.last_hold_l, 
-                    self.viz_state.last_hold_r, 
+                    self.viz_state.this.peak_l, 
+                    self.viz_state.this.peak_r, 
+                    self.viz_state.this.hold_l, 
+                    self.viz_state.this.hold_r, 
                     &mut self.viz_state
                 )
             }
@@ -208,7 +211,7 @@ impl VisualizerComponent {
                 Self::draw_vu_mono(
                     target,
                     viz_mut,
-                    self.viz_state.last_db_m,
+                    self.viz_state.this.db_m,
                     &mut self.viz_state,
                 )
             }
@@ -216,8 +219,8 @@ impl VisualizerComponent {
                 Self::draw_vu_stereo(
                     target,
                     viz_mut,
-                    self.viz_state.last_db_l,
-                    self.viz_state.last_db_r,
+                    self.viz_state.this.db_l,
+                    self.viz_state.this.db_r,
                     &mut self.viz_state,
                 )
             }
@@ -226,7 +229,7 @@ impl VisualizerComponent {
                 Self::draw_aio_vu_mono(
                     target,
                     viz_mut,
-                    self.viz_state.last_db_m,
+                    self.viz_state.this.db_m,
                     &track_info,
                     &mut self.viz_state,
                 )
@@ -255,10 +258,10 @@ impl VisualizerComponent {
                 Self::draw_vu_combi(
                     target,
                     viz_mut,
-                    self.viz_state.last_db_l,
-                    self.viz_state.last_db_r,
-                    self.viz_state.last_peak_m,
-                    self.viz_state.last_hold_m,
+                    self.viz_state.this.db_l,
+                    self.viz_state.this.db_r,
+                    self.viz_state.this.peak_m,
+                    self.viz_state.this.hold_m,
                     &mut self.viz_state,
                 )
             }
@@ -278,8 +281,8 @@ impl VisualizerComponent {
                 Self::draw_peak_mono_gray4(
                     target,
                     viz_mut,
-                    self.viz_state.last_peak_m, 
-                    self.viz_state.last_hold_m, 
+                    self.viz_state.this.peak_m, 
+                    self.viz_state.this.hold_m, 
                     &mut self.viz_state
                 )
             }
@@ -287,10 +290,10 @@ impl VisualizerComponent {
                 Self::draw_peak_pair_gray4(
                     target,  
                     viz_mut, 
-                    self.viz_state.last_peak_l, 
-                    self.viz_state.last_peak_r, 
-                    self.viz_state.last_hold_l, 
-                    self.viz_state.last_hold_r, 
+                    self.viz_state.this.peak_l, 
+                    self.viz_state.this.peak_r, 
+                    self.viz_state.this.hold_l, 
+                    self.viz_state.this.hold_r, 
                     &mut self.viz_state
                 )
             }
@@ -315,7 +318,7 @@ impl VisualizerComponent {
                 Self::draw_vu_mono_gray4(
                     target,
                     viz_mut,
-                    self.viz_state.last_db_m,
+                    self.viz_state.this.db_m,
                     &mut self.viz_state,
                 )
             }
@@ -323,8 +326,8 @@ impl VisualizerComponent {
                 Self::draw_vu_stereo_gray4(
                     target,
                     viz_mut,
-                    self.viz_state.last_db_l,
-                    self.viz_state.last_db_r,
+                    self.viz_state.this.db_l,
+                    self.viz_state.this.db_r,
                     &mut self.viz_state,
                 )
             }
@@ -333,7 +336,7 @@ impl VisualizerComponent {
                 Self::draw_aio_vu_gray4(
                     target,
                     viz_mut,
-                    self.viz_state.last_db_m,
+                    self.viz_state.this.db_m,
                     &track_info,
                     &mut self.viz_state,
                 )
@@ -362,10 +365,10 @@ impl VisualizerComponent {
                 Self::draw_vu_combi_gray4(
                     target,
                     viz_mut,
-                    self.viz_state.last_db_l,
-                    self.viz_state.last_db_r,
-                    self.viz_state.last_peak_m,
-                    self.viz_state.last_hold_m,
+                    self.viz_state.this.db_l,
+                    self.viz_state.this.db_r,
+                    self.viz_state.this.peak_m,
+                    self.viz_state.this.hold_m,
                     &mut self.viz_state,
                 )
             }
@@ -434,14 +437,14 @@ impl VisualizerComponent {
         let mut xpos = 15;
         let ypos: [u8; 2] = [7, 40];
 
-        if !state.init && state.last_peak_l == l_level && state.last_peak_r == r_level && state.last_hold_l == l_hold && state.last_hold_r == r_hold {
+        if !state.init && state.last.peak_l == l_level && state.last.peak_r == r_level && state.last.hold_l == l_hold && state.last.hold_r == r_hold {
             return Ok(need_flush);
         }
 
-        state.last_peak_l = l_level;
-        state.last_peak_r = r_level;
-        state.last_hold_l = l_hold;
-        state.last_hold_r = r_hold;
+        state.last.peak_l = l_level;
+        state.last.peak_r = r_level;
+        state.last.hold_l = l_hold;
+        state.last.hold_r = r_hold;
         state.init = false;
 
         for l in level_brackets {
@@ -449,7 +452,7 @@ impl VisualizerComponent {
             let nodew = if l < 0 { 2 } else { 4 };
 
             for c in 0..2 {
-                let mv = level_brackets[0] + if c == 0 { state.last_peak_l as i16 } else { state.last_peak_r as i16 };
+                let mv = level_brackets[0] + if c == 0 { state.last.peak_l as i16 } else { state.last.peak_r as i16 };
                 let color = if mv >= l { BinaryColor::On } else { BinaryColor::Off };
 
                 let rect = Rectangle::new(Point::new(xpos, ypos[c] as i32), Size::new(nodew, hbar));
@@ -497,14 +500,14 @@ impl VisualizerComponent {
         let mut xpos = 15;
         let ypos: [u8; 2] = [7, 40];
 
-        if !state.init && state.last_peak_l == l_level && state.last_peak_r == r_level && state.last_hold_l == l_hold && state.last_hold_r == r_hold {
+        if !state.init && state.last.peak_l == l_level && state.last.peak_r == r_level && state.last.hold_l == l_hold && state.last.hold_r == r_hold {
             return Ok(need_flush);
         }
 
-        state.last_peak_l = l_level;
-        state.last_peak_r = r_level;
-        state.last_hold_l = l_hold;
-        state.last_hold_r = r_hold;
+        state.last.peak_l = l_level;
+        state.last.peak_r = r_level;
+        state.last.hold_l = l_hold;
+        state.last.hold_r = r_hold;
         state.init = false;
 
         for l in level_brackets {
@@ -512,7 +515,7 @@ impl VisualizerComponent {
             let nodew = if l < 0 { 2 } else { 4 };
 
             for c in 0..2 {
-                let mv = level_brackets[0] + if c == 0 { state.last_peak_l as i16 } else { state.last_peak_r as i16 };
+                let mv = level_brackets[0] + if c == 0 { state.last.peak_l as i16 } else { state.last.peak_r as i16 };
                 let color = if mv >= l { Gray4::WHITE } else { Gray4::BLACK };
 
                 let rect = Rectangle::new(Point::new(xpos, ypos[c] as i32), Size::new(nodew, hbar));
@@ -555,18 +558,18 @@ impl VisualizerComponent {
         let mut xpos = 15;
         let ypos = 20;
 
-        if !state.init && state.last_peak_m == level && state.last_hold_m == hold {
+        if !state.init && state.last.peak_m == level && state.last.hold_m == hold {
             return Ok(need_flush);
         }
 
-        state.last_peak_m = level;
-        state.last_hold_m = hold;
+        state.last.peak_m = level;
+        state.last.hold_m = hold;
         state.init = false;
 
         for l in level_brackets {
             let nodeo = if l < 0 { 5 } else { 7 };
             let nodew = if l < 0 { 2 } else { 4 };
-            let mv = level_brackets[0] + state.last_peak_m as i16;
+            let mv = level_brackets[0] + state.last.peak_m as i16;
             let color = if mv >= l { BinaryColor::On } else { BinaryColor::Off };
 
             let rect = Rectangle::new(Point::new(xpos, ypos), Size::new(nodew, hbar));
@@ -611,18 +614,18 @@ impl VisualizerComponent {
         let mut xpos = 15;
         let ypos = 20;
 
-        if !state.init && state.last_peak_m == level && state.last_hold_m == hold {
+        if !state.init && state.last.peak_m == level && state.last.hold_m == hold {
             return Ok(need_flush);
         }
 
-        state.last_peak_m = level;
-        state.last_hold_m = hold;
+        state.last.peak_m = level;
+        state.last.hold_m = hold;
         state.init = false;
 
         for l in level_brackets {
             let nodeo = if l < 0 { 5 } else { 7 };
             let nodew = if l < 0 { 2 } else { 4 };
-            let mv = level_brackets[0] + state.last_peak_m as i16;
+            let mv = level_brackets[0] + state.last.peak_m as i16;
             let color = if mv >= l { Gray4::WHITE } else { Gray4::BLACK };
 
             let rect = Rectangle::new(Point::new(xpos, ypos), Size::new(nodew, hbar));
@@ -1170,14 +1173,14 @@ impl VisualizerComponent {
         // Convert dB to level for simple vertical meter
         let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
         let level = (x * PEAK_METER_LEVELS_MAX as f32).round() as u8;
-        let mut changed = state.last_peak_m != level;
+        let mut changed = state.last.peak_m != level;
         changed |= state.last_artist != track_info;
 
         if !changed && !state.init {
             return Ok(false);
         }
         state.init = false;
-        state.last_peak_m = level;
+        state.last.peak_m = level;
 
         // Draw track info text on left side if changed
         if state.last_artist != track_info {
@@ -1246,14 +1249,14 @@ impl VisualizerComponent {
         // Convert dB to level for simple vertical meter
         let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
         let level = (x * PEAK_METER_LEVELS_MAX as f32).round() as u8;
-        let mut changed = state.last_peak_m != level;
+        let mut changed = state.last.peak_m != level;
         changed |= state.last_artist != track_info;
 
         if !changed && !state.init {
             return Ok(false);
         }
         state.init = false;
-        state.last_peak_m = level;
+        state.last.peak_m = level;
 
         // Draw track info text on left side if changed
         if state.last_artist != track_info {
@@ -1467,16 +1470,15 @@ impl VisualizerComponent {
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
         use crate::vision::ensure_band_state;
-
         // Ensure state is initialized with VU physics parameters
         ensure_band_state(state, 0, 0, 0, viz, 10, 73);
 
         // Update VU physics
         let (_disp, over) = state.vu_m.update_drive(db);
-        let changed = state.last_db_m != db || state.last_disp_m != _disp;
+        let changed = state.last.db_m != db || state.last.disp_m != _disp;
 
-        state.last_db_m = db;
-        state.last_disp_m = _disp;
+        state.last.db_m = db;
+        state.last.disp_m = _disp;
 
         if !changed && !state.init {
             return Ok(false);
@@ -1486,7 +1488,7 @@ impl VisualizerComponent {
         // this is the only place we reference color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking(
-            state.last_disp_m as f64, 
+            state.last.disp_m as f64, 
             over,
             0.00, 
             false,
@@ -1517,10 +1519,10 @@ impl VisualizerComponent {
 
         // Update VU physics (using BinaryColor VU physics, just for angle calculations)
         let (_disp, over) = state.vu_m.update_drive(db);
-        let changed = state.last_db_m != db || state.last_disp_m != _disp;
+        let changed = state.last.db_m != db || state.last.disp_m != _disp;
 
-        state.last_db_m = db;
-        state.last_disp_m = _disp;
+        state.last.db_m = db;
+        state.last.disp_m = _disp;
 
         if !changed && !state.init {
             return Ok(false)
@@ -1530,7 +1532,7 @@ impl VisualizerComponent {
         // this is the only place we referce color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking_gray4(
-            state.last_disp_m as f64, 
+            state.last.disp_m as f64, 
             over,
             0.00, 
             false,
@@ -1540,7 +1542,7 @@ impl VisualizerComponent {
         // Draw SVG image
         embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
             .draw(display)?;
-       
+
         Ok(true)
     }
 
@@ -1565,26 +1567,25 @@ impl VisualizerComponent {
         let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
         let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
 
-        let mut changed = state.last_db_l != l_db || state.last_db_r != r_db;
-        changed |= state.last_disp_l != _disp_l || state.last_disp_r != _disp_r;
+        let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
+        changed |= state.last.disp_l != _disp_l || state.last.disp_r != _disp_r;
 
-        state.last_db_l = l_db;
-        state.last_db_r = r_db;
+        state.last.db_l = l_db;
+        state.last.db_r = r_db;
+        state.last.disp_l = _disp_l;
+        state.last.disp_r = _disp_r;
 
         if !changed && !state.init {
             return Ok(false);
         }
         state.init = false;
 
-        state.last_disp_l = _disp_l;
-        state.last_disp_r = _disp_r;
-
         // this is the only place we reference color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking(
-            state.last_disp_l as f64, 
+            state.last.disp_l as f64, 
             over_l,
-            state.last_disp_r as f64, 
+            state.last.disp_r as f64, 
             over_r,
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
@@ -1613,31 +1614,29 @@ impl VisualizerComponent {
         ensure_band_state(state, 0, 0, 0, viz,8, 48);
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
-        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+        let (_disp_l, over_l) = state.vu_l.update_db(l_db);
+        let (_disp_r, over_r) = state.vu_r.update_db(r_db);
 
-        let mut changed = state.last_db_l != l_db || state.last_db_r != r_db;
-        changed |= state.last_disp_l != _disp_l || state.last_disp_r != _disp_r;
+        let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
+        changed |= state.last.disp_l != _disp_l || state.last.disp_r != _disp_r;
 
-        state.last_db_l = l_db;
-        state.last_db_r = r_db;
-        state.last_disp_l = _disp_l;
-        state.last_disp_r = _disp_r;
+        state.last.db_l = l_db;
+        state.last.db_r = r_db;
+        state.last.disp_l = _disp_l;
+        state.last.disp_r = _disp_r;
 
+println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l:>5} {over_r:>5} {changed:>5} {:>5})", state.init);
         if !changed && !state.init {
             return Ok(false);
         }
         state.init = false;
 
-        state.last_disp_l = _disp_l;
-        state.last_disp_r = _disp_r;
-
         // this is the only place we referce color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking_gray4(
-            state.last_disp_l as f64,
+            l_db as f64, //state.last.disp_l as f64,
             over_l,
-            state.last_disp_r as f64, 
+            r_db as f64, //state.last.disp_r as f64, 
             over_r,
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
@@ -1674,27 +1673,27 @@ impl VisualizerComponent {
         let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
         let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
 
-        let mut changed = state.last_db_l != l_db || state.last_db_r != r_db;
-        changed |= state.last_disp_l != _disp_l || state.last_disp_r != _disp_r;
-        changed |= state.last_peak_m != peak_level || state.last_hold_m != peak_hold;
+        let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
+        changed |= state.last.disp_l != _disp_l || state.last.disp_r != _disp_r;
+        changed |= state.last.peak_m != peak_level || state.last.hold_m != peak_hold;
 
-        state.last_db_l = l_db;
-        state.last_db_r = r_db;
+        state.last.db_l = l_db;
+        state.last.db_r = r_db;
 
         if !changed && !state.init {
             return Ok(false);
         }
         state.init = false;
 
-        state.last_disp_l = _disp_l;
-        state.last_disp_r = _disp_r;
+        state.last.disp_l = _disp_l;
+        state.last.disp_r = _disp_r;
 
         // this is the only place we reference color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking(
-            state.last_disp_l as f64, 
+            state.last.disp_l as f64, 
             over_l,
-            state.last_disp_r as f64, 
+            state.last.disp_r as f64, 
             over_r,
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
@@ -1714,13 +1713,13 @@ impl VisualizerComponent {
         let gap = 6;
 
         // Draw center peak meter
-        if state.last_peak_m != peak_level || state.last_hold_m != peak_hold {
+        if state.last.peak_m != peak_level || state.last.hold_m != peak_hold {
             let level_brackets: [i16; 19] = [
                 -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
                 -4, -3, -2, -1, 0, 2, 3, 5, 8
             ];
-            state.last_peak_m = peak_level;
-            state.last_hold_m = peak_hold;
+            state.last.peak_m = peak_level;
+            state.last.hold_m = peak_hold;
 
             let top_meter = my + 1;
             let bottom_meter = h - 2 * my - 1;
@@ -1730,7 +1729,7 @@ impl VisualizerComponent {
             let mut ypos = bottom_meter + nodeh as i32;
 
             for l in level_brackets {
-                let mv = level_brackets[0] + state.last_peak_m as i16;
+                let mv = level_brackets[0] + state.last.peak_m as i16;
                 let color = if mv >= l {
                     BinaryColor::On
                 } else {
@@ -1787,14 +1786,14 @@ impl VisualizerComponent {
         let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
         let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
 
-        let mut changed = state.last_db_l != l_db || state.last_db_r != r_db;
-        changed |= state.last_disp_l != _disp_l || state.last_disp_r != _disp_r;
-        changed |= state.last_peak_m != peak_level || state.last_hold_m != peak_hold;
+        let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
+        changed |= state.last.disp_l != _disp_l || state.last.disp_r != _disp_r;
+        changed |= state.last.peak_m != peak_level || state.last.hold_m != peak_hold;
 
-        state.last_db_l = l_db;
-        state.last_db_r = r_db;
-        state.last_disp_l = _disp_l;
-        state.last_disp_r = _disp_r;
+        state.last.db_l = l_db;
+        state.last.db_r = r_db;
+        state.last.disp_l = _disp_l;
+        state.last.disp_r = _disp_r;
 
         if !changed && !state.init {
             return Ok(false);
@@ -1804,9 +1803,9 @@ impl VisualizerComponent {
         // this is the only place we referce color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking_gray4(
-            state.last_disp_l as f64, 
+            state.last.disp_l as f64, 
             over_l,
-            state.last_disp_r as f64, 
+            state.last.disp_r as f64, 
             over_r,
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
@@ -1826,13 +1825,13 @@ impl VisualizerComponent {
         let gap = 6;
 
         // Draw center peak meter with cyan bars
-        if state.last_peak_m != peak_level || state.last_hold_m != peak_hold {
+        if state.last.peak_m != peak_level || state.last.hold_m != peak_hold {
             let level_brackets: [i16; 19] = [
                 -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
                 -4, -3, -2, -1, 0, 2, 3, 5, 8
             ];
-            state.last_peak_m = peak_level;
-            state.last_hold_m = peak_hold;
+            state.last.peak_m = peak_level;
+            state.last.hold_m = peak_hold;
 
             let top_meter = my + 1;
             let bottom_meter = h - 2 * my - 1;
@@ -1842,7 +1841,7 @@ impl VisualizerComponent {
             let mut ypos = bottom_meter + nodeh as i32;
 
             for l in level_brackets {
-                let mv = level_brackets[0] + state.last_peak_m as i16;
+                let mv = level_brackets[0] + state.last.peak_m as i16;
                 let color = if mv >= l {
                     Gray4::new(11)  // Cyan
                 } else {

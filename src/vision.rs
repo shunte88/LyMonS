@@ -64,6 +64,48 @@ const LOCK_TRY_WINDOW_MS: u32 = 5;              // total budget for try-loop
 pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~60 FPS
 pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
 
+
+/// simple state carried across calls (last metrics + peak-hold)
+#[derive(Debug, PartialEq, Clone)]
+pub struct VizState {
+    pub disp_m: f32,
+    pub disp_l: f32,
+    pub disp_r: f32,
+    pub over_m: bool,
+    pub over_l: bool,
+    pub over_r: bool,
+    pub peak_m: u8,
+    pub peak_l: u8,
+    pub peak_r: u8,
+    pub hold_m: u8,
+    pub hold_l: u8,
+    pub hold_r: u8,
+    pub db_m: f32,
+    pub db_l: f32,
+    pub db_r: f32,
+}
+
+impl Default for VizState {
+    fn default() -> Self {
+        Self {
+            peak_m: u8::MIN,
+            peak_l: u8::MIN,
+            peak_r: u8::MIN,
+            disp_m: f32::MIN,
+            disp_l: f32::MIN,
+            disp_r: f32::MIN,
+            over_m: false,
+            over_l: false,
+            over_r: false,
+            hold_m: u8::MIN,
+            hold_l: u8::MIN,
+            hold_r: u8::MIN,
+            db_m: f32::MIN,
+            db_l: f32::MIN,
+            db_r: f32::MIN,
+        }
+    }
+}
 /// simple state carried across calls (last metrics + peak-hold)
 #[derive(Debug, PartialEq, Clone)]
 pub struct LastVizState {
@@ -78,26 +120,8 @@ pub struct LastVizState {
     pub last_artist: String,
     pub last_title: String,
 
-    // COULD SUB-STRUCT THE M,L,R BUT KEEP IT SIMPLE AND A TAD 'WET', NOT DRY?, FOR NOW
-    pub last_disp_m: f32,
-    pub last_disp_l: f32,
-    pub last_disp_r: f32,
-
-    pub last_over_m: bool,
-    pub last_over_l: bool,
-    pub last_over_r: bool,
-
-    pub last_peak_m: u8,
-    pub last_peak_l: u8,
-    pub last_peak_r: u8,
-
-    pub last_hold_m: u8,
-    pub last_hold_l: u8,
-    pub last_hold_r: u8,
-
-    pub last_db_m: f32,
-    pub last_db_l: f32,
-    pub last_db_r: f32,
+    pub this: VizState,
+    pub last: VizState,
 
     // latest inputs (debug/inspection)
     pub last_bands_m: Vec<u8>,
@@ -157,23 +181,9 @@ impl Default for LastVizState {
             last_artist: String::new(),
             last_title: String::new(),
 
-            last_peak_m: u8::MIN,
-            last_peak_l: u8::MIN,
-            last_peak_r: u8::MIN,
+            this: VizState::default(),
+            last: VizState::default(),
 
-            last_disp_m: f32::MIN,
-            last_disp_l: f32::MIN,
-            last_disp_r: f32::MIN,
-
-            last_over_m: false,
-            last_over_l: false,
-            last_over_r: false,
-            last_hold_m: u8::MIN,
-            last_hold_l: u8::MIN,
-            last_hold_r: u8::MIN,
-            last_db_m: f32::MIN,
-            last_db_l: f32::MIN,
-            last_db_r: f32::MIN,
             last_bands_m: Vec::new(),
             last_bands_l: Vec::new(),
             last_bands_r: Vec::new(),
@@ -246,23 +256,9 @@ impl LastVizState {
         self.last_artist = String::new();
         self.last_title = String::new();
 
-        self.last_peak_m = u8::MIN;
-        self.last_peak_l = u8::MIN;
-        self.last_peak_r = u8::MIN;
-
-        self.last_disp_m = f32::MIN;
-        self.last_disp_l = f32::MIN;
-        self.last_disp_r = f32::MIN;
-
-        self.last_over_m = false;
-        self.last_over_l = false;
-        self.last_over_r = false;
-        self.last_hold_m = u8::MIN;
-        self.last_hold_l = u8::MIN;
-        self.last_hold_r = u8::MIN;
-        self.last_db_m = f32::MIN;
-        self.last_db_l = f32::MIN;
-        self.last_db_r = f32::MIN;
+        self.this = VizState::default();
+        self.last = VizState::default();
+ 
         self.last_bands_m = Vec::new();
         self.last_bands_l = Vec::new();
         self.last_bands_r = Vec::new();
@@ -361,7 +357,7 @@ pub fn ensure_band_state(
     let ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
 
     if state.init_svg && viz.svg_supported {
-        let width = if state.wide {256}else{128}; // this needs to be smarter - the driver should providing properties
+        let width = if state.wide {256}else{128}; // make smart - get properties from driver
         state.svg_file = viz.get_svg_filename().to_string();
         let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
         state.init_svg = false;

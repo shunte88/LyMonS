@@ -34,7 +34,6 @@ use std::fmt;
 use std::fs;
 
 use crate::svgimage::SvgImageRenderer;
-use regex::Regex;
 
 /// Which visualization to produce.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -144,9 +143,9 @@ impl Visual {
             return Ok(());
         }
 
-        let mut data = self.svg_data.clone();
+        use regex::Regex;
 
-        if data.is_empty() {println!("Empty SVG????")};
+        let mut data = self.svg_data.clone();
 
         // overage beacon
         if over_left {
@@ -154,6 +153,7 @@ impl Visual {
             data = data.replace("{{overflow}}", "1"); // downmix
             data = data.replace("{{overflow_left}}", "1");
         } else {
+            data = data.replace("{{overflow}}", "0"); // downmix
             data = data.replace("{{overflow_left}}", "0");
         }
         if over_right {
@@ -164,9 +164,6 @@ impl Visual {
         }
 
         // metric - clamp within bounds
-        println!{"metric left .......: {metric_left:<10}"};
-        println!{"metric right ......: {metric_right:<10}"};
-
         let metric_left = metric_left.clamp(self.scale_min, self.scale_max);
         let normalized_left = (metric_left - self.scale_min) / (self.scale_max - self.scale_min);
         let arc_angle_left = self.sweep_min + normalized_left * (self.sweep_max - self.sweep_min);
@@ -183,9 +180,6 @@ impl Visual {
         let re = Regex::new(self.re.as_str()).unwrap();
         let replace = "0";
         data = re.replace_all(data.clone().as_str(), replace).to_string();
-
-        println!{"needle left .......: {arc_angle_left:<10}"};
-        println!{"needle right ......: {arc_angle_right:<10}"};
 
         self.modified_svg_data = data.clone();
         Ok(())
@@ -218,8 +212,6 @@ impl Visual {
 
         let width = self.rect.size.width as u32;
         let height = self.rect.size.height as u32;
-
-        println!("svg_supported ...: {}", self.svg_supported);
 
         if self.svg_supported {
             self.update(

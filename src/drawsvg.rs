@@ -88,9 +88,16 @@ pub fn get_svg (
 {
     if fs_std::metadata(path).is_ok() {
 
-        let data = fs_std::read_to_string(path).map_err(PutSvgError::Io)?;
+        let mut data = fs_std::read_to_string(path).map_err(PutSvgError::Io)?;
         let buffer_size = height as usize * ((width + 7) / 8) as usize;
         *buffer = vec![0u8; buffer_size];
+
+        // here we patch any subs variables
+        use regex::Regex;
+        let re_str = r"\{\{.*?\}\}";
+        let re = Regex::new(re_str).unwrap();
+        let replace = "0";
+        data = re.replace_all(data.clone().as_str(), replace).to_string();
 
         let svg_renderer = SvgImageRenderer::new(&data, width, height)
             .map_err(|e| PutSvgError::Svg(Box::new(e)))?;

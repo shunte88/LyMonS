@@ -95,6 +95,7 @@ pub struct Eggs {
     track_pcnt: f64,
     track_time_secs: f32,
     can_widen: bool,
+    re: String,
 }
 
 /// Loads/sets the active easter_egg
@@ -121,7 +122,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 "./assets/compactcassette.svg",
                 Rectangle::new(Point::zero(), Size::new(128,64)),
                 Rectangle::new(Point::new(18,6), Size::new(90,6)), 
-                Rectangle::new(Point::new(18,11), Size::new(90,6)), 
+                Rectangle::new(Point::new(18,12), Size::new(90,6)), 
                 // 13.5=0%, 0=100%
                 // scale in play here for tape reels
                 25.000,  // 25.000 small right
@@ -321,6 +322,7 @@ impl Eggs {
         can_widen: bool,
     ) -> Self {
 
+        let re = r"\{\{.*?\}\}".to_string();
         let width = rect.size.width as usize;
         let height = rect.size.height as usize;
         let svg_data = fs::read_to_string(path).expect("load SVG file");
@@ -341,7 +343,8 @@ impl Eggs {
             time_rect,
             track_pcnt: 0.00,
             track_time_secs: 0.00,
-            can_widen
+            can_widen,
+            re,
         }
     }
 
@@ -352,6 +355,9 @@ impl Eggs {
         track_percent: f64,
         track_time: f32,
     ) -> Result<(), EggsError> {
+        
+        use regex::Regex;
+
         if self.egg_type == EGGS_TYPE_UNKNOWN {
             return Ok(());
         }
@@ -437,6 +443,11 @@ impl Eggs {
         // progress-arc - note using _pct flavor as we're called with precalculated percentile
         let arc_angle = self.calc_progress_angle_pct(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
         data = data.replace("{{progress-arc}}", arc_angle.to_string().as_str());
+        // patch any missed replacement tags
+        let re = Regex::new(self.re.as_str()).unwrap();
+        let replace = "0";
+        data = re.replace_all(data.clone().as_str(), replace).to_string();
+
         self.modified_svg_data = data;
         Ok(())
 

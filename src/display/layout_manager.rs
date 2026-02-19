@@ -124,7 +124,7 @@ impl LayoutManager {
                 Field::new_text(
                     "info_line",
                     Rectangle::new(
-                        Point::new(border_adj, height.saturating_sub(y_height as u32) as i32), 
+                        Point::new(border_adj, height.saturating_sub(1+y_height as u32) as i32), 
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )

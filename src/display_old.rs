@@ -1391,21 +1391,21 @@ impl OledDisplay {
         }
 
         let mut changed = 
-            state.last_db_l != l_db ||
-            state.last_db_r != r_db;
+            state.this.db_l != l_db ||
+            state.this.db_r != r_db;
 
         // last metric is not taking into account time based decay
         // need to review before adding early doors
 
         // save the latest inputs
-        state.last_db_l = l_db;
-        state.last_db_r = r_db;
+        state.this.db_l = l_db;
+        state.this.db_r = r_db;
 
         let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
         let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
 
-        changed |= state.last_disp_l != _disp_l ||
-            state.last_disp_r != _disp_r;
+        changed |= state.this.disp_l != _disp_l ||
+            state.this.disp_r != _disp_r;
  
         // if nothing would change on screen, skip work (non-blocking) early doors
         if !changed && !state.init {
@@ -1426,14 +1426,14 @@ impl OledDisplay {
         let inner_h = h - my - title_base - 1;
         let over_y = my + 6;
 
-        if state.last_disp_l != _disp_l {
-            state.last_disp_l = _disp_l;
+        if state.this.disp_l != _disp_l {
+            state.this.disp_l = _disp_l;
             let _ = state.vus_l.draw_vu_needle (
                 display, 
                 Rectangle::new(
                     Point::new(mx,my), 
                     Size::new(inner_w as u32, inner_h as u32)),
-                state.last_disp_l,
+                state.this.disp_l,
                 1,
                 BinaryColor::On,
                 BinaryColor::Off,
@@ -1441,14 +1441,14 @@ impl OledDisplay {
             .map_err(|e| D::Error::from(e))?;
             need_flush = true;
         }
-        if state.last_disp_r != _disp_r {
-            state.last_disp_r = _disp_r;
+        if state.this.disp_r != _disp_r {
+            state.this.disp_r = _disp_r;
             let _ = state.vus_r.draw_vu_needle (
                 display, 
                 Rectangle::new(
                     Point::new(3*mx + inner_w + gap, my),
                     Size::new(inner_w as u32, inner_h as u32)),
-                state.last_disp_r,
+                state.this.disp_r,
                 1,
                 BinaryColor::On,
                 BinaryColor::Off,
@@ -1527,24 +1527,24 @@ impl OledDisplay {
             need_flush = true;
         }
         let mut changed = 
-            state.last_db_l != l_db ||
-            state.last_db_r != r_db;
+            state.last.db_l != l_db ||
+            state.last.db_r != r_db;
 
         // last metric is not taking into account time based decay
         // need to review before adding early doors
 
         // save the latest inputs
-        state.last_db_l = l_db;
-        state.last_db_r = r_db;
+        state.last.db_l = l_db;
+        state.last.db_r = r_db;
 
         let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
         let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
 
-        changed |= state.last_disp_l != _disp_l ||
-            state.last_disp_r != _disp_r;
+        changed |= state.last.disp_l != _disp_l ||
+            state.last.disp_r != _disp_r;
 
-        changed |= state.last_peak_m != peak_level ||
-            state.last_hold_m != peak_hold;
+        changed |= state.last.peak_m != peak_level ||
+            state.last.hold_m != peak_hold;
  
         // if nothing would change on screen, skip work (non-blocking) early doors
         if !changed && !state.init {
@@ -1565,13 +1565,13 @@ impl OledDisplay {
         let inner_h = h - my - title_base - 1;
         let over_y = 51;
 
-        if state.last_peak_m != peak_level || state.last_hold_m != peak_hold
+        if state.last.peak_m != peak_level || state.last.hold_m != peak_hold
         {
             let level_brackets: [i16; 19] = [
                 -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
                 -4,  -3,  -2,  -1,  0,   2,   3,  5,  8];
-            state.last_peak_m = peak_level;
-            state.last_hold_m = peak_hold;
+            state.last.peak_m = peak_level;
+            state.last.hold_m = peak_hold;
             // draw peak meter
             let top_meter = my + 1;
             let bottom_meter = h - 2*my - 1;
@@ -1582,7 +1582,7 @@ impl OledDisplay {
             let mut ypos = bottom_meter + nodeh as i32;
 
             for l in level_brackets {
-                let mv = level_brackets[0] + state.last_peak_m as i16;
+                let mv = level_brackets[0] + state.last.peak_m as i16;
                 let color = if mv >= l {
                     BinaryColor::On
                 } else {
@@ -1601,14 +1601,14 @@ impl OledDisplay {
             need_flush = true;
         }
 
-        if state.last_disp_l != _disp_l {
-            state.last_disp_l = _disp_l;
+        if state.last.disp_l != _disp_l {
+            state.last.disp_l = _disp_l;
             let _ = state.vus_l.draw_vu_needle (
                 display, 
                 Rectangle::new(
                     Point::new(mx,my), 
                     Size::new(inner_w as u32, inner_h as u32)),
-                l_db, // state.last_disp_l,
+                l_db, // state.last.disp_l,
                 1,
                 BinaryColor::On,
                 BinaryColor::Off,
@@ -1616,14 +1616,14 @@ impl OledDisplay {
             .map_err(|e| D::Error::from(e))?;
             need_flush = true;
         }
-        if state.last_disp_r != _disp_r {
-            state.last_disp_r = _disp_r;
+        if state.last.disp_r != _disp_r {
+            state.last.disp_r = _disp_r;
             let _ = state.vus_r.draw_vu_needle (
                 display, 
                 Rectangle::new(
                     Point::new(3*mx + inner_w + gap, my),
                     Size::new(inner_w as u32, inner_h as u32)),
-                r_db, // state.last_disp_r,
+                r_db, // state.last.disp_r,
                 1,
                 BinaryColor::On,
                 BinaryColor::Off,
@@ -1698,15 +1698,15 @@ impl OledDisplay {
         }
 
         let mut changed = 
-            state.last_db_m != db;
+            state.last.db_m != db;
 
         // save the latest inputs
-        state.last_db_m = db;
+        state.last.db_m = db;
 
         let (_disp, over) = state.vu_m.update_drive(db);
 
-        changed |= state.last_disp_m != _disp;
-        state.last_disp_m = _disp;
+        changed |= state.last.disp_m != _disp;
+        state.last.disp_m = _disp;
  
         // if nothing would change on screen, skip work (non-blocking) early doors
         if !changed && !state.init {
@@ -1730,7 +1730,7 @@ impl OledDisplay {
             Rectangle::new(
                 Point::new(mx,my), 
                 Size::new(inner_w as u32, inner_h as u32)),
-            db, //state.last_disp_m,
+            db, //state.last.disp_m,
             2,
             BinaryColor::On,
             BinaryColor::Off,
@@ -1792,15 +1792,15 @@ impl OledDisplay {
         }
 
         let mut changed = 
-            state.last_db_m != db;
+            state.last.db_m != db;
 
         // save the latest inputs
-        state.last_db_m = db;
+        state.last.db_m = db;
 
         let (_disp, over) = state.vu_m.update_drive(db);
 
-        changed |= state.last_disp_m != _disp;
-        changed |= state.last_over_m != over;
+        changed |= state.last.disp_m != _disp;
+        changed |= state.last.over_m != over;
         changed |= state.last_artist != track.clone();
 
         println!("{}", track.clone());
@@ -1843,8 +1843,8 @@ impl OledDisplay {
         let gap = 2;
         let inner_w = w/2 - 2 * mx;
 
-        if state.last_disp_m != _disp {
-            state.last_disp_m = _disp;
+        if state.last.disp_m != _disp {
+            state.last.disp_m = _disp;
             let title_base = 10;
             let inner_h = h - my - title_base - 1;
             let _ = state.vus_m.draw_vu_needle (
@@ -1852,7 +1852,7 @@ impl OledDisplay {
                 Rectangle::new(
                     Point::new(3*mx + inner_w + gap, my),
                     Size::new(inner_w as u32, inner_h as u32)),
-                state.last_disp_m,
+                state.last.disp_m,
                 2,
                 BinaryColor::On,
                 BinaryColor::Off,
@@ -1861,8 +1861,8 @@ impl OledDisplay {
             need_flush = true;
         }
 
-        if state.last_over_m != over {
-            state.last_over_m = over;
+        if state.last.over_m != over {
+            state.last.over_m = over;
             let over_y = my + 6;           
             let led_fill = if over { BinaryColor::On} else {BinaryColor::Off}; 
             draw_circle(
@@ -1915,24 +1915,24 @@ impl OledDisplay {
         let ypos:[u8;2] = [7, 40];
 
         if !state.init &&
-            state.last_peak_l == l_level &&
-            state.last_peak_r == r_level &&
-            state.last_hold_l == l_hold &&
-            state.last_hold_r == r_hold {
+            state.last.peak_l == l_level &&
+            state.last.peak_r == r_level &&
+            state.last.hold_l == l_hold &&
+            state.last.hold_r == r_hold {
             return Ok(need_flush);
         }
 
-        state.last_peak_l = l_level; 
-        state.last_peak_r = r_level; 
-        state.last_hold_l = l_hold;
-        state.last_hold_r = r_hold;
+        state.last.peak_l = l_level; 
+        state.last.peak_r = r_level; 
+        state.last.hold_l = l_hold;
+        state.last.hold_r = r_hold;
         state.init = false;
 
         for l in level_brackets {
             let nodeo = if l < 0 {5} else {7};
             let nodew = if l < 0 {2} else {4};
             for c in 0..2 {
-                let mv = level_brackets[0] + if c==0 {state.last_peak_l as i16}else{state.last_peak_r as i16};
+                let mv = level_brackets[0] + if c==0 {state.last.peak_l as i16}else{state.last.peak_r as i16};
                 let color = if mv >= l {
                     BinaryColor::On
                 } else {
@@ -1983,20 +1983,20 @@ impl OledDisplay {
         let ypos = 20;
 
         if !state.init &&
-            state.last_peak_m == level && 
-            state.last_hold_m == hold {
+            state.last.peak_m == level && 
+            state.last.hold_m == hold {
             return Ok(need_flush);
         }
 
-        state.last_peak_m = level; 
-        state.last_hold_m = hold;
+        state.last.peak_m = level; 
+        state.last.hold_m = hold;
         state.init = false;
 
         for l in level_brackets {
             let nodeo = if l < 0 {5} else {7};
             let nodew = if l < 0 {2} else {4};
             // levels are 0..48 - adjust to fit the display scaling
-            let mv = level_brackets[0] + state.last_peak_m as i16;
+            let mv = level_brackets[0] + state.last.peak_m as i16;
             let color = if mv >= l {
                 BinaryColor::On
             } else {

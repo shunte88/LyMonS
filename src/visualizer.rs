@@ -174,7 +174,7 @@ async fn visualizer_worker(
     let mut peak_hold_m: u8 = 0;
 
     info!("visualizer worker started (idle)");
-    let last_is_playing = false;
+    //let last_is_playing = false;
 
     'outer: loop {
         // drain any pending commands

@@ -630,35 +630,57 @@ impl DisplayManager {
                 "info_line" => {
                     // Inline the info line rendering to avoid borrow conflicts
                     use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
-                    use embedded_graphics::text::{Text, Baseline};
                     use embedded_graphics::prelude::*;
-                    let field_pos = field.position();
-                    let field_width = field.width();
-                    let info_y = field_pos.y;
+                    use embedded_text::{
+                        alignment::{HorizontalAlignment, VerticalAlignment},
+                        style::TextBoxStyleBuilder,
+                        TextBox,
+                    };
+
                     let font = field.font.unwrap_or(&FONT_5X8);
                     let style = MonoTextStyle::new(font, field.fg_binary());
 
+                    let textbox_style_left = TextBoxStyleBuilder::new()
+                        .alignment(HorizontalAlignment::Left)
+                        .vertical_alignment(VerticalAlignment::Middle)
+                        .build();
+                    let textbox_style_center = TextBoxStyleBuilder::new()
+                        .alignment(HorizontalAlignment::Center)
+                        .vertical_alignment(VerticalAlignment::Middle)
+                        .build();
+                    let textbox_style_right = TextBoxStyleBuilder::new()
+                        .alignment(HorizontalAlignment::Right)
+                        .vertical_alignment(VerticalAlignment::Middle)
+                        .build();
+
                     // Current time (left)
                     let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
-                    Text::with_baseline(
-                        current_time_str,
-                                            Point::new(field_pos.x + 2, info_y),
+
+                    TextBox::with_textbox_style(
+                        &self.mode_text,
+                        field.bounds,
                         style,
-                        Baseline::Top,
+                        textbox_style_center,
+                    )
+                    .draw(fb)
+                    .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
+
+                    let fix_width = 30;
+                    let mut rect = field.bounds;
+                    rect.size.width = fix_width;
+
+                    TextBox::with_textbox_style(
+                        current_time_str,
+                        rect,
+                        style,
+                        textbox_style_left,
                     )
                     .draw(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
 
-                    // Mode text (center)
-                    let mode_x = field_pos.x + (field_width as i32 - (self.mode_text.len() * 5) as i32) / 2;
-                    Text::with_baseline(
-                        &self.mode_text,
-                        Point::new(mode_x, info_y),
-                        style,
-                        Baseline::Top,
-                    )
-                    .draw(fb)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
+                    let mut rect = field.bounds;
+                    rect.top_left.x = (rect.size.width - fix_width) as i32;
+                    rect.size.width = fix_width;
 
                     // Remaining/total time (right)
                     self.render_buffers.temp_buffer.clear();
@@ -676,12 +698,11 @@ impl DisplayManager {
                     }
                     let time_str = self.render_buffers.temp_buffer.as_str();
 
-                    let time_x = field_pos.x + field_width as i32 - (time_str.len() * 5) as i32 - 2;
-                    Text::with_baseline(
+                    TextBox::with_textbox_style(
                         time_str,
-                        Point::new(time_x, info_y),
+                        rect,
                         style,
-                        Baseline::Top,
+                        textbox_style_right,
                     )
                     .draw(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw time".to_string()))?;
@@ -759,38 +780,60 @@ impl DisplayManager {
                         "info_line" => {
                             // Info line rendering for Gray4 displays
                             use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
-                            use embedded_graphics::text::{Text, Baseline};
                             use embedded_graphics::prelude::*;
                             use crate::display::color_proxy::ConvertColor;
 
-                            let field_pos = field.position();
-                            let field_width = field.width();
-                            let info_y = field_pos.y;
+                            use embedded_text::{
+                                alignment::{HorizontalAlignment, VerticalAlignment},
+                                style::TextBoxStyleBuilder,
+                                TextBox,
+                            };
+
                             let font = field.font.unwrap_or(&FONT_5X8);
                             let text_color = field.fg_color.to_color();
                             let style = MonoTextStyle::new(font, text_color);
 
+                            let textbox_style_left = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Left)
+                                .vertical_alignment(VerticalAlignment::Middle)
+                                .build();
+                            let textbox_style_center = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Center)
+                                .vertical_alignment(VerticalAlignment::Middle)
+                                .build();
+                            let textbox_style_right = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Right)
+                                .vertical_alignment(VerticalAlignment::Middle)
+                                .build();
+
                             // Current time (left)
                             let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
-                            Text::with_baseline(
-                                current_time_str,
-                                Point::new(field_pos.x + 2, info_y),
+
+                            TextBox::with_textbox_style(
+                                &self.mode_text,
+                                field.bounds,
                                 style,
-                                Baseline::Top,
+                                textbox_style_center,
+                            )
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
+
+                            let fix_width = 30;
+                            let mut rect = field.bounds;
+                            rect.size.width = fix_width;
+
+                            TextBox::with_textbox_style(
+                                current_time_str,
+                                rect,
+                                style,
+                                textbox_style_left,
                             )
                             .draw(fb)
                             .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
 
-                            // Mode text (center)
-                            let mode_x = field_pos.x + (field_width as i32 - (self.mode_text.len() * 5) as i32) / 2;
-                            Text::with_baseline(
-                                &self.mode_text,
-                                Point::new(mode_x, info_y),
-                                style,
-                                Baseline::Top,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
+                            let mut rect = field.bounds;
+                            rect.top_left.x = (rect.size.width - fix_width) as i32;
+                            rect.size.width = fix_width;
 
                             // Remaining/total time (right)
                             self.render_buffers.temp_buffer.clear();
@@ -808,15 +851,14 @@ impl DisplayManager {
                             }
                             let time_str = self.render_buffers.temp_buffer.as_str();
 
-                            let time_x = field_pos.x + field_width as i32 - (time_str.len() * 5) as i32 - 2;
-                            Text::with_baseline(
+                            TextBox::with_textbox_style(
                                 time_str,
-                                Point::new(time_x, info_y),
+                                rect,
                                 style,
-                                Baseline::Top,
+                                textbox_style_right,
                             )
                             .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw time".to_string()))?;
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
                         }
                         _ => {}
                     }
@@ -2293,15 +2335,15 @@ impl DisplayManager {
                     VizPayload::PeakStereo { l_level, r_level, l_hold, r_hold } => {
                         // Update viz state directly
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.last_peak_l = l_level;
-                        viz_state.last_peak_r = r_level;
-                        viz_state.last_hold_l = l_hold;
-                        viz_state.last_hold_r = r_hold;
+                        viz_state.this.peak_l = l_level;
+                        viz_state.this.peak_r = r_level;
+                        viz_state.this.hold_l = l_hold;
+                        viz_state.this.hold_r = r_hold;
                     }
                     VizPayload::PeakMono { level, hold } => {
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.last_peak_m = level;
-                        viz_state.last_hold_m = hold;
+                        viz_state.this.peak_m = level;
+                        viz_state.this.hold_m = hold;
                     }
                     VizPayload::HistMono { bands } => {
                         let viz_state = self.visualizer.viz_state_mut();
@@ -2314,16 +2356,16 @@ impl DisplayManager {
                     }
                     VizPayload::VuMono { db } => {
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.last_db_m = db;
+                        viz_state.this.db_m = db;
                     }
                     VizPayload::VuStereo { l_db, r_db } => {
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.last_db_l = l_db;
-                        viz_state.last_db_r = r_db;
+                        viz_state.this.db_l = l_db;
+                        viz_state.this.db_r = r_db;
                     }
                     VizPayload::AioVuMono { db } => {
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.last_db_m = db;
+                        viz_state.this.db_m = db;
                         // Update track info for AIO display
                         let track_info = if !self.artist.is_empty() && !self.title.is_empty() {
                             format!("{} - {}", self.artist, self.title)
@@ -3212,7 +3254,6 @@ impl DisplayManager {
 
         info!("Cycling visualization: {:?} -> {:?}", current_type, next_viz);
         self.visualizer.set_visualization_type(next_viz);
-        //self.vizualizer.
 
         // Switch to visualizer mode
         self.current_mode = crate::display::DisplayMode::Visualizer;
