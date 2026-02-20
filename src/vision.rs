@@ -34,10 +34,10 @@ use std::sync::atomic::{fence, Ordering};
 use std::time::{Duration, Instant};
 use std::thread::sleep;
 
-use crate::vuphysics::{VuNeedle};
-use crate::vuphysics::{Scale};
+use crate::vuphysics_new::VuMeterState;
 
 use crate::visualization::{Visual, get_visualizer_panel};
+
 // for the "old" display calls
 use crate::visualization::{Visualization};
 use crate::drawsvg::{get_svg};
@@ -53,7 +53,6 @@ const VIS_BUF_SIZE:usize = 16_384;              // Predefined in Squeezelite.
 pub const PEAK_METER_LEVELS_MAX:u8 = 48;        // Number of peak meter intervals
 pub const PEAK_METER_SCALE_HEADROOM:f32 = 0.8;  // 20% headroom clipping
 pub const METER_CHANNELS:usize = 2;             // Number of metered channels.
-pub const OVERLOAD_PEAKS:u8 = 3;                // Number of consecutive 0dBFS peaks for overload.
 
 pub const LEVEL_FLOOR_DB: f32 = -72.0;          // meter floor
 pub const LEVEL_CEIL_DB: f32 =   0.0;           // ~0 dBFS
@@ -147,13 +146,9 @@ pub struct LastVizState {
     pub cap_last_update_r: Vec<Instant>,
 
     // NEED TO SUPPORT COLOR
-    pub vu_m: VuNeedle<BinaryColor>,
-    pub vu_l: VuNeedle<BinaryColor>,
-    pub vu_r: VuNeedle<BinaryColor>,
-
-    pub vus_m: Scale<BinaryColor>,
-    pub vus_l: Scale<BinaryColor>,
-    pub vus_r: Scale<BinaryColor>,
+    pub vu_m: VuMeterState,
+    pub vu_l: VuMeterState,
+    pub vu_r: VuMeterState,
 
     pub last_tick: Instant,
 
@@ -200,35 +195,9 @@ impl Default for LastVizState {
             cap_last_update_l: Vec::new(),
             cap_last_update_r: Vec::new(),
  
-            vu_m: VuNeedle::new(),
-            vu_l: VuNeedle::new(),
-            vu_r: VuNeedle::new(),
-
-            // vu init as ssd1309 flavor
-            vus_m: Scale::init(
-                -46.00, 
-                46.00, 
-                -21.00, 
-                4.80, 
-                10, 
-                73,
-            ),
-            vus_l: Scale::init(
-                -45.27,
-                45.27,
-                -21.0,
-                5.0,
-                8,
-                48,
-            ),
-            vus_r: Scale::init(
-                -45.27,
-                45.27,
-                -21.0,
-                5.0,
-                8,
-                48,
-            ),
+            vu_m: VuMeterState::new(),
+            vu_l: VuMeterState::new(),
+            vu_r: VuMeterState::new(),
 
             last_tick: Instant::now(),
 
@@ -306,16 +275,24 @@ pub fn ensure_band_state_old(
         state.svg_file = get_visualizer_panel(vk, state.wide);
         let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
         state.init_svg = false;
-        state.vus_m = Scale::init(
-            sweep_min,
-            sweep_max,
+        state.vu_m.update_scale(
             scale_min,
+            sweep_min,
             scale_max,
-            top_scale,
-            bottom_scale, 
+            sweep_max,
         );
-        state.vus_l = state.vus_m.clone();
-        state.vus_r = state.vus_m.clone();
+        state.vu_l.update_scale(
+            scale_min,
+            sweep_min,
+            scale_max,
+            sweep_max,
+        );
+        state.vu_r.update_scale(
+            scale_min,
+            sweep_min,
+            scale_max,
+            sweep_max,
+        );
 
     } // init svg
 
@@ -362,32 +339,25 @@ pub fn ensure_band_state(
         let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
         state.init_svg = false;
         if viz.kind == Visualization::AioVuMono||viz.kind == Visualization::VuMono {
-            state.vus_m = Scale::init(
-                viz.sweep_min,
-                viz.sweep_max,
+            state.vu_m.update_scale(
                 viz.scale_min,
+                viz.sweep_min,
                 viz.scale_max,
-                top_scale,
-                bottom_scale, 
+                viz.sweep_max,
             );
         } else if viz.kind == Visualization::VuStereo||viz.kind == Visualization::VuStereoWithCenterPeak {
-            state.vus_l = Scale::init(
-                viz.sweep_min,
-                viz.sweep_max,
+            state.vu_l.update_scale(
                 viz.scale_min,
-                viz.scale_max,
-                top_scale,
-                bottom_scale, 
-            );
-            state.vus_r = Scale::init(
                 viz.sweep_min,
-                viz.sweep_max,
-                viz.scale_min,
                 viz.scale_max,
-                top_scale,
-                bottom_scale, 
+                viz.sweep_max,
             );
-
+            state.vu_r.update_scale(
+                viz.scale_min,
+                viz.sweep_min,
+                viz.scale_max,
+                viz.sweep_max,
+            );
         }
 
     } // init svg

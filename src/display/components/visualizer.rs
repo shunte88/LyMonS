@@ -1474,11 +1474,11 @@ impl VisualizerComponent {
         ensure_band_state(state, 0, 0, 0, viz, 10, 73);
 
         // Update VU physics
-        let (_disp, over) = state.vu_m.update_drive(db);
-        let changed = state.last.db_m != db || state.last.disp_m != _disp;
+        let (_disp, over) = state.vu_m.update_drive(db as f64);
+        let changed = state.last.db_m != db || state.last.disp_m != _disp as f32;
 
         state.last.db_m = db;
-        state.last.disp_m = _disp;
+        state.last.disp_m = _disp as f32;
 
         if !changed && !state.init {
             return Ok(false);
@@ -1518,11 +1518,11 @@ impl VisualizerComponent {
         ensure_band_state(state, 0, 0, 0, viz, 10, 73);
 
         // Update VU physics (using BinaryColor VU physics, just for angle calculations)
-        let (_disp, over) = state.vu_m.update_drive(db);
-        let changed = state.last.db_m != db || state.last.disp_m != _disp;
+        let (_disp, over) = state.vu_m.update_drive(db as f64);
+        let changed = state.last.db_m != db || state.last.disp_m != _disp as f32;
 
         state.last.db_m = db;
-        state.last.disp_m = _disp;
+        state.last.disp_m = _disp as f32;
 
         if !changed && !state.init {
             return Ok(false)
@@ -1564,16 +1564,16 @@ impl VisualizerComponent {
         ensure_band_state(state, 0, 0, 0, viz,8, 48);
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
-        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db as f64);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db as f64);
 
         let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
-        changed |= state.last.disp_l != _disp_l || state.last.disp_r != _disp_r;
+        changed |= state.last.disp_l != _disp_l as f32|| state.last.disp_r != _disp_r as f32;
 
         state.last.db_l = l_db;
         state.last.db_r = r_db;
-        state.last.disp_l = _disp_l;
-        state.last.disp_r = _disp_r;
+        state.last.disp_l = _disp_l as f32;
+        state.last.disp_r = _disp_r as f32;
 
         if !changed && !state.init {
             return Ok(false);
@@ -1614,16 +1614,16 @@ impl VisualizerComponent {
         ensure_band_state(state, 0, 0, 0, viz,8, 48);
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_db(l_db);
-        let (_disp_r, over_r) = state.vu_r.update_db(r_db);
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db as f64);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db as f64);
 
         let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
-        changed |= state.last.disp_l != _disp_l || state.last.disp_r != _disp_r;
+        changed |= state.last.disp_l != _disp_l  as f32 || state.last.disp_r != _disp_r  as f32;
 
         state.last.db_l = l_db;
         state.last.db_r = r_db;
-        state.last.disp_l = _disp_l;
-        state.last.disp_r = _disp_r;
+        state.last.disp_l = _disp_l as f32;
+        state.last.disp_r = _disp_r as f32;
 
 println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l:>5} {over_r:>5} {changed:>5} {:>5})", state.init);
         if !changed && !state.init {
@@ -1634,9 +1634,9 @@ println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l
         // this is the only place we referce color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking_gray4(
-            l_db as f64, //state.last.disp_l as f64,
+            state.last.disp_l as f64,
             over_l,
-            r_db as f64, //state.last.disp_r as f64, 
+            state.last.disp_r as f64, 
             over_r,
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
@@ -1670,23 +1670,22 @@ println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l
         ensure_band_state(state, 0, 0, 0, viz,  16, 40);
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
-        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db  as f64);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db  as f64);
 
         let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
-        changed |= state.last.disp_l != _disp_l || state.last.disp_r != _disp_r;
+        changed |= state.last.disp_l != _disp_l  as f32|| state.last.disp_r != _disp_r  as f32;
         changed |= state.last.peak_m != peak_level || state.last.hold_m != peak_hold;
 
         state.last.db_l = l_db;
         state.last.db_r = r_db;
+        state.last.disp_l = _disp_l  as f32;
+        state.last.disp_r = _disp_r  as f32;
 
         if !changed && !state.init {
             return Ok(false);
         }
         state.init = false;
-
-        state.last.disp_l = _disp_l;
-        state.last.disp_r = _disp_r;
 
         // this is the only place we reference color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
@@ -1783,17 +1782,17 @@ println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l
         }
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_drive(l_db);
-        let (_disp_r, over_r) = state.vu_r.update_drive(r_db);
+        let (_disp_l, over_l) = state.vu_l.update_drive(l_db as f64);
+        let (_disp_r, over_r) = state.vu_r.update_drive(r_db as f64);
 
         let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
-        changed |= state.last.disp_l != _disp_l || state.last.disp_r != _disp_r;
+        changed |= state.last.disp_l != _disp_l as f32 || state.last.disp_r != _disp_r as f32;
         changed |= state.last.peak_m != peak_level || state.last.hold_m != peak_hold;
 
         state.last.db_l = l_db;
         state.last.db_r = r_db;
-        state.last.disp_l = _disp_l;
-        state.last.disp_r = _disp_r;
+        state.last.disp_l = _disp_l as f32;
+        state.last.disp_r = _disp_r as f32;
 
         if !changed && !state.init {
             return Ok(false);

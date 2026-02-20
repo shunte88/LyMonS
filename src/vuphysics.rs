@@ -32,6 +32,7 @@ use embedded_graphics::{
     primitives::{Line, PrimitiveStyle, Rectangle},
 };
 
+use crate::visualization::{Visual};
 use crate::vframebuf::VarFrameBuf;
 
 // classic visual range for scale
@@ -85,17 +86,9 @@ impl <C: PixelColor + Clone + Default>Scale<C> {
     }
 
     fn map_value_to_angle(&self, value: f64) -> f64 {
-    
-        let mut value = value;
-        if value < self.scale_min {
-            value = self.scale_min as f64;
-        } else if value > self.scale_max {
-            value = self.scale_max as f64;
-        }
-        
+        let value = value.clamp(self.scale_min, self.scale_max);    
         let normalized = (value - self.scale_min) / (self.scale_max - self.scale_min);
         self.sweep_min + normalized * (self.sweep_max - self.sweep_min)
-
     }
 
     // BlitBlat needle draw
@@ -275,6 +268,7 @@ pub struct NeedleMetrics {
     pub k: f32,         // spring constant
     pub damp: f32,      // linear damping
     pub dispx: f32,     // displacement in [0,1]
+    pub gamma: f32,
     pub velocity: f32,  // velocity
     pub over: u32,      // overdrive counter (>=5ms => LED on)
 }
@@ -287,6 +281,7 @@ impl Default for NeedleMetrics {
             k: 1.0,
             damp: 0.08,
             dispx: 0.0,
+            gamma: 0.7,
             velocity: 0.0,
             over: 0,
         }
@@ -332,8 +327,6 @@ pub struct VuNeedle<C: PixelColor + Clone + Default> {
     color: C,
     saved: Option<SavedRegion<C>>,
     pub fudge: f32,   // C used 9000.0
-    pub x_min: f32,   // 0.0
-    pub x_max: f32,   // 1.0
 }
 
 #[allow(dead_code)]
@@ -343,8 +336,6 @@ impl<C: PixelColor + Clone + Default> VuNeedle<C> {
             n: NeedleMetrics::default(),
             last_t: Instant::now(),
             fudge: 1.0, // unity
-            x_min: -22.0,
-            x_max: 4.8,
             color: C::default(),
             saved: None,
         }
@@ -354,36 +345,49 @@ impl<C: PixelColor + Clone + Default> VuNeedle<C> {
     pub fn reset(&mut self) {
         self.n.dispx = 0.0;
         self.n.velocity = 0.0;
+        self.n.gamma = 0.7;
         self.n.over = 0;
         self.last_t = Instant::now();
         self.saved = None;
     }
 
-    /// Update by normalized drive u (dB).
-    pub fn update_drive(&mut self, u: f32) -> (f32, bool) {
-
+    pub fn update_drive_old(&mut self, u: f32) -> (f32, bool) {
         let now = std::time::Instant::now();
         let mut dt_ms = now.saturating_duration_since(self.last_t).as_millis() as u32;
         self.last_t = now;
         if dt_ms > 50 { dt_ms = 50; }
         let force = get_force(u);
-        //let x = step_ms(&mut self.n, u, self.x_min, self.x_max, dt_ms);
-        let x = step_ms(&mut self.n, force, self.x_min, self.x_max, dt_ms);
+        //let x = step_ms(&mut self.n, u, viz.scale_min as f32, viz.scale_max as f32, dt_ms);
+        let x = step_ms(&mut self.n, force, -24.00, 4.5, dt_ms);
         (x, self.n.over > 4)
     }
 
-    /// Update from raw metric (i32/float). Returns (deflection in 0..1, over_flag).
-    pub fn update_db(&mut self, accum: f32) -> (f32, bool) {
+    /// Update by normalized drive u (dB).
+    pub fn update_drive(&mut self, viz: &mut Visual, u: f32) -> (f32, bool) {
+        let now = std::time::Instant::now();
+        let mut dt_ms = now.saturating_duration_since(self.last_t).as_millis() as u32;
+        self.last_t = now;
+        if dt_ms > 50 { dt_ms = 50; }
+        //let force = get_force(u);
+        let x = step_ms(&mut self.n, u, viz.scale_min as f32, viz.scale_max as f32, dt_ms);
+        //let x = step_ms(&mut self.n, force, viz.scale_min as f32, viz.scale_max as f32, dt_ms);
+        (x, self.n.over > 4)
+    }
 
+    pub fn db_to_drive(&mut self, viz: &mut Visual, db: f32, gamma: f32) -> f32 {
+        let norm = ((db - floor_db) / (ceil_db - floor_db)).clamp(0.0, 1.0);
+        norm.powf(gamma)
+    }
+
+    /// Update from raw metric (i32/float). Returns (deflection in 0..1, over_flag).
+    pub fn update_db(&mut self, viz: &mut Visual, accum: f32) -> (f32, bool) {
         let now = Instant::now();
         let mut dt_ms = now.saturating_duration_since(self.last_t).as_millis() as u32;
         self.last_t = now;
-
         // clamp to avoid huge catch-up if we hiccup
         if dt_ms > 50 { dt_ms = 50; } // integrate at most 50 ms
-
         let force = get_force((accum / self.fudge).max(0.0));
-        let x = step_ms(&mut self.n, force, self.x_min, self.x_max, dt_ms);
+        let x = step_ms(&mut self.n, force, viz.scale_min as f32, viz.scale_max as f32, dt_ms);
         (x, self.n.over > 4) // “LED on” after ~5 ms above 0.7, like C
     }
 
@@ -447,6 +451,17 @@ pub fn vu_db_to_meter_angle(db: f32, sweep_min: i32, sweep_max: i32) -> f32 {
     //let theta = 90.0 / 2.0_f32.sqrt();
     let a_db   = theta * 10f32.powf(db / 20.0);
     let a_m3db = theta * 10f32.powf(-3.0 / 20.0); // reference at −3 dB
+    a_db - a_m3db
+}
+
+#[inline]
+pub fn vu_db_to_meter_angle_sweep(db: f32, viz: &mut Visual) -> f32 {
+    // θ from original C: sweep / sqrt(2)
+    let sweep = viz.sweep_min.abs() as f32 + viz.sweep_max.abs() as f32;
+    let theta = sweep / 2.0_f32.sqrt();
+    //let theta = 90.0 / 2.0_f32.sqrt();
+    let a_db   = theta * 10f32.powf(db / viz.sweep_min.abs() as f32);
+    let a_m3db = theta * 10f32.powf(-3.0 / viz.sweep_min.abs() as f32); // reference at −3 dB
     a_db - a_m3db
 }
 
