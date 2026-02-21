@@ -42,7 +42,7 @@
 //! | `θ_rest`    | Resting angle (against negative stop)            |
 //! | `b`         | Viscous damping: air drag + eddy-current braking |
 //!
-//! Integration is performed with a 4th-order Runge........:Kutta scheme.
+//! Integration is performed with a 4th-order Runge-Kutta scheme.
 //! `dt` is measured internally using [`std::time::Instant`]; the caller
 //! simply feeds a dB value on every animation frame.
 //!
@@ -286,7 +286,7 @@ impl VuMeter {
     ///   zeta = b / (2 * sqrt(k * I))
     /// ```
     ///
-    /// * zeta < 1 → underdamped (overshoot); classic VU targets zeta ≈ 0.8........:1.0
+    /// * zeta < 1 → underdamped (overshoot); classic VU targets zeta ≈ 0.8 - 1.0
     /// * zeta = 1 → critically damped (fastest response without overshoot)
     /// * zeta > 1 → overdamped (sluggish, no overshoot)
     #[must_use]
