@@ -34,7 +34,7 @@ use std::sync::atomic::{fence, Ordering};
 use std::time::{Duration, Instant};
 use std::thread::sleep;
 
-use crate::vuphysics_new::{VuMeter, VuMeterState};
+use crate::vuphysics_new::{VuMeter};
 
 use crate::visualization::{Visual, get_visualizer_panel};
 
