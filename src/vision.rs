@@ -197,21 +197,30 @@ impl Default for LastVizState {
             vu_m: VuMeter::new()
                 .with_sweep(-23.0, 4.8, -44.01, 44.01)
                 .with_overload_threshold(0.0, 0.005)
-                .with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
-                .with_damping(5.3e-9)  // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
-                .with_inertia(8.0e-9),                   // unchanged
+                //.with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
+                //.with_damping(5.3e-9)   // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
+                //.with_inertia(8.0e-9),  // unchanged
+                .with_spring(5.0e-7)
+                .with_damping(7.1e-9)
+                .with_inertia(8.0e-9),
             vu_l: VuMeter::new()
                 .with_sweep(-23.0, 4.8, -44.01, 44.01)
                 .with_overload_threshold(0.0, 0.005)
-                .with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
-                .with_damping(5.3e-9)  // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
-                .with_inertia(8.0e-9),                   // unchanged
+                //.with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
+                //.with_damping(5.3e-9)   // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
+                //.with_inertia(8.0e-9),  // unchanged
+                .with_spring(5.0e-7)
+                .with_damping(7.1e-9)
+                .with_inertia(8.0e-9),
             vu_r: VuMeter::new()
                 .with_sweep(-23.0, 4.8, -44.01, 44.01)
                 .with_overload_threshold(0.0, 0.005)
-                .with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
-                .with_damping(5.3e-9)  // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
-                .with_inertia(8.0e-9),                   // unchanged
+                //.with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
+                //.with_damping(5.3e-9)   // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
+                //.with_inertia(8.0e-9),  // unchanged
+                .with_spring(5.0e-7)
+                .with_damping(7.1e-9)
+                .with_inertia(8.0e-9),
 
             last_tick: Instant::now(),
 
