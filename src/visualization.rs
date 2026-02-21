@@ -163,18 +163,9 @@ impl Visual {
             data = data.replace("{{overflow_right}}", "0");
         }
 
-        // metric - clamp within bounds
-        let metric_left = metric_left.clamp(self.scale_min, self.scale_max);
-        let normalized_left = (metric_left - self.scale_min) / (self.scale_max - self.scale_min);
-        let arc_angle_left = self.sweep_min + normalized_left * (self.sweep_max - self.sweep_min);
-
-        let metric_right = metric_right.clamp(self.scale_min, self.scale_max);
-        let normalized_right = (metric_right - self.scale_min) / (self.scale_max - self.scale_min);
-        let arc_angle_right = self.sweep_min + normalized_right * (self.sweep_max - self.sweep_min);
-
-        data = data.replace("{{needle}}", arc_angle_left.to_string().as_str());
-        data = data.replace("{{needle_left}}", arc_angle_left.to_string().as_str());
-        data = data.replace("{{needle_right}}", arc_angle_right.to_string().as_str());
+        data = data.replace("{{needle}}", metric_left.to_string().as_str());
+        data = data.replace("{{needle_left}}", metric_left.to_string().as_str());
+        data = data.replace("{{needle_right}}", metric_right.to_string().as_str());
 
         // patch any missed replacement tags
         let re = Regex::new(self.re.as_str()).unwrap();

@@ -423,7 +423,7 @@ impl VisualizerComponent {
         use embedded_graphics::primitives::Rectangle;
         use embedded_graphics::Drawable;
 
-        ensure_band_state(state, 0, 0, 0, viz, 0, 0);
+        ensure_band_state(state, 0, 0, 0, viz, true);
         let mut need_flush = false;
 
         if state.init {
@@ -484,7 +484,7 @@ impl VisualizerComponent {
         use embedded_graphics::primitives::Rectangle;
         use embedded_graphics::Drawable;
 
-        ensure_band_state(state, 0, 0, 0, viz, 0, 0);
+        ensure_band_state(state, 0, 0, 0, viz, true);
         let mut need_flush = false;
 
         if state.init {
@@ -544,7 +544,7 @@ impl VisualizerComponent {
         use embedded_graphics::primitives::Rectangle;
         use embedded_graphics::Drawable;
 
-        ensure_band_state(state, 0, 0, 0, viz, 0, 0);
+        ensure_band_state(state, 0, 0, 0, viz, true);
         let mut need_flush = false;
 
         if state.init {
@@ -597,7 +597,7 @@ impl VisualizerComponent {
         use embedded_graphics::primitives::Rectangle;
         use embedded_graphics::Drawable;
 
-        ensure_band_state(state, 0, 0, 0, viz, 0, 0);
+        ensure_band_state(state, 0, 0, 0, viz, true);
         let mut need_flush = false;
 
         // REVIEW IF WE GO THE SVG ANIMATION ROUTE
@@ -821,7 +821,7 @@ impl VisualizerComponent {
     where D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, viz, 0, 0);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, viz, true);
         state.last_bands_l.copy_from_slice(&bands_l);
         state.last_bands_r.copy_from_slice(&bands_r);
 
@@ -881,7 +881,7 @@ impl VisualizerComponent {
     where D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
-        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, viz,  0, 0);
+        ensure_band_state(state, bands_l.len(), bands_r.len(), 0, viz, true);
         state.last_bands_l.copy_from_slice(&bands_l);
         state.last_bands_r.copy_from_slice(&bands_r);
 
@@ -939,7 +939,7 @@ impl VisualizerComponent {
     where D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
-        ensure_band_state(state, 0, 0, bands.len(), viz, 0, 0);
+        ensure_band_state(state, 0, 0, bands.len(), viz, true);
         state.last_bands_m.copy_from_slice(&bands);
 
         let now = Instant::now();
@@ -975,7 +975,7 @@ impl VisualizerComponent {
     where D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
         use crate::vision::ensure_band_state;
-        ensure_band_state(state, 0, 0, bands.len(), viz, 0, 0);
+        ensure_band_state(state, 0, 0, bands.len(), viz, true);
         state.last_bands_m.copy_from_slice(&bands);
 
         let now = Instant::now();
@@ -1319,7 +1319,7 @@ impl VisualizerComponent {
         let (w, h) = (width as i32, height as i32);
 
         // Ensure state buffers match band count
-        ensure_band_state(state, 0, 0, bands.len(), viz, 0, 0);
+        ensure_band_state(state, 0, 0, bands.len(), viz, true);
         state.last_bands_m.copy_from_slice(&bands);
 
         // Compute body decay and peak caps
@@ -1398,7 +1398,7 @@ impl VisualizerComponent {
         let (w, h) = (width as i32, height as i32);
 
         // Ensure state buffers match band count
-        ensure_band_state(state, 0, 0, bands.len(), viz, 0, 0);
+        ensure_band_state(state, 0, 0, bands.len(), viz, true);
         state.last_bands_m.copy_from_slice(&bands);
 
         // Compute body decay and peak caps
@@ -1471,14 +1471,16 @@ impl VisualizerComponent {
     {
         use crate::vision::ensure_band_state;
         // Ensure state is initialized with VU physics parameters
-        ensure_band_state(state, 0, 0, 0, viz, 10, 73);
+        ensure_band_state(state, 0, 0, 0, viz, true);
 
         // Update VU physics
-        let (_disp, over) = state.vu_m.update_drive(db as f64);
-        let changed = state.last.db_m != db || state.last.disp_m != _disp as f32;
+        state.vu_m.update(db as f64);
+        let disp = state.vu_m.angle_degrees() as f32;
+
+        let changed = state.last.db_m != db || state.last.disp_m != disp;
 
         state.last.db_m = db;
-        state.last.disp_m = _disp as f32;
+        state.last.disp_m = disp;
 
         if !changed && !state.init {
             return Ok(false);
@@ -1489,7 +1491,7 @@ impl VisualizerComponent {
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking(
             state.last.disp_m as f64, 
-            over,
+            state.vu_m.is_overloaded(),
             0.00, 
             false,
         )
@@ -1515,14 +1517,17 @@ impl VisualizerComponent {
         use crate::vision::ensure_band_state;
 
         // Ensure state is initialized
-        ensure_band_state(state, 0, 0, 0, viz, 10, 73);
+        ensure_band_state(state, 0, 0, 0, viz, true);
 
-        // Update VU physics (using BinaryColor VU physics, just for angle calculations)
-        let (_disp, over) = state.vu_m.update_drive(db as f64);
-        let changed = state.last.db_m != db || state.last.disp_m != _disp as f32;
+        // Update VU physics
+        state.vu_m.update(db as f64);
+        let disp = state.vu_m.angle_degrees() as f32;
+
+        let mut changed = state.last.db_m != db;
+        changed |= state.last.disp_m != disp;
 
         state.last.db_m = db;
-        state.last.disp_m = _disp as f32;
+        state.last.disp_m = disp;
 
         if !changed && !state.init {
             return Ok(false)
@@ -1533,7 +1538,7 @@ impl VisualizerComponent {
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking_gray4(
             state.last.disp_m as f64, 
-            over,
+            state.vu_m.is_overloaded(),
             0.00, 
             false,
         )
@@ -1561,19 +1566,21 @@ impl VisualizerComponent {
         use crate::vision::ensure_band_state;
 
         // Ensure state is initialized with VU physics parameters (different from mono)
-        ensure_band_state(state, 0, 0, 0, viz,8, 48);
+        ensure_band_state(state, 0, 0, 0, viz, true);
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_drive(l_db as f64);
-        let (_disp_r, over_r) = state.vu_r.update_drive(r_db as f64);
+        state.vu_l.update(l_db as f64);
+        state.vu_r.update(r_db as f64);
+        let disp_l = state.vu_l.angle_degrees() as f32;
+        let disp_r = state.vu_r.angle_degrees() as f32;
 
         let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
-        changed |= state.last.disp_l != _disp_l as f32|| state.last.disp_r != _disp_r as f32;
+        changed |= state.last.disp_l != disp_l || state.last.disp_r != disp_r;
 
         state.last.db_l = l_db;
         state.last.db_r = r_db;
-        state.last.disp_l = _disp_l as f32;
-        state.last.disp_r = _disp_r as f32;
+        state.last.disp_l = disp_l;
+        state.last.disp_r = disp_r;
 
         if !changed && !state.init {
             return Ok(false);
@@ -1584,9 +1591,9 @@ impl VisualizerComponent {
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking(
             state.last.disp_l as f64, 
-            over_l,
+            state.vu_l.is_overloaded(),
             state.last.disp_r as f64, 
-            over_r,
+            state.vu_r.is_overloaded(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
@@ -1611,33 +1618,36 @@ impl VisualizerComponent {
         use crate::vision::ensure_band_state;
 
         // Ensure state is initialized
-        ensure_band_state(state, 0, 0, 0, viz,8, 48);
+        ensure_band_state(state, 0, 0, 0, viz, false);
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_drive(l_db as f64);
-        let (_disp_r, over_r) = state.vu_r.update_drive(r_db as f64);
+        state.vu_l.update(l_db as f64);
+        state.vu_r.update(l_db as f64);
+        let disp_l = state.vu_l.angle_degrees() as f32;
+        let disp_r = state.vu_r.angle_degrees() as f32;
 
         let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
-        changed |= state.last.disp_l != _disp_l  as f32 || state.last.disp_r != _disp_r  as f32;
+        changed |= state.last.disp_l != disp_l || state.last.disp_r != disp_r;
 
         state.last.db_l = l_db;
         state.last.db_r = r_db;
-        state.last.disp_l = _disp_l as f32;
-        state.last.disp_r = _disp_r as f32;
+        state.last.disp_l = disp_l;
+        state.last.disp_r = disp_r;
 
-println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l:>5} {over_r:>5} {changed:>5} {:>5})", state.init);
         if !changed && !state.init {
             return Ok(false);
         }
         state.init = false;
 
+        println!("{:#?}", state.vu_l);
+
         // this is the only place we referce color depth - easily conditionalalized to DRY the code
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking_gray4(
             state.last.disp_l as f64,
-            over_l,
+            state.vu_l.is_overloaded(),
             state.last.disp_r as f64, 
-            over_r,
+            state.vu_r.is_overloaded(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
@@ -1667,20 +1677,23 @@ println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l
         use crate::draw::draw_rectangle;
 
         // Ensure state is initialized with combination VU physics parameters
-        ensure_band_state(state, 0, 0, 0, viz,  16, 40);
+        ensure_band_state(state, 0, 0, 0, viz, true);
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_drive(l_db  as f64);
-        let (_disp_r, over_r) = state.vu_r.update_drive(r_db  as f64);
+        state.vu_l.update(l_db  as f64);
+        state.vu_r.update(r_db  as f64);
+        let disp_l = state.vu_l.angle_degrees() as f32;
+        let disp_r = state.vu_r.angle_degrees() as f32;
 
+        
         let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
-        changed |= state.last.disp_l != _disp_l  as f32|| state.last.disp_r != _disp_r  as f32;
+        changed |= state.last.disp_l != disp_l || state.last.disp_r != disp_r;
         changed |= state.last.peak_m != peak_level || state.last.hold_m != peak_hold;
 
         state.last.db_l = l_db;
         state.last.db_r = r_db;
-        state.last.disp_l = _disp_l  as f32;
-        state.last.disp_r = _disp_r  as f32;
+        state.last.disp_l = disp_l;
+        state.last.disp_r = disp_r;
 
         if !changed && !state.init {
             return Ok(false);
@@ -1691,9 +1704,9 @@ println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking(
             state.last.disp_l as f64, 
-            over_l,
+            state.vu_l.is_overloaded(),
             state.last.disp_r as f64, 
-            over_r,
+            state.vu_r.is_overloaded(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
@@ -1768,7 +1781,7 @@ println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l
         use crate::draw::draw_rectangle;
 
         // Ensure state is initialized
-        ensure_band_state(state, 0, 0, 0, viz,  16, 40);
+        ensure_band_state(state, 0, 0, 0, viz, true);
 
         // Always redraw Gray4 SVG background
         // THIS IS NOW REDUNDANT
@@ -1782,17 +1795,19 @@ println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l
         }
 
         // Update VU physics for both channels
-        let (_disp_l, over_l) = state.vu_l.update_drive(l_db as f64);
-        let (_disp_r, over_r) = state.vu_r.update_drive(r_db as f64);
+        state.vu_l.update(l_db as f64);
+        state.vu_r.update(r_db as f64);
+        let disp_l = state.vu_l.angle_degrees() as f32;
+        let disp_r = state.vu_r.angle_degrees() as f32;
 
         let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
-        changed |= state.last.disp_l != _disp_l as f32 || state.last.disp_r != _disp_r as f32;
+        changed |= state.last.disp_l != disp_l || state.last.disp_r != disp_r;
         changed |= state.last.peak_m != peak_level || state.last.hold_m != peak_hold;
 
         state.last.db_l = l_db;
         state.last.db_r = r_db;
-        state.last.disp_l = _disp_l as f32;
-        state.last.disp_r = _disp_r as f32;
+        state.last.disp_l = disp_l;
+        state.last.disp_r = disp_r;
 
         if !changed && !state.init {
             return Ok(false);
@@ -1803,9 +1818,9 @@ println!(">>In>>> {l_db:>7.2} {r_db:>7.2} ({_disp_l:>7.2} {_disp_r:>7.2} {over_l
         // repeat the metrics - keeps it simple
         let raw_image = viz.update_and_render_blocking_gray4(
             state.last.disp_l as f64, 
-            over_l,
+            state.vu_l.is_overloaded(),
             state.last.disp_r as f64, 
-            over_r,
+            state.vu_r.is_overloaded(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 

@@ -34,7 +34,7 @@ use std::sync::atomic::{fence, Ordering};
 use std::time::{Duration, Instant};
 use std::thread::sleep;
 
-use crate::vuphysics_new::VuMeterState;
+use crate::vuphysics_new::{VuMeter, VuMeterState};
 
 use crate::visualization::{Visual, get_visualizer_panel};
 
@@ -145,10 +145,9 @@ pub struct LastVizState {
     pub cap_last_update_l: Vec<Instant>,
     pub cap_last_update_r: Vec<Instant>,
 
-    // NEED TO SUPPORT COLOR
-    pub vu_m: VuMeterState,
-    pub vu_l: VuMeterState,
-    pub vu_r: VuMeterState,
+    pub vu_m: VuMeter,
+    pub vu_l: VuMeter,
+    pub vu_r: VuMeter,
 
     pub last_tick: Instant,
 
@@ -194,10 +193,25 @@ impl Default for LastVizState {
             cap_last_update_m: Vec::new(),
             cap_last_update_l: Vec::new(),
             cap_last_update_r: Vec::new(),
- 
-            vu_m: VuMeterState::new(),
-            vu_l: VuMeterState::new(),
-            vu_r: VuMeterState::new(),
+
+            vu_m: VuMeter::new()
+                .with_sweep(-23.0, 4.8, -44.01, 44.01)
+                .with_overload_threshold(0.0, 0.005)
+                .with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
+                .with_damping(5.3e-9)  // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
+                .with_inertia(8.0e-9),                   // unchanged
+            vu_l: VuMeter::new()
+                .with_sweep(-23.0, 4.8, -44.01, 44.01)
+                .with_overload_threshold(0.0, 0.005)
+                .with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
+                .with_damping(5.3e-9)  // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
+                .with_inertia(8.0e-9),                   // unchanged
+            vu_r: VuMeter::new()
+                .with_sweep(-23.0, 4.8, -44.01, 44.01)
+                .with_overload_threshold(0.0, 0.005)
+                .with_spring(3.5e-7)    // was 2.5e-7  (+40% → faster attack)
+                .with_damping(5.3e-9)  // was 4.5e-9  (scaled to keep ζ ≈ 0.89)
+                .with_inertia(8.0e-9),                   // unchanged
 
             last_tick: Instant::now(),
 
@@ -275,22 +289,22 @@ pub fn ensure_band_state_old(
         state.svg_file = get_visualizer_panel(vk, state.wide);
         let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
         state.init_svg = false;
-        state.vu_m.update_scale(
+        state.vu_m.set_sweep(
             scale_min,
-            sweep_min,
             scale_max,
+            sweep_min,
             sweep_max,
         );
-        state.vu_l.update_scale(
+        state.vu_l.set_sweep(
             scale_min,
-            sweep_min,
             scale_max,
+            sweep_min,
             sweep_max,
         );
-        state.vu_r.update_scale(
+        state.vu_r.set_sweep(
             scale_min,
-            sweep_min,
             scale_max,
+            sweep_min,
             sweep_max,
         );
 
@@ -324,8 +338,7 @@ pub fn ensure_band_state(
     n_r: usize, 
     n_m: usize,
     viz: &mut Visual,
-    top_scale: i32,
-    bottom_scale: i32, 
+    steady_state: bool, 
 ) 
 {
 
@@ -339,23 +352,23 @@ pub fn ensure_band_state(
         let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
         state.init_svg = false;
         if viz.kind == Visualization::AioVuMono||viz.kind == Visualization::VuMono {
-            state.vu_m.update_scale(
+            state.vu_m.set_sweep(
                 viz.scale_min,
-                viz.sweep_min,
                 viz.scale_max,
+                viz.sweep_min,
                 viz.sweep_max,
             );
         } else if viz.kind == Visualization::VuStereo||viz.kind == Visualization::VuStereoWithCenterPeak {
-            state.vu_l.update_scale(
+            state.vu_l.set_sweep(
                 viz.scale_min,
-                viz.sweep_min,
                 viz.scale_max,
+                viz.sweep_min,
                 viz.sweep_max,
             );
-            state.vu_r.update_scale(
+            state.vu_r.set_sweep(
                 viz.scale_min,
-                viz.sweep_min,
                 viz.scale_max,
+                viz.sweep_min,
                 viz.sweep_max,
             );
         }
