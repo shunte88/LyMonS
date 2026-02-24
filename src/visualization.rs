@@ -87,6 +87,8 @@ pub struct Visual {
     pub sweep_max: f64,
     pub over_support: bool,
     pub can_widen: bool,
+    pub peak_m: Vec<bool>,
+    pub hold_m: Vec<bool>,
     re: String,
 }
 
@@ -104,6 +106,7 @@ impl Visual {
         sweep_max: f64,
         over_support: bool,
         can_widen: bool,
+        bools_idx: usize,
     ) -> Self {
 
         let re = r"\{\{.*?\}\}".to_string();
@@ -113,6 +116,9 @@ impl Visual {
         let svg_name = path.clone();
         let svg_data = if svg_supported {fs::read_to_string(path.as_str()).expect("load SVG file")} else {String::from("")};
         let buffer_size = height as usize * ((width + 7) / 8) as usize;
+
+        let init_vec = vec![false; bools_idx];
+
         Self {
             kind,
             svg_supported,
@@ -127,6 +133,8 @@ impl Visual {
             sweep_max,
             over_support,
             can_widen,
+            peak_m: init_vec.clone(),
+            hold_m: init_vec.clone(),
             re,
         }
     }
@@ -137,6 +145,8 @@ impl Visual {
         over_left: bool,
         metric_right: f64,
         over_right: bool,
+        peak_m: Vec<bool>,
+        hold_m: Vec<bool>,
     ) -> Result<(), VizError> {
 
         if !self.svg_supported {
@@ -149,7 +159,6 @@ impl Visual {
 
         // overage beacon
         if over_left {
-            //println!("LED LEFT ON");
             data = data.replace("{{overflow}}", "1"); // downmix
             data = data.replace("{{overflow_left}}", "1");
         } else {
@@ -157,7 +166,6 @@ impl Visual {
             data = data.replace("{{overflow_left}}", "0");
         }
         if over_right {
-            //println!("LED RIGHT ON");
             data = data.replace("{{overflow_right}}", "1");
         } else {
             data = data.replace("{{overflow_right}}", "0");
@@ -166,6 +174,17 @@ impl Visual {
         data = data.replace("{{needle}}", metric_left.to_string().as_str());
         data = data.replace("{{needle_left}}", metric_left.to_string().as_str());
         data = data.replace("{{needle_right}}", metric_right.to_string().as_str());
+
+        if peak_m.len()>0 && hold_m.len()>0 { 
+            for (i, &value) in peak_m.iter().enumerate() {
+                let tag = format!("{{{{peak_{:0width$}}}}}", i, width = 2);
+                let mut replacement = if value { "1" } else { "0.5" };
+                if hold_m[i] {
+                    replacement = "1"
+                }
+                data = data.replace(tag.as_str(), replacement);
+            }
+        }
 
         // patch any missed replacement tags
         let re = Regex::new(self.re.as_str()).unwrap();
@@ -183,6 +202,8 @@ impl Visual {
         over_left: bool,
         metric_right: f64,
         over_right: bool,
+        peak_m: Vec<bool>,
+        hold_m: Vec<bool>,
     ) -> Result<ImageRaw<BinaryColor>, VizError> {
         // Delegate to blocking version (no actual async ops here)
         self.update_and_render_blocking(        
@@ -190,6 +211,8 @@ impl Visual {
             over_left,
             metric_right,
             over_right,
+            peak_m,
+            hold_m,
         )
     }
 
@@ -199,6 +222,8 @@ impl Visual {
         over_left: bool,
         metric_right: f64,
         over_right: bool,
+        peak_m: Vec<bool>,
+        hold_m: Vec<bool>,
     ) -> Result<ImageRaw<BinaryColor>, VizError> {
 
         let width = self.rect.size.width as u32;
@@ -210,6 +235,8 @@ impl Visual {
                 over_left,
                 metric_right,
                 over_right,
+                peak_m,
+                hold_m,
             )?;
             let data = self.modified_svg_data.clone();
             let svg_renderer = SvgImageRenderer::new(&data, width, height)
@@ -229,6 +256,8 @@ impl Visual {
         over_left: bool,
         metric_right: f64,
         over_right: bool,
+        peak_m: Vec<bool>,
+        hold_m: Vec<bool>,
     ) -> Result<ImageRaw<Gray4>, VizError> {
 
         let width = self.rect.size.width as u32;
@@ -240,6 +269,8 @@ impl Visual {
                 over_left,
                 metric_right,
                 over_right,
+                peak_m,
+                hold_m,
             )?;
             let data = self.modified_svg_data.clone();
             
@@ -276,7 +307,8 @@ pub fn transpose_kind(kind: &str) -> Visualization {
         "peak_mono" => Visualization::PeakMono,
         "hist_stereo" => Visualization::HistStereo,
         "hist_mono" => Visualization::HistMono,
-        "vu_stereo_with_center_peak" | "combination" => Visualization::VuStereoWithCenterPeak,
+        "vu_stereo_with_center_peak" | "combination" | "vu_combi" 
+            => Visualization::VuStereoWithCenterPeak,
         "aio_vu_mono" => Visualization::AioVuMono,
         "aio_hist_mono" => Visualization::AioHistMono,
         "waveform_spectrum" => Visualization::WaveformSpectrum,
@@ -363,6 +395,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 44.01,
                 true,
                 false,
+                0,
             )
         },
         Visualization::VuMono  => {
@@ -376,19 +409,22 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 44.01,
                 true,
                 false,
+                0,
             )
         },
         Visualization::VuStereoWithCenterPeak => {
+            let sweep: f64 = if size.width > 128 {44.34} else {45.00};
             Visual::new(
                 kind,
                 String::from(format!("{folder}vucombi.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
-                -25.0,
-                5.0,
-                -44.01,
-                44.01,
-                true,
+                -23.0,
+                3.0,
+                -sweep,
+                sweep,
                 false,
+                false,
+                19,
             )},
         Visualization::AioVuMono  => {
             Visual::new(
@@ -401,6 +437,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 44.01,
                 true,
                 false,
+                0,
             )
         },
         Visualization::PeakStereo  => {
@@ -414,6 +451,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
+                0,
             )
         },
         Visualization::PeakMono   => {
@@ -427,6 +465,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
+                0,
             )
         },
         Visualization::AioHistMono  => {
@@ -440,6 +479,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
+                0,
             )
         },
         Visualization::HistStereo   => {
@@ -453,6 +493,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
+                0,
             )
         },
         Visualization::HistMono  => {
@@ -466,6 +507,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
+                0,
             )
         },
         Visualization::WaveformSpectrum  => {
@@ -479,6 +521,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
+                0,
             )
         },
         Visualization::NoVisualization  => {
@@ -492,6 +535,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
+                0,
             )
         },
     };

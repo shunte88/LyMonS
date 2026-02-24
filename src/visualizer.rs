@@ -74,12 +74,12 @@ pub enum VizPayload {
     PeakMono { level: u8, hold: u8 },
     HistStereo { bands_l: Vec<u8>, bands_r: Vec<u8> },
     HistMono   { bands: Vec<u8> },
-    VuStereoWithCenterPeak { l_db: f32, r_db: f32, peak_level: u8, peak_hold: u8 },
+    VuStereoWithCenterPeak { l_db: f32, r_db: f32, m_db: f32, peak_hold: u8 },
     AioVuMono { db: f32 },
     AioHistMono { bands: Vec<u8> },
     WaveformSpectrum {
-        waveform_l: Vec<i16>,    // Downsampled waveform data (L channel)
-        waveform_r: Vec<i16>,    // Downsampled waveform data (R channel)
+        waveform_l: Vec<i16>,     // Downsampled waveform data (L channel)
+        waveform_r: Vec<i16>,     // Downsampled waveform data (R channel)
         spectrum_column: Vec<u8>, // Current FFT frequency bands for this frame
     },
     NoVisualization {},
@@ -88,9 +88,9 @@ pub enum VizPayload {
 /// Commands sent to the background worker.
 #[derive(Debug, Clone)]
 pub enum VizCommand {
-    Enable(bool),              // enable/disable publishing
-    SetKind(Visualization),    // switch viz mode
-    Shutdown,                  // stop worker
+    Enable(bool),                 // enable/disable publishing
+    SetKind(Visualization),       // switch viz mode
+    Shutdown,                     // stop worker
 }
 
 /// Public handle that coordinates the worker and the display consumer.
@@ -174,7 +174,6 @@ async fn visualizer_worker(
     let mut peak_hold_m: u8 = 0;
 
     info!("visualizer worker started (idle)");
-    //let last_is_playing = false;
 
     'outer: loop {
         // drain any pending commands
@@ -299,19 +298,16 @@ async fn visualizer_worker(
                     }
                 }
                 Visualization::VuStereoWithCenterPeak => {
-                    let (pk_l_i16, rms_l) = peak_and_rms(left);
-                    let (pk_r_i16, rms_r) = peak_and_rms(right);
-                    let l_db = dbfs(rms_l);
-                    let r_db = dbfs(rms_r);
-
-                    let peak_db = dbfs(pk_l_i16.max(pk_r_i16) as f32);
-                    let mut level = db_to_level(peak_db);
-                    peak_hold_m = peak_hold_m.saturating_sub(LEVEL_DECAY_STEPS_PER_FRAME).max(level);
-                    level = level.min(PEAK_METER_LEVELS_MAX);
-
+                    let (_pk_l_i16, rms_l) = peak_and_rms(left);
+                    let (_pk_r_i16, rms_r) = peak_and_rms(right);
+                    let l_db = dbfs::dbfs_to_vudb(dbfs(rms_l));
+                    let r_db = dbfs::dbfs_to_vudb(dbfs(rms_r));
+                    // downmix RMS ≈ sqrt((L^2 + R^2)/2)
+                    let m_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
+                    let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::VuStereoWithCenterPeak {
-                            l_db, r_db, peak_level: level, peak_hold: peak_hold_m
+                            l_db, r_db, m_db, peak_hold: 0
                         });
                 }
                 Visualization::WaveformSpectrum => {
@@ -371,3 +367,45 @@ fn db_to_level(db: f32) -> u8 {
     let x = ((db - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)).clamp(0.0, 1.0);
     (x * PEAK_METER_LEVELS_MAX as f32).round() as u8
 }
+
+struct PeakHold {
+    peak_index: Option<usize>,
+    hold_samples: u32,
+    hold_duration: u32, // e.g. sample_rate * hold_seconds / block_size
+}
+
+impl PeakHold {
+    fn update(&mut self, leds: &[bool; 19]) -> Option<usize> {
+  
+        // Find highest lit LED
+        let current_peak = leds.iter().rposition(|&on| on);
+
+        match (current_peak, self.peak_index) {
+            (Some(cp), Some(pp)) if cp >= pp => {
+                self.peak_index = Some(cp);
+                self.hold_samples = 0;
+            }
+            (_, Some(_)) => {
+                self.hold_samples += 1;
+                if self.hold_samples >= self.hold_duration {
+                    self.peak_index = current_peak;
+                    self.hold_samples = 0;
+                }
+            }
+            (Some(_), None) => {
+                self.peak_index = current_peak;
+                self.hold_samples = 0;
+            }
+            (None, None) => {}
+        }
+
+        self.peak_index
+    }
+}
+
+/* 
+let mut leds_l = compute_leds(l_db, &level_brackets);
+if let Some(peak_idx) = peak_hold_l.update(&leds_l) {
+    leds_l[peak_idx] = true;
+}
+*/

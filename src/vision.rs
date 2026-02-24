@@ -343,11 +343,10 @@ pub fn ensure_band_state_old(
 
 pub fn ensure_band_state(
     state: &mut LastVizState, 
-    n_l: usize, 
+    n_l: usize,
     n_r: usize, 
     n_m: usize,
     viz: &mut Visual,
-    steady_state: bool, 
 ) 
 {
 

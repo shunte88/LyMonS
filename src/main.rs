@@ -45,11 +45,6 @@ mod trig;
 mod dbfs;
 mod draw;
 mod drawsvg;
-// Legacy display module (requires driver-ssd1306 feature)
-#[cfg(feature = "driver-ssd1306")]
-#[path = "display_old.rs"]
-mod display_old;
-// New modular display system
 mod display;
 mod mac_addr;
 mod metrics;
@@ -248,16 +243,16 @@ async fn unified_display_loop(
 
                 // Convert u8 repeat/shuffle to enums
                 let repeat_mode = match lms_guard.sliminfo.repeat {
-                    0 => crate::display_old::RepeatMode::Off,
-                    1 => crate::display_old::RepeatMode::RepeatAll,
-                    2 => crate::display_old::RepeatMode::RepeatOne,
-                    _ => crate::display_old::RepeatMode::Off,
+                    0 => crate::glyphs::RepeatMode::Off,
+                    1 => crate::glyphs::RepeatMode::RepeatAll,
+                    2 => crate::glyphs::RepeatMode::RepeatOne,
+                    _ => crate::glyphs::RepeatMode::Off,
                 };
                 let shuffle_mode = match lms_guard.sliminfo.shuffle {
-                    0 => crate::display_old::ShuffleMode::Off,
-                    1 => crate::display_old::ShuffleMode::ByTracks,
-                    2 => crate::display_old::ShuffleMode::ByAlbums,
-                    _ => crate::display_old::ShuffleMode::Off,
+                    0 => crate::glyphs::ShuffleMode::Off,
+                    1 => crate::glyphs::ShuffleMode::ByTracks,
+                    2 => crate::glyphs::ShuffleMode::ByAlbums,
+                    _ => crate::glyphs::ShuffleMode::Off,
                 };
 
                 display_lock.set_status_line_data(
@@ -1327,16 +1322,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         // Convert u8 repeat/shuffle to enums
                         let repeat_mode = match lms_guard.sliminfo.repeat {
-                            0 => crate::display_old::RepeatMode::Off,
-                            1 => crate::display_old::RepeatMode::RepeatAll,
-                            2 => crate::display_old::RepeatMode::RepeatOne,
-                            _ => crate::display_old::RepeatMode::Off,
+                            0 => crate::glyphs::RepeatMode::Off,
+                            1 => crate::glyphs::RepeatMode::RepeatAll,
+                            2 => crate::glyphs::RepeatMode::RepeatOne,
+                            _ => crate::glyphs::RepeatMode::Off,
                         };
                         let shuffle_mode = match lms_guard.sliminfo.shuffle {
-                            0 => crate::display_old::ShuffleMode::Off,
-                            1 => crate::display_old::ShuffleMode::ByTracks,
-                            2 => crate::display_old::ShuffleMode::ByAlbums,
-                            _ => crate::display_old::ShuffleMode::Off,
+                            0 => crate::glyphs::ShuffleMode::Off,
+                            1 => crate::glyphs::ShuffleMode::ByTracks,
+                            2 => crate::glyphs::ShuffleMode::ByAlbums,
+                            _ => crate::glyphs::ShuffleMode::Off,
                         };
 
                         display_manager.set_status_line_data(

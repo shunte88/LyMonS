@@ -21,6 +21,13 @@
  *
  */
 
+use log::{info, warn};
+use std::time::Instant;
+use arrayvec::ArrayString;
+use core::fmt::Write;
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+use embedded_graphics::prelude::*;
+
 use crate::config::DisplayConfig;
 use crate::display::{
     BoxedDriver,
@@ -41,33 +48,22 @@ use crate::display::components::{
     VisualizerComponent,
     EasterEggsComponent,
 };
-use crate::textable::ScrollMode;
-use crate::clock_font::{ClockFontData, set_clock_font};
+
+use crate::clock_font::{set_clock_font};
 use crate::eggs::{Eggs, set_easter_egg};
 use crate::metrics::MachineMetrics;
 use crate::vision::LastVizState;
-use crate::display_old::{RepeatMode, ShuffleMode};
-
-use embedded_graphics::mono_font::ascii::FONT_4X6;
-use log::{info, warn};
-use std::time::Instant;
-use arrayvec::ArrayString;
-use core::fmt::Write;
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
-use embedded_graphics::prelude::*;
+use crate::glyphs::{RepeatMode, ShuffleMode};
 
 /// Pre-allocated render buffers to avoid heap allocations in hot paths
 #[derive(Debug)]
 pub struct RenderBuffers {
     /// Buffer for time strings (e.g., "3:45")
     pub time_buffer: ArrayString<16>,
-
     /// Buffer for status text
     pub status_buffer: ArrayString<32>,
-
     /// Buffer for track info
     pub track_buffer: ArrayString<128>,
-
     /// Buffer for temp calculations
     pub temp_buffer: ArrayString<64>,
 }
@@ -113,19 +109,14 @@ impl RenderBuffers {
 pub struct PerformanceMetrics {
     /// Total frame time (render + transfer)
     pub frame_time_us: u64,
-
     /// Time spent rendering to framebuffer
     pub render_time_us: u64,
-
     /// Time spent transferring to hardware
     pub transfer_time_us: u64,
-
     /// Frame counter for averaging
     pub frame_count: u64,
-
     /// Average frame time over last N frames
     pub avg_frame_time_us: u64,
-
     /// Target frame time based on display capabilities
     pub target_frame_time_us: u64,
 }
@@ -240,98 +231,70 @@ impl PerformanceMetrics {
 pub struct DisplayManager {
     /// Display driver (trait object)
     driver: BoxedDriver,
-
     /// Framebuffer for rendering
     framebuffer: FrameBuffer,
-
     /// Display capabilities
     capabilities: DisplayCapabilities,
-
     /// Layout configuration
     layout: LayoutConfig,
-
     /// Layout manager - owns all page definitions
     layout_manager: LayoutManager,
-
     /// Current display mode
     pub current_mode: DisplayMode,
-
     /// Status bar component
     status_bar: StatusBar,
-
     /// Scrolling text component
     scrolling_text: ScrollingText,
-
     /// Clock display component
     clock_display: ClockDisplay,
-
     /// Weather display component
     weather_display: WeatherComponent,
-
     /// Visualizer component
     visualizer: VisualizerComponent,
-
     /// Easter eggs component
     easter_eggs_component: EasterEggsComponent,
-
     /// Easter egg animations
     pub easter_egg: Eggs,
-
     /// Whether to show system metrics
     pub show_metrics: bool,
-
     /// Emulator state (for keyboard shortcuts)
     #[cfg(feature = "emulator")]
     emulator_state: Option<std::sync::Arc<std::sync::Mutex<crate::display::drivers::emulator::EmulatorState>>>,
 
     /// Device metrics
     pub device_metrics: MachineMetrics,
-
     /// Last visualizer state
     pub last_viz_state: LastVizState,
-
     /// Track duration in seconds
     pub track_duration_secs: f32,
-
     /// Current track time in seconds
     pub current_track_time_secs: f32,
-
     /// Remaining time in seconds
     pub remaining_time_secs: f32,
-
     /// Mode text (e.g., "Paused", "Playing")
     pub mode_text: String,
-
     /// Whether to show remaining time
     pub show_remaining: bool,
-
     /// Audio quality level (SD=1, HD=2, DSD=3, None=0) for easter egg animations
     pub audio_level: u8,
-
-    /// Current artist for easter eggs (stored separately from scrolling_text)
+    /// Current artist for aio viz & easter eggs (stored separately from scrolling_text)
     pub artist: String,
-
-    /// Current title for easter eggs (stored separately from scrolling_text)
+    /// Current album for aio viz & easter eggs (stored separately from scrolling_text)
+    pub album: String,
+    /// Current title for aio viz & easter eggs (stored separately from scrolling_text)
     pub title: String,
-
     /// Performance metrics
     pub metrics: PerformanceMetrics,
-
     /// Pre-allocated render buffers (zero allocations in render loop!)
     render_buffers: RenderBuffers,
-
     /// Weather temperature units ("C" or "F")
     pub weather_temp_units: String,
-
     /// Weather wind speed units ("mph" or "km/h")
     pub weather_wind_speed_units: String,
-
     /// Weather location name
     pub weather_location_name: String,
-
     /// Weather data receiver (watch channel for lock-free updates)
     weather_rx: Option<tokio::sync::watch::Receiver<crate::weather::WeatherConditions>>,
-
     /// Splash screen state
     splash_active: bool,
     splash_version: String,
@@ -457,6 +420,7 @@ impl DisplayManager {
             show_remaining: false,
             audio_level: 0,
             artist: String::new(),
+            album: String::new(),
             title: String::new(),
             metrics,
             render_buffers: RenderBuffers::default(),
@@ -2363,6 +2327,13 @@ impl DisplayManager {
                         viz_state.this.db_l = l_db;
                         viz_state.this.db_r = r_db;
                     }
+                    VizPayload::VuStereoWithCenterPeak { l_db, r_db, m_db, peak_hold } => {
+                        let viz_state = self.visualizer.viz_state_mut();
+                        viz_state.this.db_l = l_db;
+                        viz_state.this.db_r = r_db;
+                        viz_state.this.db_m = m_db;
+                        viz_state.this.hold_m = peak_hold;
+                    }
                     VizPayload::AioVuMono { db } => {
                         let viz_state = self.visualizer.viz_state_mut();
                         viz_state.this.db_m = db;
@@ -2930,7 +2901,6 @@ impl DisplayManager {
         self.status_bar.set_volume(volume);
         self.status_bar.set_muted(is_muted);
 
-        // Convert RepeatMode from display_old to status_bar
         let sb_repeat = match repeat {
             RepeatMode::Off => SBRepeatMode::Off,
             RepeatMode::RepeatAll => SBRepeatMode::All,
@@ -2938,7 +2908,6 @@ impl DisplayManager {
         };
         self.status_bar.set_repeat_mode(sb_repeat);
 
-        // Convert ShuffleMode from display_old to status_bar
         let sb_shuffle = match shuffle {
             ShuffleMode::Off => SBShuffleMode::Off,
             ShuffleMode::ByTracks => SBShuffleMode::ByTracks,

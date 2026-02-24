@@ -41,22 +41,16 @@ pub enum ColorDepth {
 pub struct DisplayCapabilities {
     /// Display width in pixels
     pub width: u32,
-
     /// Display height in pixels
     pub height: u32,
-
     /// Color depth (monochrome or grayscale)
     pub color_depth: ColorDepth,
-
     /// Whether the display supports hardware rotation
     pub supports_rotation: bool,
-
     /// Maximum recommended frame rate
     pub max_fps: u32,
-
     /// Whether the display supports brightness control
     pub supports_brightness: bool,
-
     /// Whether the display supports inversion
     pub supports_invert: bool,
 }

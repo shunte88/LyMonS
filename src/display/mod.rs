@@ -92,8 +92,8 @@ pub enum DisplayMode {
 }
 
 // Re-export OledDisplay from the old display module when available
-#[cfg(feature = "driver-ssd1306")]
-pub use crate::display_old::OledDisplay;
+//#[cfg(feature = "driver-ssd1306")]
+//pub use crate::display_old::OledDisplay;
 
 // Re-export driver types when features are enabled
 #[cfg(feature = "driver-ssd1306")]

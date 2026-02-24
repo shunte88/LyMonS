@@ -1372,7 +1372,7 @@ impl OledDisplay {
         display: &mut D,
         l_db: f32, 
         r_db: f32, 
-        peak_level: u8, 
+        m_db: f32, 
         peak_hold: u8,
         vk: Visualization,
         state: &mut LastVizState
@@ -1380,7 +1380,6 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-
         let mut need_flush = false;
         Ok(need_flush)
     }
@@ -1394,10 +1393,8 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-
         let mut need_flush = false;
         Ok(need_flush)
-
     }
 
     fn draw_aio_vu<D>(
@@ -1410,10 +1407,8 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
-
         let mut need_flush = false;
         Ok(need_flush)
-
     }
 
     fn draw_peak_pair<D>(
@@ -1428,64 +1423,8 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        ensure_band_state_old(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
         let mut need_flush = false;
-
-        // we implement draw and erase, only initialize on first call
-        if state.init {
-            // Blit to target
-            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
-            let _ = Image::new(&raw, Point::new(0, 0))
-                .draw(display)
-                .map_err(|e|D::Error::from(e));
-            need_flush = true;
-        }
-
-        let level_brackets: [i16; 19] = [
-            -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
-            -4,  -3,  -2,  -1,  0,   2,   3,  5,  8];
-
-        let hbar = 17;
-        let mut xpos = 15;
-        let ypos:[u8;2] = [7, 40];
-
-        if !state.init &&
-            state.last.peak_l == l_level &&
-            state.last.peak_r == r_level &&
-            state.last.hold_l == l_hold &&
-            state.last.hold_r == r_hold {
-            return Ok(need_flush);
-        }
-
-        state.last.peak_l = l_level; 
-        state.last.peak_r = r_level; 
-        state.last.hold_l = l_hold;
-        state.last.hold_r = r_hold;
-        state.init = false;
-
-        for l in level_brackets {
-            let nodeo = if l < 0 {5} else {7};
-            let nodew = if l < 0 {2} else {4};
-            for c in 0..2 {
-                let mv = level_brackets[0] + if c==0 {state.last.peak_l as i16}else{state.last.peak_r as i16};
-                let color = if mv >= l {
-                    BinaryColor::On
-                } else {
-                    BinaryColor::Off
-                };
-                draw_rectangle(
-                    display,
-                    Point::new(xpos, ypos[c] as i32),
-                    nodew, hbar,
-                    color,
-                    Some(0), Some(BinaryColor::Off))
-                    .map_err(|e| D::Error::from(e))?;
-            }
-            xpos += nodeo;
-            need_flush = true;
-        }
         Ok(need_flush)
-
     }
 
     fn draw_peak_mono<D>(
@@ -1498,56 +1437,7 @@ impl OledDisplay {
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
         let mut need_flush = false;
-        ensure_band_state_old(state, 0, 0, 0, vk, true, 0.0, 0.0, 0.0, 0.0, 0, 0);
-
-        if state.init {
-            // Blit to target
-            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
-            let _ = Image::new(&raw, Point::new(0, 0))
-                .draw(display)
-                .map_err(|e|D::Error::from(e));
-            need_flush = true;
-        }
-
-        let level_brackets: [i16; 19] = [
-            -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
-            -4,  -3,  -2,  -1,  0,   2,   3,  5,  8];
-
-        let hbar = 36;
-        let mut xpos = 15;
-        let ypos = 20;
-
-        if !state.init &&
-            state.last.peak_m == level && 
-            state.last.hold_m == hold {
-            return Ok(need_flush);
-        }
-
-        state.last.peak_m = level; 
-        state.last.hold_m = hold;
-        state.init = false;
-
-        for l in level_brackets {
-            let nodeo = if l < 0 {5} else {7};
-            let nodew = if l < 0 {2} else {4};
-            // levels are 0..48 - adjust to fit the display scaling
-            let mv = level_brackets[0] + state.last.peak_m as i16;
-            let color = if mv >= l {
-                BinaryColor::On
-            } else {
-                BinaryColor::Off
-            };
-            draw_rectangle(
-                display,
-                Point::new(xpos, ypos),
-                nodew, hbar,
-                color,
-                Some(0), Some(BinaryColor::Off))
-                .map_err(|e| D::Error::from(e))?;
-            xpos += nodeo;
-        }
         Ok(need_flush)
-
     }
 
     // need these interfaces to support Drawable
@@ -1560,94 +1450,8 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-
-        // resize state buffers if band count changed
-        ensure_band_state_old(
-            state, 
-            bands_l.len(), 
-            bands_r.len(), 
-            0, 
-            vk, 
-            false,
-            0.0, 
-            0.0,
-            0.0, 
-            0.0,
-            0, 
-            0
-        );
-
-        // store latest inputs
-        state.last_bands_l.copy_from_slice(&bands_l);
-        state.last_bands_r.copy_from_slice(&bands_r);
-
-        // compute body decay (rise fast, fall slow)
-        let now = Instant::now();
-        let elapsed = now.saturating_duration_since(state.last_tick);
-        state.last_tick = now;
-
-        let mut changed = false;
-        changed |= update_body_decay(&mut state.draw_bands_l, &state.last_bands_l, elapsed);
-        changed |= update_body_decay(&mut state.draw_bands_r, &state.last_bands_r, elapsed);
-
-        // update peak caps (time-based hold then decay)
-        changed |= update_caps(
-            &mut state.cap_l,
-            &mut state.cap_hold_until_l,
-            &mut state.cap_last_update_l,
-            &state.draw_bands_l,
-            now,
-        );
-        changed |= update_caps(
-            &mut state.cap_r,
-            &mut state.cap_hold_until_r,
-            &mut state.cap_last_update_r,
-            &state.draw_bands_r,
-            now,
-        );
-
-        // If nothing would change visually and we already drew once, skip
-        if !changed && !state.init {
-            return Ok(false);
-        }
-        state.init = false;
-
-        // layout
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
-        if w <= 6 || h <= 4 { return Ok(false); }
-
-        let mx = 3;
-        let my = 6;
-        let title_base = 10;
-        let gap = 2;
-        let inner_w = w - 2 * mx;
-        let inner_h = h - my - title_base - 1;
-        let title_pos = h - title_base;
-        let pane_w = (inner_w - gap) / 2;
-
-        // left panel
-        draw_hist_panel_with_caps(
-            display,
-            "Left", title_base as u32, title_pos,
-            Point::new(mx, my),
-            Size::new(pane_w as u32, inner_h as u32),
-            &state.draw_bands_l,
-            &state.cap_l,
-        ).map_err(|e| D::Error::from(e))?;
-
-        // right panel
-        draw_hist_panel_with_caps(
-            display,
-            "Right", title_base as u32, title_pos,
-            Point::new(mx + pane_w + gap, my),
-            Size::new(pane_w as u32, inner_h as u32),
-            &state.draw_bands_r,
-            &state.cap_r,
-        ).map_err(|e| D::Error::from(e))?;
-
-        Ok(true)
-
+        let mut need_flush = false;
+        Ok(need_flush)
     }
 
     pub fn draw_hist_pair_no_caps<D>(
@@ -1659,74 +1463,8 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        ensure_band_state_old(state, bands_l.len(), bands_r.len(), 0, vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
-
-        // 2) Save the latest inputs (debug/inspection)
-        state.last_bands_l.copy_from_slice(&bands_l);
-        state.last_bands_r.copy_from_slice(&bands_r);
-
-        // 3) Compute decay steps based on elapsed time since last draw
-        let now = Instant::now();
-        let elapsed = now.saturating_duration_since(state.last_tick);
-        state.last_tick = now;
-
-        let ticks = (elapsed.as_millis() / (HIST_DECAY_TICK.as_millis().max(1))) as u32;
-        let decay_steps: u8 = (ticks as u8).saturating_mul(HIST_DECAY_PER_TICK).max(1);
-        // for *strictly time-based* decay (no redraws = no decay), remove `.max(1)`.
-
-        // 4) Update draw bands with "rise fast, fall slow" rule; track if anything changed
-        let mut changed = false;
-
-        for (i, &target) in bands_l.iter().enumerate() {
-            let curl = state.draw_bands_l[i];
-            let newl = if target >= curl { target } else { curl.saturating_sub(decay_steps).max(target) };
-            if newl != curl { changed = true; }
-            state.draw_bands_l[i] = newl;
-            let curr = state.draw_bands_r[i];
-            let newr = if target >= curr { target } else { curr.saturating_sub(decay_steps).max(target) };
-            if newr != curr { changed = true; }
-            state.draw_bands_r[i] = newr;
-        }
-
-        // 5) If nothing would change on screen, skip work (non-blocking)
-        if !changed && !state.init {
-            return Ok(false);
-        }
-        state.init = false;
-
-        // layout and draw the panels
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
-
-        // too small to draw meaningfully
-        if w <= 6 || h <= 4 {
-            return Ok(false);
-        }
-
-        let mx = 3;               // outer margins
-        let my = 3;
-        let gap = 3;              // gap between L/R histos
-        let inner_w = w - 2 * mx;
-        let inner_h = h - 2 * my;
-        let pane_w = (inner_w - gap) / 2;
-
-        // Left
-        draw_hist_panel(
-            display,
-            Point::new(mx, my),
-            Size::new(pane_w as u32, inner_h as u32),
-            &state.draw_bands_l,
-        ).map_err(|e| D::Error::from(e))?;
-
-        // Right
-        draw_hist_panel(
-            display,
-            Point::new(mx + pane_w + gap, my),
-            Size::new(pane_w as u32, inner_h as u32),
-            &state.draw_bands_r,
-        ).map_err(|e| D::Error::from(e))?;
-
-        Ok(true) // we dun did drew; caller should flush
+        let mut need_flush = false;
+        Ok(need_flush)
     }
 
     fn draw_hist_mono<D>(
@@ -1738,61 +1476,8 @@ impl OledDisplay {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-
-        // resize state buffers if band count changed
-        ensure_band_state_old(state, 0, 0, bands.len(), vk, false, 0.0, 0.0, 0.0, 0.0, 0, 0);
-
-        // store latest inputs
-        state.last_bands_m.copy_from_slice(&bands);
-
-        // compute body decay (rise fast, fall slow)
-        let now = Instant::now();
-        let elapsed = now.saturating_duration_since(state.last_tick);
-        state.last_tick = now;
-
-        let mut changed = false;
-        changed |= update_body_decay(&mut state.draw_bands_m, &state.last_bands_m, elapsed);
-
-        // update peak caps (time-based hold then decay)
-        changed |= update_caps(
-            &mut state.cap_m,
-            &mut state.cap_hold_until_m,
-            &mut state.cap_last_update_m,
-            &state.draw_bands_m,
-            now,
-        );
-
-        // If nothing would change visually and we already drew once, skip
-        if !changed && !state.init {
-            return Ok(false);
-        }
-        state.init = false;
-
-        // layout
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
-        if w <= 6 || h <= 4 { return Ok(false); }
-
-        let mx = 3;
-        let my = 6;
-        let title_base = 10;
-        let inner_w = w - 2 * mx;
-        let inner_h = h - my - title_base - 1;
-        let title_pos = h - title_base;
-        let pane_w = inner_w;
-
-        // downmix (mono) panel
-        draw_hist_panel_with_caps(
-            display,
-            "Downmix", title_base as u32, title_pos,
-            Point::new(mx, my),
-            Size::new(pane_w as u32, inner_h as u32),
-            &state.draw_bands_m,
-            &state.cap_m,
-        ).map_err(|e| D::Error::from(e))?;
-
-        Ok(true)
-
+        let mut need_flush = false;
+        Ok(need_flush)
     }
 
     fn draw_aio_hist<D>(
@@ -1806,110 +1491,7 @@ impl OledDisplay {
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + Debug + 'static,
     {
         let mut need_flush = false;
-
-        // resize state buffers if band count changed
-        ensure_band_state_old(
-            state, 
-            0, 
-            0, 
-            bands.len(), 
-            vk, 
-            false,
-            0.0, 
-            0.0,
-            0.0, 
-            0.0,
-            0, 
-            0
-        );
-
-        if state.init {
-            // Blit to target
-            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
-            let _ = Image::new(&raw, Point::new(0, 0))
-                .draw(display)
-                .map_err(|e|D::Error::from(e));
-            need_flush = true;
-        }
-
-        // store latest inputs
-        state.last_bands_m.copy_from_slice(&bands);
-
-        // compute body decay (rise fast, fall slow)
-        let now = Instant::now();
-        let elapsed = now.saturating_duration_since(state.last_tick);
-        state.last_tick = now;
-
-        let mut changed = false;
-        changed |= update_body_decay(&mut state.draw_bands_m, &state.last_bands_m, elapsed);
-
-        // update peak caps (time-based hold then decay)
-        changed |= update_caps(
-            &mut state.cap_m,
-            &mut state.cap_hold_until_m,
-            &mut state.cap_last_update_m,
-            &state.draw_bands_m,
-            now,
-        );
-
-        changed |= state.last_artist != track.clone();
-println!("{}", track.clone());
-
-        // if nothing would change on screen, skip work (non-blocking) early doors
-        if !changed && !state.init {
-            return Ok(need_flush);
-        }
-        state.init = false;
-
-        if state.last_artist != track.clone() 
-        {
-            state.last_artist = track.clone();
-            let atext: &str = &state.last_artist.clone();
-
-            let character_style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
-            let textbox_style = TextBoxStyleBuilder::new()
-                .alignment(HorizontalAlignment::Left)
-                .vertical_alignment(VerticalAlignment::Top)
-                .build();
-
-            let arect = Rectangle::new(Point::new(5,3), Size::new(64,58));
-            let text_box = TextBox::with_textbox_style(
-                atext, 
-                arect, 
-                character_style, 
-                textbox_style
-            );
-            text_box.draw(display)
-            .map_err(|e| D::Error::from(e))?;
-            need_flush = true;
-        }
-
-        // layout
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
-
-        let mx = 3;
-        let my = 6;
-        let title_base = 10;
-        let gap = 2;
-        let inner_w = w - 2 * mx;
-        let inner_h = h - my - title_base - 1;
-        let title_pos = h - title_base;
-        let pane_w = (inner_w - gap) / 2;
-
-        // right histogram downmix panel
-        draw_hist_panel_with_caps(
-            display,
-            "Downmix", title_base as u32, title_pos,
-            Point::new(mx + pane_w + gap, my),
-            Size::new(pane_w as u32, inner_h as u32),
-            &state.draw_bands_r,
-            &state.cap_r,
-        ).map_err(|e| D::Error::from(e))?;
-        need_flush = true;
-
         Ok(need_flush)
-
     }
 
     pub async fn drain_frame_queue(
@@ -1958,9 +1540,9 @@ println!("{}", track.clone());
                     self.draw(|fb| {
                         need_flush = Self::draw_vu_pair(fb, l_db, r_db, frame.kind, &mut state).unwrap()
                     }),
-                VizPayload::VuStereoWithCenterPeak { l_db, r_db, peak_level, peak_hold } => 
+                VizPayload::VuStereoWithCenterPeak { l_db, r_db, m_db, peak_hold } => 
                     self.draw(|fb| {
-                        need_flush = Self::draw_viz_combi(fb, l_db, r_db, peak_level, peak_hold, frame.kind, &mut state).unwrap()                        
+                        need_flush = Self::draw_viz_combi(fb, l_db, r_db, m_db, peak_hold, frame.kind, &mut state).unwrap()                        
                     }),
                 VizPayload::VuMono { db } => 
                     self.draw(|fb| {

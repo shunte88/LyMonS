@@ -20,7 +20,7 @@ use super::DisplayMode;
 use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode, GAP_BETWEEN_LOOP_TEXT_FIXED};
 use crate::eggs::{Eggs, set_easter_egg};
 use crate::clock_font::{ClockFontData, set_clock_font};
-use crate::display_old::{RepeatMode, ShuffleMode};
+use crate::glyphs::{RepeatMode, ShuffleMode};
 use crate::deutils::seconds_to_hms;
 use crate::constants;
 use crate::glyphs;

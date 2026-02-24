@@ -2,7 +2,7 @@
  *  glyphs.rs
  * 
  *  LyMonS - worth the squeeze
- *	(c) 2020-25 Stuart Hunter
+ *	(c) 2020-26 Stuart Hunter
  *
  *	TODO:
  *
@@ -20,6 +20,52 @@
  *	Public License.
  *
  */
+
+/// Represents the audio bitrate mode for displaying the correct glyph.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum AudioBitrate {
+    SD = 1,
+    HD = 2,
+    DSD = 3,
+    None, // No specific audio bitrate glyph displayed
+}
+
+/// Represents the repeat mode for displaying the correct glyph.
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(u8)]
+pub enum RepeatMode {
+    Off,
+    RepeatAll,
+    RepeatOne,
+}
+
+fn map_repeat_mode(mode: u8) -> RepeatMode {
+    match mode {
+        0 => RepeatMode::Off,
+        1 => RepeatMode::RepeatAll,
+        2 => RepeatMode::RepeatOne,
+        _ => RepeatMode::Off,
+    }
+}
+
+/// Represents the shuffle mode for displaying the correct glyph.
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(u8)]
+pub enum ShuffleMode {
+    Off,
+    ByTracks,
+    ByAlbums,
+}
+
+fn map_shuffle_mode(mode: u8) -> ShuffleMode {
+    match mode {
+        0 => ShuffleMode::Off,
+        1 => ShuffleMode::ByTracks,
+        2 => ShuffleMode::ByAlbums,
+        _ => ShuffleMode::Off,
+    }
+}
+
 /// Helper function to get a slice for a specific glyph from a binary set
 pub fn get_glyph_slice(raw_glyph: &'static [u8], index: usize, w: u32, h: u32) -> &'static [u8] {
     let byte_size = ((w as usize + 7) / 8) * h as usize;
