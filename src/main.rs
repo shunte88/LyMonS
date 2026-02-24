@@ -886,11 +886,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "aio_vu_mono",       // All In One with downmix VU
             "combination",       // L/R VU with a central mono peak meter
             "hist_mono",         // mono freq. histogram "bars" (downmix)
-            "hist_stereo",       // two freq. histogram "bars" (L/R)
-            "peak_mono",         // mono peak meter with hold/decay
-            "peak_stereo",       // two peak meters with hold/decay
+            "hist_stereo",       // stereo freq. histogram "bars" (L/R)
+            "peak_mono",         // mono (rms downmix) peak meter with hold/decay
+            "peak_stereo",       // stereo peak meter with hold/decay
             "vu_mono",           // downmix to mono VU
-            "vu_stereo",         // two VU meters (L/R)
+            "vu_stereo",         // twstereoo VU meters (L/R)
             "waveform_spectrum", // oscilloscope waveform + spectrogram waterfall
             "no_viz"                                                                                                               ]
         )

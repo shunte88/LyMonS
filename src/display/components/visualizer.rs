@@ -176,17 +176,17 @@ impl VisualizerComponent {
                 Self::draw_peak_mono(
                     target,  
                     viz_mut,
-                    self.viz_state.this.peak_m, 
+                    self.viz_state.this.db_m, 
                     self.viz_state.this.hold_m, 
                     &mut self.viz_state
                 )
             }
             Visualization::PeakStereo => {
-                Self::draw_peak_pair(
+                Self::draw_peak_stereo(
                     target,  
                     viz_mut, 
-                    self.viz_state.this.peak_l, 
-                    self.viz_state.this.peak_r, 
+                    self.viz_state.this.db_l, 
+                    self.viz_state.this.db_r, 
                     self.viz_state.this.hold_l, 
                     self.viz_state.this.hold_r, 
                     &mut self.viz_state
@@ -283,17 +283,17 @@ impl VisualizerComponent {
                 Self::draw_peak_mono_gray4(
                     target,
                     viz_mut,
-                    self.viz_state.this.peak_m, 
+                    self.viz_state.this.db_m, 
                     self.viz_state.this.hold_m, 
                     &mut self.viz_state
                 )
             }
             Visualization::PeakStereo => {
-                Self::draw_peak_pair_gray4(
+                Self::draw_peak_stereo_gray4(
                     target,  
                     viz_mut, 
-                    self.viz_state.this.peak_l, 
-                    self.viz_state.this.peak_r, 
+                    self.viz_state.this.db_l, 
+                    self.viz_state.this.db_r, 
                     self.viz_state.this.hold_l, 
                     self.viz_state.this.hold_r, 
                     &mut self.viz_state
@@ -408,11 +408,11 @@ impl VisualizerComponent {
     //
 
     /// Draw stereo peak meters (monochrome)
-    fn draw_peak_pair<D>(
+    fn draw_peak_stereo<D>(
         display: &mut D,
         viz: &mut Visual,
-        l_level: u8,
-        r_level: u8,
+        l_db: f32,
+        r_db: f32,
         l_hold: u8,
         r_hold: u8,
         state: &mut crate::vision::LastVizState,
@@ -420,58 +420,65 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        use embedded_graphics::image::{Image, ImageRaw};
-        use embedded_graphics::primitives::Rectangle;
-        use embedded_graphics::Drawable;
+        let dummy: Vec<bool> = Vec::new(); 
+        let level_brackets: [i16; 16] = [
+            -30, -20, -15, -10, -7, -5, -3, -2, -1, 
+            0, 1, 2, 3, 5, 7, 10
+        ];
+        let n_db = level_brackets.len();
 
-        ensure_band_state(state, 0, 0, 0, viz);
-        let mut need_flush = false;
+        ensure_band_state(state, n_db, n_db, 0, viz);
+        let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
+        changed |= state.last.hold_l != l_hold || state.last.hold_r != r_hold;
 
-        if state.init {
-            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-            need_flush = true;
-        }
-
-        let level_brackets: [i16; 19] = [-36, -30, -20, -17, -13, -10, -8, -7, -6, -5, -4, -3, -2, -1, 0, 2, 3, 5, 8];
-        let hbar = 17;
-        let mut xpos = 15;
-        let ypos: [u8; 2] = [7, 40];
-
-        if !state.init && state.last.peak_l == l_level && state.last.peak_r == r_level && state.last.hold_l == l_hold && state.last.hold_r == r_hold {
-            return Ok(need_flush);
-        }
-
-        state.last.peak_l = l_level;
-        state.last.peak_r = r_level;
+        state.last.db_l = l_db;
+        state.last.db_r = r_db;
         state.last.hold_l = l_hold;
         state.last.hold_r = r_hold;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
         state.init = false;
 
-        for l in level_brackets {
-            let nodeo = if l < 0 { 5 } else { 7 };
-            let nodew = if l < 0 { 2 } else { 4 };
+        viz.peak_l = compute_leds(l_db as f64, &level_brackets);
+        viz.peak_r = compute_leds(r_db as f64, &level_brackets);
+        let current_peak_l = viz.peak_l.iter().rposition(|&on| on).unwrap_or(0);
+        let current_peak_r = viz.peak_r.iter().rposition(|&on| on).unwrap_or(0);
+        viz.hold_l.fill(false);
+        viz.hold_r.fill(false);
+        viz.hold_l[current_peak_l] = true; // need time base for hold
+        viz.hold_r[current_peak_r] = true; // need time base for hold
 
-            for c in 0..2 {
-                let mv = level_brackets[0] + if c == 0 { state.last.peak_l as i16 } else { state.last.peak_r as i16 };
-                let color = if mv >= l { BinaryColor::On } else { BinaryColor::Off };
+        // this is the only place we reference color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking(
+            0.00,
+            false,
+            0.00, 
+            false,
+            dummy.clone(),
+            dummy.clone(),
+            viz.peak_l.clone(),
+            viz.hold_l.clone(),
+            viz.peak_r.clone(),
+            viz.hold_r.clone(),
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
-                let rect = Rectangle::new(Point::new(xpos, ypos[c] as i32), Size::new(nodew, hbar));
-                let style = PrimitiveStyleBuilder::new().fill_color(color).build();
-                rect.into_styled(style).draw(display)?;
-            }
-            xpos += nodeo;
-            need_flush = true;
-        }
-        Ok(need_flush)
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)?;
+        Ok(true)
+
     }
 
     /// Draw stereo peak meters (Gray4)
-    fn draw_peak_pair_gray4<D>(
+    fn draw_peak_stereo_gray4<D>(
         display: &mut D,
         viz: &mut Visual,
-        l_level: u8,
-        r_level: u8,
+        l_db: f32,
+        r_db: f32,
         l_hold: u8,
         r_hold: u8,
         state: &mut crate::vision::LastVizState,
@@ -479,159 +486,174 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
-        use crate::drawsvg::get_svg_gray4;
-        use embedded_graphics::image::{Image, ImageRaw};
-        use embedded_graphics::primitives::Rectangle;
-        use embedded_graphics::Drawable;
+        let dummy: Vec<bool> = Vec::new(); 
+        let level_brackets: [i16; 16] = [
+            -30, -20, -15, -10, -7, -5, -3, -2, -1, 
+            0, 1, 2, 3, 5, 7, 10
+        ];
+        let n_db = level_brackets.len();
 
-        ensure_band_state(state, 0, 0, 0, viz);
-        let mut need_flush = false;
+        ensure_band_state(state, n_db, n_db, 0, viz);
+        let mut changed = state.last.db_l != l_db || state.last.db_r != r_db;
+        changed |= state.last.hold_l != l_hold || state.last.hold_r != r_hold;
 
-        if state.init {
-            let width = display.size().width;
-            let _ = get_svg_gray4(&state.svg_file, width, 64, &mut state.buffer);
-            let raw = ImageRaw::<Gray4>::new(&state.buffer, width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-            need_flush = true;
-        }
-
-        let level_brackets: [i16; 19] = [-36, -30, -20, -17, -13, -10, -8, -7, -6, -5, -4, -3, -2, -1, 0, 2, 3, 5, 8];
-        let hbar = 17;
-        let mut xpos = 15;
-        let ypos: [u8; 2] = [7, 40];
-
-        if !state.init && state.last.peak_l == l_level && state.last.peak_r == r_level && state.last.hold_l == l_hold && state.last.hold_r == r_hold {
-            return Ok(need_flush);
-        }
-
-        state.last.peak_l = l_level;
-        state.last.peak_r = r_level;
+        state.last.db_l = l_db;
+        state.last.db_r = r_db;
         state.last.hold_l = l_hold;
         state.last.hold_r = r_hold;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
         state.init = false;
 
-        for l in level_brackets {
-            let nodeo = if l < 0 { 5 } else { 7 };
-            let nodew = if l < 0 { 2 } else { 4 };
+        viz.peak_l = compute_leds(l_db as f64, &level_brackets);
+        viz.peak_r = compute_leds(r_db as f64, &level_brackets);
+        let current_peak_l = viz.peak_l.clone().iter().rposition(|&on| on).unwrap_or(0);
+        let current_peak_r = viz.peak_r.clone().iter().rposition(|&on| on).unwrap_or(0);
+        viz.hold_l.fill(false);
+        viz.hold_r.fill(false);
+        viz.hold_l[current_peak_l] = true; // need time base for hold
+        viz.hold_r[current_peak_r] = true; // need time base for hold
 
-            for c in 0..2 {
-                let mv = level_brackets[0] + if c == 0 { state.last.peak_l as i16 } else { state.last.peak_r as i16 };
-                let color = if mv >= l { Gray4::WHITE } else { Gray4::BLACK };
+        // this is the only place we reference color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking_gray4(
+            0.00,
+            false,
+            0.00, 
+            false,
+            dummy.clone(),
+            dummy.clone(),
+            viz.peak_l.clone(),
+            viz.hold_l.clone(),
+            viz.peak_r.clone(),
+            viz.hold_r.clone(),
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
-                let rect = Rectangle::new(Point::new(xpos, ypos[c] as i32), Size::new(nodew, hbar));
-                let style = PrimitiveStyleBuilder::new().fill_color(color).build();
-                rect.into_styled(style).draw(display)?;
-            }
-            xpos += nodeo;
-            need_flush = true;
-        }
-        Ok(need_flush)
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)?;
+        Ok(true)
     }
 
     /// Draw mono peak meter (monochrome)
     fn draw_peak_mono<D>(
         display: &mut D,
         viz: &mut Visual,
-        level: u8,
+        m_db: f32,
         hold: u8,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions,
     {
-        use embedded_graphics::image::{Image, ImageRaw};
-        use embedded_graphics::primitives::Rectangle;
-        use embedded_graphics::Drawable;
+        let dummy: Vec<bool> = Vec::new(); 
+        let level_brackets: [i16; 16] = [
+            -30, -20, -15, -10, -7, -5, -3, -2, -1, 
+            0, 1, 2, 3, 5, 7, 10
+        ];
 
-        ensure_band_state(state, 0, 0, 0, viz);
-        let mut need_flush = false;
+        ensure_band_state(state, 0, 0, level_brackets.len(), viz);
 
-        if state.init {
-            let raw = ImageRaw::<BinaryColor>::new(&state.buffer, display.size().width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-            need_flush = true;
-        }
+        let mut changed = state.last.db_m != m_db;
+        changed |= state.last.db_m != m_db;
+        changed |= state.last.hold_m != hold;
 
-        let level_brackets: [i16; 19] = [-36, -30, -20, -17, -13, -10, -8, -7, -6, -5, -4, -3, -2, -1, 0, 2, 3, 5, 8];
-        let hbar = 36;
-        let mut xpos = 15;
-        let ypos = 20;
-
-        if !state.init && state.last.peak_m == level && state.last.hold_m == hold {
-            return Ok(need_flush);
-        }
-
-        state.last.peak_m = level;
+        state.last.db_m = m_db;
         state.last.hold_m = hold;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
         state.init = false;
 
-        for l in level_brackets {
-            let nodeo = if l < 0 { 5 } else { 7 };
-            let nodew = if l < 0 { 2 } else { 4 };
-            let mv = level_brackets[0] + state.last.peak_m as i16;
-            let color = if mv >= l { BinaryColor::On } else { BinaryColor::Off };
+        viz.peak_m = compute_leds(m_db as f64, &level_brackets);
+        let current_peak = viz.peak_m.iter().rposition(|&on| on).unwrap_or(0);
+        viz.hold_m.fill(false);
+        viz.hold_m[current_peak] = true; // need time base for hold
 
-            let rect = Rectangle::new(Point::new(xpos, ypos), Size::new(nodew, hbar));
-            let style = PrimitiveStyleBuilder::new().fill_color(color).build();
-            rect.into_styled(style).draw(display)?;
-            xpos += nodeo;
-        }
-        Ok(need_flush)
+        // this is the only place we referce color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking(
+            0.00,
+            false,
+            0.00, 
+            false,
+            viz.peak_m.clone(),
+            viz.hold_m.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
+
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)?;
+        Ok(true)
+
     }
 
     /// Draw mono peak meter (Gray4)
     fn draw_peak_mono_gray4<D>(
         display: &mut D,
         viz: &mut Visual,
-        level: u8,
+        m_db: f32,
         hold: u8,
         state: &mut crate::vision::LastVizState,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
-        use crate::drawsvg::get_svg_gray4;
-        use embedded_graphics::image::{Image, ImageRaw};
-        use embedded_graphics::primitives::Rectangle;
-        use embedded_graphics::Drawable;
+        let dummy: Vec<bool> = Vec::new(); 
+        let level_brackets: [i16; 16] = [
+            -30, -20, -15, -10, -7, -5, -3, -2, -1, 
+            0, 1, 2, 3, 5, 7, 10
+        ];
 
-        ensure_band_state(state, 0, 0, 0, viz);
-        let mut need_flush = false;
+        ensure_band_state(state, 0, 0, level_brackets.len(), viz);
 
-        // REVIEW IF WE GO THE SVG ANIMATION ROUTE
-        if state.init {
-            let width = display.size().width;
-            let _ = get_svg_gray4(&state.svg_file, width, 64, &mut state.buffer);
-            let raw = ImageRaw::<Gray4>::new(&state.buffer, width);
-            Image::new(&raw, Point::new(0, 0)).draw(display)?;
-            need_flush = true;
-        }
+        let mut changed = state.last.db_m != m_db;
+        changed |= state.last.db_m != m_db;
+        changed |= state.last.hold_m != hold;
 
-        let level_brackets: [i16; 19] = [-36, -30, -20, -17, -13, -10, -8, -7, -6, -5, -4, -3, -2, -1, 0, 2, 3, 5, 8];
-        let hbar = 36;
-        let mut xpos = 15;
-        let ypos = 20;
-
-        if !state.init && state.last.peak_m == level && state.last.hold_m == hold {
-            return Ok(need_flush);
-        }
-
-        state.last.peak_m = level;
+        state.last.db_m = m_db;
         state.last.hold_m = hold;
+
+        if !changed && !state.init {
+            return Ok(false);
+        }
         state.init = false;
 
-        for l in level_brackets {
-            let nodeo = if l < 0 { 5 } else { 7 };
-            let nodew = if l < 0 { 2 } else { 4 };
-            let mv = level_brackets[0] + state.last.peak_m as i16;
-            let color = if mv >= l { Gray4::WHITE } else { Gray4::BLACK };
+        viz.peak_m = compute_leds(m_db as f64, &level_brackets);
+        let current_peak = viz.peak_m.iter().rposition(|&on| on).unwrap_or(0);
+        viz.hold_m.fill(false);
+        viz.hold_m[current_peak] = true; // need time base for hold
 
-            let rect = Rectangle::new(Point::new(xpos, ypos), Size::new(nodew, hbar));
-            let style = PrimitiveStyleBuilder::new().fill_color(color).build();
-            rect.into_styled(style).draw(display)?;
-            xpos += nodeo;
-        }
-        Ok(need_flush)
+        // this is the only place we referce color depth - easily conditionalalized to DRY the code
+        // repeat the metrics - keeps it simple
+        let raw_image = viz.update_and_render_blocking_gray4(
+            0.00,
+            false,
+            0.00, 
+            false,
+            viz.peak_m.clone(),
+            viz.hold_m.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+        )
+            .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
+
+        // Draw SVG image
+        embedded_graphics::image::Image::new(&raw_image, Point::new(0, 0))
+            .draw(display)?;
+        Ok(true)
+
     }
 
     //
@@ -1461,6 +1483,7 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
+        let dummy: Vec<bool> = Vec::new();
         // Ensure state is initialized with VU physics parameters
         ensure_band_state(state, 0, 0, 0, viz);
 
@@ -1485,8 +1508,12 @@ impl VisualizerComponent {
             state.vu_m.is_overloaded(),
             0.00, 
             false,
-            viz.peak_m.clone(),
-            viz.hold_m.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
@@ -1507,6 +1534,7 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
+        let dummy: Vec<bool> = Vec::new();
         // Ensure state is initialized
         ensure_band_state(state, 0, 0, 0, viz);
 
@@ -1532,8 +1560,12 @@ impl VisualizerComponent {
             state.vu_m.is_overloaded(),
             0.00, 
             false,
-            viz.peak_m.clone(),
-            viz.hold_m.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
@@ -1555,6 +1587,7 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
+        let dummy: Vec<bool> = Vec::new();
         // Ensure state is initialized with VU physics parameters (different from mono)
         ensure_band_state(state, 0, 0, 0, viz);
 
@@ -1584,8 +1617,12 @@ impl VisualizerComponent {
             state.vu_l.is_overloaded(),
             state.last.disp_r as f64, 
             state.vu_r.is_overloaded(),
-            viz.peak_m.clone(),
-            viz.hold_m.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
@@ -1607,6 +1644,7 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
+        let dummy: Vec<bool> = Vec::new();
         // Ensure state is initialized
         ensure_band_state(state, 0, 0, 0, viz);
 
@@ -1636,8 +1674,12 @@ impl VisualizerComponent {
             state.vu_l.is_overloaded(),
             state.last.disp_r as f64, 
             state.vu_r.is_overloaded(),
-            viz.peak_m.clone(),
-            viz.hold_m.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
@@ -1662,9 +1704,10 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
     {
+        let dummy: Vec<bool> = Vec::new();
         let level_brackets: [i16; 19] = [
-            -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
-            -4, -3, -2, -1, 0, 2, 3, 5, 8
+            -36, -30, -20, -17, -13, -10, -8, -7, -6, -5, -4, -3, -2, -1, 
+            0, 2, 3, 5, 8
         ];
 
         // Ensure state is initialized
@@ -1706,6 +1749,10 @@ impl VisualizerComponent {
             state.vu_r.is_overloaded(),
             viz.peak_m.clone(),
             viz.hold_m.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 
@@ -1729,6 +1776,7 @@ impl VisualizerComponent {
     where
         D: DrawTarget<Color = Gray4> + OriginDimensions,
     {
+        let dummy: Vec<bool> = Vec::new();
         let level_brackets: [i16; 19] = [
             -36, -30, -20, -17, -13, -10, -8, -7, -6, -5,
             -4, -3, -2, -1, 0, 2, 3, 5, 8
@@ -1773,6 +1821,10 @@ impl VisualizerComponent {
             state.vu_r.is_overloaded(),
             viz.peak_m.clone(),
             viz.hold_m.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
+            dummy.clone(),
         )
             .map_err(|e| format!("Visualizer render failed: {}", e)).unwrap();
 

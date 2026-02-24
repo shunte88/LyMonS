@@ -2296,17 +2296,17 @@ impl DisplayManager {
             // If we got a frame, update component state based on payload
             if let Some(frame) = latest_frame {
                 match frame.payload {
-                    VizPayload::PeakStereo { l_level, r_level, l_hold, r_hold } => {
+                    VizPayload::PeakStereo { l_db, r_db, l_hold, r_hold } => {
                         // Update viz state directly
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.this.peak_l = l_level;
-                        viz_state.this.peak_r = r_level;
+                        viz_state.this.db_l = l_db;
+                        viz_state.this.db_r = r_db;
                         viz_state.this.hold_l = l_hold;
                         viz_state.this.hold_r = r_hold;
                     }
-                    VizPayload::PeakMono { level, hold } => {
+                    VizPayload::PeakMono { m_db, hold } => {
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.this.peak_m = level;
+                        viz_state.this.db_m = m_db;
                         viz_state.this.hold_m = hold;
                     }
                     VizPayload::HistMono { bands } => {
@@ -2318,9 +2318,9 @@ impl DisplayManager {
                         viz_state.last_bands_l = bands_l;
                         viz_state.last_bands_r = bands_r;
                     }
-                    VizPayload::VuMono { db } => {
+                    VizPayload::VuMono { m_db } => {
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.this.db_m = db;
+                        viz_state.this.db_m = m_db;
                     }
                     VizPayload::VuStereo { l_db, r_db } => {
                         let viz_state = self.visualizer.viz_state_mut();
@@ -2334,9 +2334,9 @@ impl DisplayManager {
                         viz_state.this.db_m = m_db;
                         viz_state.this.hold_m = peak_hold;
                     }
-                    VizPayload::AioVuMono { db } => {
+                    VizPayload::AioVuMono { m_db } => {
                         let viz_state = self.visualizer.viz_state_mut();
-                        viz_state.this.db_m = db;
+                        viz_state.this.db_m = m_db;
                         // Update track info for AIO display
                         let track_info = if !self.artist.is_empty() && !self.title.is_empty() {
                             format!("{} - {}", self.artist, self.title)

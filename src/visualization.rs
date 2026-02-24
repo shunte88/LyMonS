@@ -89,6 +89,10 @@ pub struct Visual {
     pub can_widen: bool,
     pub peak_m: Vec<bool>,
     pub hold_m: Vec<bool>,
+    pub peak_l: Vec<bool>,
+    pub hold_l: Vec<bool>,
+    pub peak_r: Vec<bool>,
+    pub hold_r: Vec<bool>,
     re: String,
 }
 
@@ -135,6 +139,10 @@ impl Visual {
             can_widen,
             peak_m: init_vec.clone(),
             hold_m: init_vec.clone(),
+            peak_l: init_vec.clone(),
+            hold_l: init_vec.clone(),
+            peak_r: init_vec.clone(),
+            hold_r: init_vec.clone(),
             re,
         }
     }
@@ -147,6 +155,10 @@ impl Visual {
         over_right: bool,
         peak_m: Vec<bool>,
         hold_m: Vec<bool>,
+        peak_l: Vec<bool>,
+        hold_l: Vec<bool>,
+        peak_r: Vec<bool>,
+        hold_r: Vec<bool>,
     ) -> Result<(), VizError> {
 
         if !self.svg_supported {
@@ -186,6 +198,27 @@ impl Visual {
             }
         }
 
+        if peak_l.len()>0 && hold_l.len()>0 { 
+            for (i, &value) in peak_l.iter().enumerate() {
+                let tag = format!("{{{{peak_left_{:0width$}}}}}", i, width = 2);
+                let mut replacement = if value { "1" } else { "0.5" };
+                if hold_l[i] {
+                    replacement = "1"
+                }
+                data = data.replace(tag.as_str(), replacement);
+            }
+        }
+        if peak_r.len()>0 && hold_r.len()>0 { 
+            for (i, &value) in peak_r.iter().enumerate() {
+                let tag = format!("{{{{peak_right_{:0width$}}}}}", i, width = 2);
+                let mut replacement = if value { "1" } else { "0.5" };
+                if hold_r[i] {
+                    replacement = "1"
+                }
+                data = data.replace(tag.as_str(), replacement);
+            }
+        }
+
         // patch any missed replacement tags
         let re = Regex::new(self.re.as_str()).unwrap();
         let replace = "0";
@@ -204,6 +237,10 @@ impl Visual {
         over_right: bool,
         peak_m: Vec<bool>,
         hold_m: Vec<bool>,
+        peak_l: Vec<bool>,
+        hold_l: Vec<bool>,
+        peak_r: Vec<bool>,
+        hold_r: Vec<bool>,
     ) -> Result<ImageRaw<BinaryColor>, VizError> {
         // Delegate to blocking version (no actual async ops here)
         self.update_and_render_blocking(        
@@ -213,6 +250,10 @@ impl Visual {
             over_right,
             peak_m,
             hold_m,
+            peak_l,
+            hold_l,
+            peak_r,
+            hold_r,
         )
     }
 
@@ -224,6 +265,10 @@ impl Visual {
         over_right: bool,
         peak_m: Vec<bool>,
         hold_m: Vec<bool>,
+        peak_l: Vec<bool>,
+        hold_l: Vec<bool>,
+        peak_r: Vec<bool>,
+        hold_r: Vec<bool>,
     ) -> Result<ImageRaw<BinaryColor>, VizError> {
 
         let width = self.rect.size.width as u32;
@@ -237,6 +282,10 @@ impl Visual {
                 over_right,
                 peak_m,
                 hold_m,
+                peak_l,
+                hold_l,
+                peak_r,
+                hold_r,
             )?;
             let data = self.modified_svg_data.clone();
             let svg_renderer = SvgImageRenderer::new(&data, width, height)
@@ -258,6 +307,10 @@ impl Visual {
         over_right: bool,
         peak_m: Vec<bool>,
         hold_m: Vec<bool>,
+        peak_l: Vec<bool>,
+        hold_l: Vec<bool>,
+        peak_r: Vec<bool>,
+        hold_r: Vec<bool>,
     ) -> Result<ImageRaw<Gray4>, VizError> {
 
         let width = self.rect.size.width as u32;
@@ -271,6 +324,10 @@ impl Visual {
                 over_right,
                 peak_m,
                 hold_m,
+                peak_l,
+                hold_l,
+                peak_r,
+                hold_r,
             )?;
             let data = self.modified_svg_data.clone();
             
@@ -344,10 +401,10 @@ pub fn visualizer_svg_supported(kind: Visualization) -> bool {
         Visualization::VuStereo |
         Visualization::VuMono |
         Visualization::VuStereoWithCenterPeak |
-        Visualization::AioVuMono => true,
+        Visualization::AioVuMono |
         Visualization::PeakStereo |
         Visualization::PeakMono  |
-        Visualization::AioHistMono |
+        Visualization::AioHistMono => true,
         Visualization::HistStereo |
         Visualization::HistMono |
         Visualization::WaveformSpectrum |
@@ -443,7 +500,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
         Visualization::PeakStereo  => {
             Visual::new(
                 kind,
-                String::from(format!("{folder}peak.svg")),
+                String::from(format!("{folder}peakstereo.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 0.0,
                 0.0,
@@ -451,7 +508,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
-                0,
+                16,
             )
         },
         Visualization::PeakMono   => {
@@ -465,7 +522,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 0.0,
                 false,
                 false,
-                0,
+                16,
             )
         },
         Visualization::AioHistMono  => {

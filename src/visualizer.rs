@@ -66,16 +66,16 @@ pub struct VizFrameOut {
 #[derive(Debug, Clone)]
 pub enum VizPayload {
     VuStereo { l_db: f32, r_db: f32 },
-    VuMono   { db: f32 },
+    VuMono   { m_db: f32 },
     PeakStereo {
-        l_level: u8, r_level: u8,
+        l_db: f32, r_db: f32,
         l_hold: u8,  r_hold: u8,
     },
-    PeakMono { level: u8, hold: u8 },
+    PeakMono { m_db: f32, hold: u8 },
     HistStereo { bands_l: Vec<u8>, bands_r: Vec<u8> },
     HistMono   { bands: Vec<u8> },
     VuStereoWithCenterPeak { l_db: f32, r_db: f32, m_db: f32, peak_hold: u8 },
-    AioVuMono { db: f32 },
+    AioVuMono { m_db: f32 },
     AioHistMono { bands: Vec<u8> },
     WaveformSpectrum {
         waveform_l: Vec<i16>,     // Downsampled waveform data (L channel)
@@ -221,58 +221,55 @@ async fn visualizer_worker(
                     let (_pk_l, rms_l) = peak_and_rms(left);
                     let (_pk_r, rms_r) = peak_and_rms(right);
                     // downmix RMS ≈ sqrt((L^2 + R^2)/2)
-                    let mono_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
-                    let db = dbfs::dbfs_to_vudb(dbfs(mono_rms)); // includes VU meter adj.
+                    let m_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
+                    let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                        VizPayload::VuMono { db });
+                        VizPayload::VuMono { m_db }
+                    );
                 }
                 Visualization::AioVuMono => {
                     let (_pk_l, rms_l) = peak_and_rms(left);
                     let (_pk_r, rms_r) = peak_and_rms(right);
                     // downmix RMS ≈ sqrt((L^2 + R^2)/2)
-                    let mono_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
-                    let db = dbfs::dbfs_to_vudb(dbfs(mono_rms)); // includes VU meter adj.
+                    let m_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
+                    let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                        VizPayload::AioVuMono { db });
+                        VizPayload::AioVuMono { m_db }
+                    );
                 }
                 Visualization::PeakStereo => {
-                    // Peaks in dBFS → level
-                    let (pk_l_i16, _) = peak_and_rms(left);
-                    let (pk_r_i16, _) = peak_and_rms(right);
-                    let l_db = dbfs(pk_l_i16 as f32);
-                    let r_db = dbfs(pk_r_i16 as f32);
-                    let mut l_level = db_to_level(l_db);
-                    let mut r_level = db_to_level(r_db);
-                    // peak-hold with decay
-                    peak_hold_l = peak_hold_l.saturating_sub(LEVEL_DECAY_STEPS_PER_FRAME).max(l_level);
-                    peak_hold_r = peak_hold_r.saturating_sub(LEVEL_DECAY_STEPS_PER_FRAME).max(r_level);
-                    
-                    // clamp to range - REVIEW! tweak a tad as we're getting a whole bunch of clipping
-                    l_level = l_level.min(PEAK_METER_LEVELS_MAX);
-                    r_level = r_level.min(PEAK_METER_LEVELS_MAX);
-                 
+                    let (_pk_l, rms_l) = peak_and_rms(left);
+                    let (_pk_r, rms_r) = peak_and_rms(right);
+                    let l_db = dbfs::dbfs_to_vudb(dbfs(rms_l));
+                    let r_db = dbfs::dbfs_to_vudb(dbfs(rms_r));                 
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::PeakStereo {
-                            l_level, r_level,
-                            l_hold: peak_hold_l, r_hold: peak_hold_r,
-                        });
+                            l_db, r_db,
+                            l_hold: 0, r_hold: 0,
+                        }
+                    );
                 }
                 Visualization::PeakMono => {
-                    let (pk_l_i16, _) = peak_and_rms(left);
-                    let (pk_r_i16, _) = peak_and_rms(right);
-                    let mono_pk_db = dbfs(pk_l_i16.max(pk_r_i16) as f32);
-                    let mut level = db_to_level(mono_pk_db);
-                    peak_hold_m = peak_hold_m.saturating_sub(LEVEL_DECAY_STEPS_PER_FRAME).max(level);
-                    level = level.min(PEAK_METER_LEVELS_MAX);
-
+                    let (_pk_l, rms_l) = peak_and_rms(left);
+                    let (_pk_r, rms_r) = peak_and_rms(right);
+                    // downmix RMS ≈ sqrt((L^2 + R^2)/2)
+                    let m_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
+                    let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                        VizPayload::PeakMono { level, hold: peak_hold_m });
+                        VizPayload::PeakMono { 
+                            m_db, hold: 0, 
+                        }
+                    );
                 }
                 Visualization::HistStereo => {
                     if let Some(e) = &mut eng {
                         let (bands_l, bands_r) = e.compute_levels(left, right);
                         publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                            VizPayload::HistStereo { bands_l, bands_r });
+                            VizPayload::HistStereo { 
+                                bands_l, 
+                                bands_r, 
+                            }
+                        );
                     }
                 }
                 Visualization::HistMono => {
