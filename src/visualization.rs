@@ -147,6 +147,50 @@ impl Visual {
         }
     }
 
+    pub fn apply_template(
+        &mut self,
+        template: &str, 
+        peak: &[bool], 
+        hold: &[bool],
+        seed: &str,
+    ) -> String {
+        use std::collections::HashMap;
+        // Build lookup
+        let values: HashMap<String, &str> = peak.iter()
+            .zip(hold.iter())
+            .enumerate()
+            .map(|(i, (&peak, &hold))| {
+                let tag = format!("{}_{:02}", seed, i);
+                let value = if peak || hold { "1" } else { "0.5" };
+                (tag, value)
+            })
+            .collect();
+
+        let mut result = String::with_capacity(template.len());
+        let mut chars = template.chars().peekable();
+
+        while let Some(c) = chars.next() {
+            if c == '{' && chars.peek() == Some(&'{') {
+                chars.next(); // consume second '{'
+                let key: String = chars.by_ref()
+                    .take_while(|&c| c != '}')
+                    .collect();
+                chars.next(); // consume second '}'
+
+                if let Some(value) = values.get(&key) {
+                    result.push_str(value);
+                } else {
+                    // Unknown tag, preserve it
+                    result.push_str(&format!("{{{{{}}}}}", key));
+                }
+            } else {
+                result.push(c);
+            }
+        }
+
+        result
+    }
+
     pub fn update (
         &mut self,
         metric_left: f64,
@@ -187,37 +231,9 @@ impl Visual {
         data = data.replace("{{needle_left}}", metric_left.to_string().as_str());
         data = data.replace("{{needle_right}}", metric_right.to_string().as_str());
 
-        if peak_m.len()>0 && hold_m.len()>0 { 
-            for (i, &value) in peak_m.iter().enumerate() {
-                let tag = format!("{{{{peak_{:0width$}}}}}", i, width = 2);
-                let mut replacement = if value { "1" } else { "0.5" };
-                if hold_m[i] {
-                    replacement = "1"
-                }
-                data = data.replace(tag.as_str(), replacement);
-            }
-        }
-
-        if peak_l.len()>0 && hold_l.len()>0 { 
-            for (i, &value) in peak_l.iter().enumerate() {
-                let tag = format!("{{{{peak_left_{:0width$}}}}}", i, width = 2);
-                let mut replacement = if value { "1" } else { "0.5" };
-                if hold_l[i] {
-                    replacement = "1"
-                }
-                data = data.replace(tag.as_str(), replacement);
-            }
-        }
-        if peak_r.len()>0 && hold_r.len()>0 { 
-            for (i, &value) in peak_r.iter().enumerate() {
-                let tag = format!("{{{{peak_right_{:0width$}}}}}", i, width = 2);
-                let mut replacement = if value { "1" } else { "0.5" };
-                if hold_r[i] {
-                    replacement = "1"
-                }
-                data = data.replace(tag.as_str(), replacement);
-            }
-        }
+        data = self.apply_template(&data, &peak_m, &hold_m, "peak");
+        data = self.apply_template(&data, &peak_l, &hold_l, "peak_left");
+        data = self.apply_template(&data, &peak_r, &hold_r, "peak_right");
 
         // patch any missed replacement tags
         let re = Regex::new(self.re.as_str()).unwrap();
@@ -599,3 +615,28 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
     viz
 }
 
+/*
+
+if !peak_m.is_empty() && !hold_m.is_empty() {
+    let replacements: Vec<(String, &str)> = peak_m.iter()
+        .zip(hold_m.iter())
+        .enumerate()
+        .map(|(i, (&peak, &hold))| {
+            let tag = format!("{{{{peak_{:02}}}}}", i);
+            let value = if peak || hold { "1" } else { "0.5" };
+            (tag, value)
+        })
+        .collect();
+
+    for (tag, value) in &replacements {
+        data = data.replace(tag.as_str(), value);
+    }
+}
+
+A few notes:
+
+- `!peak_m.is_empty()` is idiomatic over `.len() > 0`
+- The `peak || hold` simplifies your conditional — if either is true, it's `"1"`
+- This is cleaner but still O(n × len(data)) due to repeated `replace` calls
+
+If you really need to scale, the proper fix is to do a **single pass** over `data` rather than N replacements. Something like the `aho-corasick` crate for multi-pattern replacement, or building the string from a template with indexed slots instead of doing find-and-replace. But for 19 LEDs and a reasonably sized string, this is likely fine. */
