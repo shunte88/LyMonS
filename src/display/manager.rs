@@ -46,7 +46,6 @@ use crate::display::components::{
     ClockDisplay,
     WeatherDisplay as WeatherComponent,
     VisualizerComponent,
-    EasterEggsComponent,
 };
 
 use crate::clock_font::{set_clock_font};
@@ -251,8 +250,6 @@ pub struct DisplayManager {
     weather_display: WeatherComponent,
     /// Visualizer component
     visualizer: VisualizerComponent,
-    /// Easter eggs component
-    easter_eggs_component: EasterEggsComponent,
     /// Easter egg animations
     pub easter_egg: Eggs,
     /// Whether to show system metrics
@@ -387,8 +384,6 @@ impl DisplayManager {
             crate::visualization::Visualization::NoVisualization,
         );
 
-        let easter_eggs_component = EasterEggsComponent::new(layout.clone());
-
         let easter_egg = set_easter_egg(egg_name);
 
         // Create performance metrics with target based on display capabilities
@@ -408,7 +403,6 @@ impl DisplayManager {
             clock_display,
             weather_display,
             visualizer,
-            easter_eggs_component,
             easter_egg,
             show_metrics,
             device_metrics: MachineMetrics::default(),
@@ -3077,6 +3071,7 @@ impl DisplayManager {
         // Extract initial data to populate display manager fields
         let weather_display = weather.weather_data.get_weather_display();
         self.weather_temp_units = weather_display.temp_units.clone();
+        self.weather_wind_speed_units = weather_display.wind_speed_units.clone();
         // Location name could be fetched from coordinates if needed
         // For now, just set a placeholder
         self.weather_location_name = "Local".to_string();

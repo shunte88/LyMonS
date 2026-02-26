@@ -26,7 +26,6 @@ pub mod scrollers;
 pub mod clock;
 pub mod weather;
 pub mod visualizer;
-pub mod easter_eggs;
 
 // Re-exports
 pub use status_bar::StatusBar;
@@ -34,4 +33,3 @@ pub use scrollers::ScrollingText;
 pub use clock::ClockDisplay;
 pub use weather::WeatherDisplay;
 pub use visualizer::VisualizerComponent;
-pub use easter_eggs::EasterEggsComponent;

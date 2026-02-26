@@ -76,6 +76,52 @@ impl fmt::Display for EggsError {
 
 impl Error for EggsError {}
 
+#[derive(Clone, Debug, PartialEq)]
+struct AnimState {
+    tick: u32,
+    frames_per_cycle: u32,
+}
+
+impl AnimState {
+
+    fn new() -> Self
+    {
+        Self {
+            tick: 0,
+            frames_per_cycle: 20,
+        }
+    }
+
+    fn advance(&mut self) {
+        self.tick = (self.tick + 1) % self.frames_per_cycle;
+    }
+
+    fn inchworm(&self) -> (f64, f64) {
+        let t = self.tick as f64 / self.frames_per_cycle as f64;
+        if t < 0.5 {
+            // Phase 1: stretch - front moves, back stays
+            let p = t * 2.0;
+            let stretch = 1.0 + 0.3 * p;  // widen
+            let offset = 5.0 * p;          // shift forward
+            (stretch, offset)
+        } else {
+            // Phase 2: pull - body compresses, back catches up
+            let p = (t - 0.5) * 2.0;
+            let stretch = 1.3 - 0.3 * p;  // back to normal
+            let offset = 5.0 + 5.0 * p;   // continue forward
+            (stretch, offset)
+        }
+    }
+
+    fn bounce_offset(&self) -> f64 {
+        let t = self.tick as f64 / self.frames_per_cycle as f64;
+        let height = 20.0;
+        // Simple parabolic bounce
+        let phase = (t * std::f64::consts::PI).sin();
+        height * phase
+    }
+}
+
 /// Renders Easter Egg [animation] from SVG data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Eggs {
@@ -95,6 +141,7 @@ pub struct Eggs {
     track_pcnt: f64,
     track_time_secs: f32,
     can_widen: bool,
+    groovy: AnimState,
     re: String,
 }
 
@@ -327,6 +374,8 @@ impl Eggs {
         let height = rect.size.height as usize;
         let svg_data = fs::read_to_string(path).expect("load SVG file");
         let buffer_size = height as usize * ((width + 7) / 8) as usize;
+        let groovy = AnimState::new();
+
         Self {
             egg_type,
             rect,
@@ -344,6 +393,7 @@ impl Eggs {
             track_pcnt: 0.00,
             track_time_secs: 0.00,
             can_widen,
+            groovy,
             re,
         }
     }
@@ -372,26 +422,32 @@ impl Eggs {
         }
 
         // level - supports switch and on-off (cumulative) modes
-        if level == 3 {
-            data = data.replace("{{level-switch-03}}", "1.0");
-            data = data.replace("{{level-onoff-02}}", "1.0");
-            data = data.replace("{{level-onoff-03}}", "1.0");
-        } else {
-            data = data.replace("{{level-switch-03}}", "0.0");
-            data = data.replace("{{level-onoff-02}}", "0.0");
-            data = data.replace("{{level-onoff-03}}", "0.0");
-        }
-        if level == 2 {
-            data = data.replace("{{level-switch-02}}", "1.0");
-            data = data.replace("{{level-onoff-02}}", "1.0");
-        } else {
-            data = data.replace("{{level-switch-02}}", "0.0");
-            data = data.replace("{{level-onoff-02}}", "0.0");
-        }
-        if level == 1 {
-            data = data.replace("{{level1-switch-0}}", "1.0");
-        } else {
-            data = data.replace("{{level-switch-01}}", "0.0");
+        if data.contains("{{level") {
+            if level == 3 {
+                data = data
+                    .replace("{{level-switch-03}}", "1.0")
+                    .replace("{{level-onoff-02}}", "1.0")
+                    .replace("{{level-onoff-03}}", "1.0");
+            } else {
+                data = data
+                    .replace("{{level-switch-03}}", "0.0")
+                    .replace("{{level-onoff-02}}", "0.0")
+                    .replace("{{level-onoff-03}}", "0.0");
+            }
+            if level == 2 {
+                data = data
+                    .replace("{{level-switch-02}}", "1.0")
+                    .replace("{{level-onoff-02}}", "1.0");
+            } else {
+                data = data
+                    .replace("{{level-switch-02}}", "0.0")
+                    .replace("{{level-onoff-02}}", "0.0");
+            }
+            if level == 1 {
+                data = data.replace("{{level1-switch-0}}", "1.0");
+            } else {
+                data = data.replace("{{level-switch-01}}", "0.0");
+            }
         }
 
         // artist
@@ -406,24 +462,29 @@ impl Eggs {
         let seconds = now.second() as f64;
         let seconds_angle =  (
             now.second() as f64 + now.timestamp_subsec_nanos() as f64 / 1_000_000_000.0) * 12.0;
-        data = data.replace("{{seconds-angle}}", seconds_angle.to_string().as_str());
-        data = data.replace("{{anticlockwise-seconds-angle}}", format!("-{seconds_angle}").as_str());
+        if data.contains("-angle}}") {
+            data = data
+                .replace("{{seconds-angle}}", seconds_angle.to_string().as_str())
+                .replace("{{anticlockwise-seconds-angle}}", format!("-{seconds_angle}").as_str());
+        }
         if seconds%2.0 == 0.0 {
-            data = data.replace("{{flip}}", "1");
-            data = data.replace("{{flip-odd}}", "-1");
-            data = data.replace("{{flip-even}}", "1");
-            data = data.replace("{{blink-even}}", "1.0");
-            data = data.replace("{{blink-odd}}", "0.0");
-            data = data.replace("{{ripple-even}}", "1.0");
-            data = data.replace("{{ripple-odd}}", "0.0");
+            data = data
+                .replace("{{flip}}", "1")
+                .replace("{{flip-odd}}", "-1")
+            	.replace("{{flip-even}}", "1")
+            	.replace("{{blink-even}}", "1.0")
+            	.replace("{{blink-odd}}", "0.0")
+            	.replace("{{ripple-even}}", "1.0")
+            	.replace("{{ripple-odd}}", "0.0");
         } else {
-            data = data.replace("{{flip}}", "-1");
-            data = data.replace("{{flip-odd}}", "1");
-            data = data.replace("{{flip-even}}", "-1");
-            data = data.replace("{{blink-even}}", "0.0");
-            data = data.replace("{{blink-odd}}", "1.0");
-            data = data.replace("{{ripple-even}}", "0.0");
-            data = data.replace("{{ripple-odd}}", "1.0");
+            data = data
+                .replace("{{flip}}", "-1")
+            	.replace("{{flip-odd}}", "1")
+            	.replace("{{flip-even}}", "-1")
+            	.replace("{{blink-even}}", "0.0")
+            	.replace("{{blink-odd}}", "1.0")
+            	.replace("{{ripple-even}}", "0.0")
+            	.replace("{{ripple-odd}}", "1.0");
         }
 
         data = data.replace("{{track-percent}}", track_percent.to_string().as_str());
@@ -443,6 +504,26 @@ impl Eggs {
         // progress-arc - note using _pct flavor as we're called with precalculated percentile
         let arc_angle = self.calc_progress_angle_pct(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
         data = data.replace("{{progress-arc}}", arc_angle.to_string().as_str());
+
+        if data.contains("{{worm-") {
+            /*
+            <g transform="translate({{worm-x}}, 0) scale({{worm-stretch}}, 1)">
+            <!-- character paths -->
+            </g>
+            */
+            self.groovy.advance();
+            let inchworm_offset = self.groovy.bounce_offset();
+             // simple 2-frame stretch animation for fun
+            let inchworm_stretch = if self.groovy.tick < self.groovy.frames_per_cycle / 2 {
+                1.0 + 0.3 * (self.groovy.tick as f64 / (self.groovy.frames_per_cycle as f64 / 2.0))
+            } else {
+                1.3 - 0.3 * ((self.groovy.tick - self.groovy.frames_per_cycle / 2) as f64 / (self.groovy.frames_per_cycle as f64 / 2.0))
+            };
+            data = data
+                .replace("{{worm-stretch}}", inchworm_stretch.to_string().as_str())
+                .replace("{{worm-x}}", inchworm_offset.to_string().as_str());
+        }
+
         // patch any missed replacement tags
         let re = Regex::new(self.re.as_str()).unwrap();
         let replace = "0";
@@ -583,4 +664,3 @@ impl Eggs {
     }
 
 }
-
