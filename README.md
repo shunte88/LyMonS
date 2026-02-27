@@ -6,7 +6,7 @@
 
 **An LMS Monitor For The Future**
 
-> LyMonS version 0.2.8 | Built: 2026-02-24
+> LyMonS version 0.3.0 | Built: 2026-02-27
 
 OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
 
