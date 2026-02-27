@@ -24,16 +24,71 @@
 
 use crate::display::layout::LayoutConfig;
 use embedded_graphics::{
-    image::{ImageRaw},
+    image::{Image, ImageRaw},
     pixelcolor::{BinaryColor, Gray4},
     prelude::*,
-    primitives::{Rectangle},
+    primitives::Rectangle,
 };
 use std::error::Error;
 use std::fmt;
 use std::fs;
 
 use crate::svgimage::SvgImageRenderer;
+
+/// Trait that abstracts SVG-to-buffer rendering for different color depths.
+///
+/// Implementing this for `BinaryColor` and `Gray4` allows `Visual::render_svg_and_draw<D>()`
+/// to work generically, eliminating paired `_mono`/`_gray4` draw functions.
+pub trait SvgColorDepth: PixelColor + From<<Self as PixelColor>::Raw> {
+    /// Buffer size in bytes required for a `width × height` frame.
+    fn required_buffer_size(width: u32, height: u32) -> usize;
+
+    /// Rasterize `renderer` into `buffer` using this color depth's format.
+    fn render_to_buffer(renderer: &SvgImageRenderer, buffer: &mut Vec<u8>) -> Result<(), VizError>;
+
+    /// Draw a rendered buffer to `display`.
+    ///
+    /// Implemented concretely per color depth so the compiler sees the exact
+    /// `ImageRaw<BinaryColor>` / `ImageRaw<Gray4>` type and can satisfy the
+    /// `ImageDrawable` trait bound without additional HRTB constraints on callers.
+    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, display: &mut D) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Self>;
+}
+
+impl SvgColorDepth for BinaryColor {
+    fn required_buffer_size(width: u32, height: u32) -> usize {
+        (width * height / 8) as usize
+    }
+    fn render_to_buffer(renderer: &SvgImageRenderer, buffer: &mut Vec<u8>) -> Result<(), VizError> {
+        renderer.render_to_buffer(buffer)
+            .map_err(|e| VizError::VizBufferError(e.to_string()))
+    }
+    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, display: &mut D) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor>,
+    {
+        let raw = ImageRaw::<BinaryColor>::new(buffer, width);
+        Image::new(&raw, Point::zero()).draw(display)
+    }
+}
+
+impl SvgColorDepth for Gray4 {
+    fn required_buffer_size(width: u32, height: u32) -> usize {
+        ((width * height + 1) / 2) as usize
+    }
+    fn render_to_buffer(renderer: &SvgImageRenderer, buffer: &mut Vec<u8>) -> Result<(), VizError> {
+        renderer.render_to_buffer_gray4(buffer)
+            .map_err(|e| VizError::VizBufferError(e.to_string()))
+    }
+    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, display: &mut D) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Gray4>,
+    {
+        let raw = ImageRaw::<Gray4>::new(buffer, width);
+        Image::new(&raw, Point::zero()).draw(display)
+    }
+}
 
 /// Which visualization to produce.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -161,7 +216,8 @@ impl Visual {
             .enumerate()
             .map(|(i, (&peak, &hold))| {
                 let tag = format!("{}_{:02}", seed, i);
-                let value = if peak || hold { "1" } else { "0.5" };
+                // using 0.4 as equates to off on mono OLED
+                let value = if peak || hold { "1" } else { "0.4" };
                 (tag, value)
             })
             .collect();
@@ -360,6 +416,91 @@ impl Visual {
         let raw_image = ImageRaw::<Gray4>::new(&self.buffer, width);
         Ok(raw_image)
 
+    }
+
+    /// Generic SVG render - dispatches to the right buffer format based on color depth `C`.
+    ///
+    /// Replaces the separate `update_and_render_blocking` / `update_and_render_blocking_gray4`
+    /// call sites in draw functions, giving a single generic entry point.
+    pub fn render_svg<C>(
+        &mut self,
+        metric_left: f64,
+        over_left: bool,
+        metric_right: f64,
+        over_right: bool,
+        peak_m: Vec<bool>,
+        hold_m: Vec<bool>,
+        peak_l: Vec<bool>,
+        hold_l: Vec<bool>,
+        peak_r: Vec<bool>,
+        hold_r: Vec<bool>,
+    ) -> Result<ImageRaw<C>, VizError>
+    where
+        C: SvgColorDepth,
+    {
+        let width = self.rect.size.width;
+        let height = self.rect.size.height;
+
+        if self.svg_supported {
+            self.update(
+                metric_left, over_left, metric_right, over_right,
+                peak_m, hold_m, peak_l, hold_l, peak_r, hold_r,
+            )?;
+            let data = self.modified_svg_data.clone();
+            let svg_renderer = SvgImageRenderer::new(&data, width, height)
+                .map_err(|e| VizError::VizRenderError(e.to_string()))?;
+            let buffer_size = C::required_buffer_size(width, height);
+            self.buffer.resize(buffer_size, 0);
+            C::render_to_buffer(&svg_renderer, &mut self.buffer)?;
+        }
+        Ok(ImageRaw::<C>::new(&self.buffer, width))
+    }
+
+    /// Render SVG and draw directly to `display`.
+    ///
+    /// Avoids returning `ImageRaw<C>` to the caller (which would require
+    /// `ImageDrawable` HRTB bounds), instead delegating the draw step to the
+    /// concrete `SvgColorDepth::draw_buffer_to_display` impl.
+    pub fn render_svg_and_draw<D>(
+        &mut self,
+        display: &mut D,
+        metric_left: f64,
+        over_left: bool,
+        metric_right: f64,
+        over_right: bool,
+        peak_m: Vec<bool>,
+        hold_m: Vec<bool>,
+        peak_l: Vec<bool>,
+        hold_l: Vec<bool>,
+        peak_r: Vec<bool>,
+        hold_r: Vec<bool>,
+    ) -> Result<(), D::Error>
+    where
+        D: DrawTarget,
+        D::Color: SvgColorDepth,
+    {
+        let width = self.rect.size.width;
+        let height = self.rect.size.height;
+
+        if self.svg_supported {
+            self.update(
+                metric_left, over_left, metric_right, over_right,
+                peak_m, hold_m, peak_l, hold_l, peak_r, hold_r,
+            ).map_err(|e| {
+                // VizError can't be converted to D::Error generically;
+                // log and treat as a no-op draw rather than crashing.
+                eprintln!("SVG update error: {}", e);
+            }).ok();
+            let data = self.modified_svg_data.clone();
+            if let Ok(svg_renderer) = crate::svgimage::SvgImageRenderer::new(&data, width, height) {
+                let buffer_size = D::Color::required_buffer_size(width, height);
+                self.buffer.resize(buffer_size, 0);
+                if D::Color::render_to_buffer(&svg_renderer, &mut self.buffer).is_ok() {
+                    D::Color::draw_buffer_to_display(&self.buffer, width, display)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn get_svg_filename(&self) -> &str {

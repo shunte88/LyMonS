@@ -115,6 +115,11 @@ impl DisplayDriverFactory {
                 Ok(Box::new(Ssd1309Driver::new_i2c(bus, *address, config)?))
             }
 
+            #[cfg(feature = "driver-ssd1309")]
+            (DriverKind::Ssd1309, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
+                Ok(Box::new(Ssd1309Driver::new_spi(bus, *dc_pin, *rst_pin, config)?))
+            }
+
             #[cfg(feature = "driver-ssd1322")]
             (DriverKind::Ssd1322, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
                 Ok(Box::new(Ssd1322Driver::new_spi(
@@ -249,6 +254,56 @@ impl DisplayDriverFactory {
         };
 
         Ok(Box::new(driver))
+    }
+
+    /// Return a ready-to-use default DisplayConfig for the given driver kind.
+    ///
+    /// This is useful for generating example configs, `--dump-config`, and
+    /// first-time setup. Defaults are the most common Raspberry Pi wiring.
+    pub fn default_config_for(kind: &DriverKind) -> DisplayConfig {
+        match kind {
+            #[cfg(feature = "driver-ssd1306")]
+            DriverKind::Ssd1306 => {
+                use crate::display::drivers::ssd1306::Ssd1306Driver;
+                Ssd1306Driver::default_config()
+            }
+            #[cfg(feature = "driver-ssd1309")]
+            DriverKind::Ssd1309 => {
+                use crate::display::drivers::ssd1309::Ssd1309Driver;
+                Ssd1309Driver::default_i2c_config()
+            }
+            #[cfg(feature = "driver-ssd1322")]
+            DriverKind::Ssd1322 => {
+                use crate::display::drivers::ssd1322::Ssd1322Driver;
+                Ssd1322Driver::default_config()
+            }
+            #[cfg(feature = "driver-sh1106")]
+            DriverKind::Sh1106 => {
+                use crate::display::drivers::sh1106::Sh1106Driver;
+                Sh1106Driver::default_config()
+            }
+            DriverKind::SharpMemory => {
+                use crate::config::BusConfig;
+                DisplayConfig {
+                    driver: Some(DriverKind::SharpMemory),
+                    width: Some(400),
+                    height: Some(240),
+                    bus: Some(BusConfig::Spi {
+                        bus: "/dev/spidev0.0".to_string(),
+                        speed_hz: Some(2_000_000),
+                        dc_pin: 24,
+                        rst_pin: None,
+                        cs_pin: None,
+                    }),
+                    brightness: Some(255),
+                    invert: Some(false),
+                    rotate_deg: Some(0),
+                    emulated: Some(false),
+                }
+            }
+            #[allow(unreachable_patterns)]
+            _ => DisplayConfig::default(),
+        }
     }
 
     /// Validate a configuration without creating a driver

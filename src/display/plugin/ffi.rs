@@ -373,10 +373,17 @@ impl From<&DisplayCapabilities> for LyMonsDisplayCapabilities {
 
 impl From<LyMonsDisplayCapabilities> for DisplayCapabilities {
     fn from(caps: LyMonsDisplayCapabilities) -> Self {
+        use crate::display::traits::{BusInterface, I2cInfo};
         Self {
             width: caps.width,
             height: caps.height,
             color_depth: caps.color_depth.into(),
+            // Plugins don't expose interface details via FFI; use a virtual I2C placeholder
+            interface: BusInterface::I2c(I2cInfo {
+                default_address: 0x3C,
+                alt_address: None,
+                max_speed_hz: 400_000,
+            }),
             supports_rotation: caps.supports_rotation,
             max_fps: caps.max_fps,
             supports_brightness: caps.supports_brightness,

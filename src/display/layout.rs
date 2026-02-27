@@ -21,7 +21,7 @@
  *
  */
 
-use crate::display::traits::{DisplayCapabilities, ColorDepth};
+use crate::display::traits::{DisplayCapabilities, ColorDepth, BusInterface, I2cInfo};
 
 /// Layout configuration for different display resolutions
 ///
@@ -505,6 +505,11 @@ pub fn layout_for_resolution(width: u32, height: u32, color_depth: ColorDepth) -
         width,
         height,
         color_depth,
+        interface: BusInterface::I2c(I2cInfo {
+            default_address: 0x3C,
+            alt_address: None,
+            max_speed_hz: 400_000,
+        }),
         supports_rotation: false,
         max_fps: 60,
         supports_brightness: true,

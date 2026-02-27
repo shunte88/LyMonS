@@ -35,12 +35,22 @@ use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::geometry::Size;
 
-use crate::config::DisplayConfig;
+use crate::config::{DisplayConfig, BusConfig};
 use crate::display::error::DisplayError;
-use crate::display::traits::{DisplayDriver, DrawableDisplay, DisplayCapabilities, ColorDepth};
+use crate::display::traits::{
+    DisplayDriver, DrawableDisplay, DisplayCapabilities, ColorDepth,
+    BusInterface, I2cInfo,
+};
 use crate::vframebuf::VarFrameBuf;
 
 use log::info;
+
+/// Default I2C address (ADDR pin → GND)
+pub const DEFAULT_I2C_ADDRESS: u8 = 0x3C;
+/// Alternate I2C address (ADDR pin → VCC)
+pub const ALT_I2C_ADDRESS: u8 = 0x3D;
+/// Maximum supported I2C clock speed
+pub const DEFAULT_I2C_SPEED_HZ: u32 = 400_000;
 
 /// SSD1306 display driver wrapper
 pub struct Ssd1306Driver {
@@ -61,6 +71,33 @@ enum Ssd1306Variants {
 }
 
 impl Ssd1306Driver {
+
+    /// Returns default DisplayConfig for SSD1306 over I2C (128x64)
+    pub fn default_config() -> DisplayConfig {
+        DisplayConfig {
+            driver: Some(crate::config::DriverKind::Ssd1306),
+            width: Some(128),
+            height: Some(64),
+            bus: Some(BusConfig::I2c {
+                bus: "/dev/i2c-1".to_string(),
+                address: DEFAULT_I2C_ADDRESS,
+                speed_hz: Some(DEFAULT_I2C_SPEED_HZ),
+            }),
+            brightness: Some(200),
+            invert: Some(false),
+            rotate_deg: Some(0),
+            emulated: Some(false),
+        }
+    }
+
+    fn i2c_interface_info() -> BusInterface {
+        BusInterface::I2c(I2cInfo {
+            default_address: DEFAULT_I2C_ADDRESS,
+            alt_address: Some(ALT_I2C_ADDRESS),
+            max_speed_hz: DEFAULT_I2C_SPEED_HZ,
+        })
+    }
+
     /// Create a new SSD1306 driver using I2C
     ///
     /// # Arguments
@@ -101,6 +138,7 @@ impl Ssd1306Driver {
                     width: 128,
                     height: 64,
                     color_depth: ColorDepth::Monochrome,
+                    interface: Self::i2c_interface_info(),
                     supports_rotation: true,
                     max_fps: 30, // I2C is slower
                     supports_brightness: true,
@@ -121,6 +159,7 @@ impl Ssd1306Driver {
                     width: 128,
                     height: 32,
                     color_depth: ColorDepth::Monochrome,
+                    interface: Self::i2c_interface_info(),
                     supports_rotation: true,
                     max_fps: 30,
                     supports_brightness: true,

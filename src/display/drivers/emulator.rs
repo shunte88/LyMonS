@@ -35,7 +35,7 @@ use crate::config::DisplayConfig;
 #[cfg(feature = "emulator")]
 use crate::display::error::DisplayError;
 #[cfg(feature = "emulator")]
-use crate::display::traits::{DisplayDriver, DrawableDisplay, DisplayCapabilities, ColorDepth};
+use crate::display::traits::{DisplayDriver, DrawableDisplay, DisplayCapabilities, ColorDepth, BusInterface, I2cInfo};
 #[cfg(feature = "emulator")]
 use crate::vframebuf::VarFrameBuf;
 
@@ -156,6 +156,11 @@ impl EmulatorDriver {
             width,
             height,
             color_depth: ColorDepth::Monochrome,
+            interface: BusInterface::I2c(I2cInfo {
+                default_address: 0x3C,
+                alt_address: Some(0x3D),
+                max_speed_hz: 400_000,
+            }),
             supports_rotation: true,
             max_fps: 60,
             supports_brightness: true,
@@ -195,6 +200,11 @@ impl EmulatorDriver {
             width,
             height,
             color_depth: ColorDepth::Gray4,
+            interface: BusInterface::I2c(I2cInfo {
+                default_address: 0x3C,
+                alt_address: None,
+                max_speed_hz: 400_000,
+            }),
             supports_rotation: true,
             max_fps: 60,
             supports_brightness: true,

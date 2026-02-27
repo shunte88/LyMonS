@@ -36,6 +36,69 @@ pub enum ColorDepth {
     Gray4,
 }
 
+/// I2C interface parameters
+#[derive(Debug, Clone)]
+pub struct I2cInfo {
+    /// Default I2C address (ADDR pin low / tied to GND)
+    pub default_address: u8,
+    /// Alternate I2C address (ADDR pin high / tied to VCC)
+    pub alt_address: Option<u8>,
+    /// Maximum supported I2C clock speed in Hz (typically 400_000 or 1_000_000)
+    pub max_speed_hz: u32,
+}
+
+/// SPI interface parameters
+#[derive(Debug, Clone)]
+pub struct SpiInfo {
+    /// Maximum supported SPI clock speed in Hz (typically 4_000_000 to 10_000_000)
+    pub max_speed_hz: u32,
+    /// Data/Command select pin (BCM GPIO numbering on Raspberry Pi)
+    /// HIGH = data, LOW = command
+    pub dc_pin_desc: &'static str,
+    /// Reset pin - active LOW pulse resets the controller
+    /// Set to None if reset is handled by power-on or shared line
+    pub rst_pin_desc: &'static str,
+    /// Whether a hardware RST pin is required (vs optional/tied high)
+    pub rst_required: bool,
+}
+
+/// Hardware bus interface supported by the display controller
+#[derive(Debug, Clone)]
+pub enum BusInterface {
+    /// I2C only (e.g. SSD1306, SH1106)
+    I2c(I2cInfo),
+    /// SPI only (e.g. SSD1322)
+    Spi(SpiInfo),
+    /// Supports both I2C and SPI - selected by hardware pin strapping (e.g. SSD1309)
+    Either { i2c: I2cInfo, spi: SpiInfo },
+}
+
+impl BusInterface {
+    /// Returns I2C info if this interface supports I2C
+    pub fn i2c(&self) -> Option<&I2cInfo> {
+        match self {
+            Self::I2c(info) => Some(info),
+            Self::Either { i2c, .. } => Some(i2c),
+            _ => None,
+        }
+    }
+
+    /// Returns SPI info if this interface supports SPI
+    pub fn spi(&self) -> Option<&SpiInfo> {
+        match self {
+            Self::Spi(info) => Some(info),
+            Self::Either { spi, .. } => Some(spi),
+            _ => None,
+        }
+    }
+
+    /// Returns true if this driver can use I2C
+    pub fn supports_i2c(&self) -> bool { self.i2c().is_some() }
+
+    /// Returns true if this driver can use SPI
+    pub fn supports_spi(&self) -> bool { self.spi().is_some() }
+}
+
 /// Display capabilities and metadata
 #[derive(Debug, Clone)]
 pub struct DisplayCapabilities {
@@ -45,6 +108,8 @@ pub struct DisplayCapabilities {
     pub height: u32,
     /// Color depth (monochrome or grayscale)
     pub color_depth: ColorDepth,
+    /// Hardware bus interface info (I2C, SPI, or either)
+    pub interface: BusInterface,
     /// Whether the display supports hardware rotation
     pub supports_rotation: bool,
     /// Maximum recommended frame rate

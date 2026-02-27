@@ -23,6 +23,7 @@
  */
 
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4, GrayColor};
+use embedded_graphics::prelude::PixelColor;
 
 /// Convert BinaryColor to any PixelColor type via ColorProxy
 pub trait ConvertColor<C> {
@@ -99,7 +100,7 @@ impl Pal16 {
 /// Color proxy trait - abstracts color depth conversion
 /// "color in -> if mono then white else color out"
 pub trait ColorProxy {
-    type Output;
+    type Output: PixelColor + Default;
 
     /// Convert a palette color based on display capabilities
     fn proxy(color: Pal16) -> Self::Output;
@@ -109,6 +110,10 @@ pub trait ColorProxy {
 
     /// Get the "off" color (black/min brightness)
     fn off() -> Self::Output;
+
+    /// Map a 0-255 intensity value to a pixel color.
+    /// For monochrome: threshold at 128. For Gray4: map to 0-15.
+    fn spectrum_pixel(intensity: u8) -> Self::Output;
 }
 
 /// Color proxy for monochrome displays
@@ -128,6 +133,10 @@ impl ColorProxy for MonoProxy {
     fn off() -> BinaryColor {
         BinaryColor::Off
     }
+
+    fn spectrum_pixel(intensity: u8) -> BinaryColor {
+        if intensity > 128 { BinaryColor::On } else { BinaryColor::Off }
+    }
 }
 
 /// Color proxy for 4-bit grayscale displays
@@ -146,6 +155,10 @@ impl ColorProxy for Gray4Proxy {
 
     fn off() -> Gray4 {
         Gray4::BLACK
+    }
+
+    fn spectrum_pixel(intensity: u8) -> Gray4 {
+        Gray4::new((intensity as u32 * 15 / 255) as u8)
     }
 }
 

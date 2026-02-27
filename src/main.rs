@@ -876,6 +876,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .action(ArgAction::SetTrue)
         .hide(true)
         .required(false))
+        .arg(Arg::new("driver")
+        .short('d')
+        .long("driver")
+        .help("Display driver type for emulator, overrides config (ssd1306, ssd1309, ssd1322, sh1106, sharpmemory)")
+        .value_parser(["ssd1306", "ssd1309", "ssd1322", "sh1106", "sharpmemory"])
+        .required(false))
         .arg(Arg::new("viz")
         .short('a')
         .long("viz")
@@ -911,6 +917,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let show_remaining = matches.get_flag("remain");
     let debug_enabled = matches.get_flag("debug");
     let mut emulated = matches.get_flag("emulated");
+    let driver_override = matches.get_one::<String>("driver").cloned();
     let _config_file = matches.get_one::<String>("config").unwrap();
 
     // Also check config file for emulated setting
@@ -965,18 +972,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
+        // Allow --driver CLI arg to override config
+        if let Some(ref d) = driver_override {
+            display_config.driver = Some(match d.as_str() {
+                "ssd1306"     => crate::config::DriverKind::Ssd1306,
+                "ssd1309"     => crate::config::DriverKind::Ssd1309,
+                "ssd1322"     => crate::config::DriverKind::Ssd1322,
+                "sh1106"      => crate::config::DriverKind::Sh1106,
+                "sharpmemory" => crate::config::DriverKind::SharpMemory,
+                _ => unreachable!(), // value_parser enforces valid values
+            });
+            info!("Driver overridden by CLI: {}", d);
+        }
+
         // For emulator: create EmulatorDriver with specs from config
         info!("Creating emulator with DisplayManager (unified approach)");
 
         // Determine display specs from config (for emulation)
-        // TEMP: Testing VU meters on different displays
         let (width, height, is_grayscale, display_name) = match display_config.driver {
             Some(crate::config::DriverKind::Ssd1306) => (128, 64, false, "SSD1306"),
             Some(crate::config::DriverKind::Ssd1309) => (128, 64, false, "SSD1309"),
             Some(crate::config::DriverKind::Sh1106) => (132, 64, false, "SH1106"),
             Some(crate::config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"), // Grayscale (Gray4)
             Some(crate::config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
-            None => (256, 64, true, "SSD1322"), // TEMP: Testing ssd1322 grayscale (Tests 3-4)
+            None => (256, 64, true, "SSD1322"), // default when no driver in config
         };
 
         // Create EmulatorDriver (not the actual hardware driver!)

@@ -65,18 +65,40 @@ pub struct VizFrameOut {
 /// Data payload per visualization type.
 #[derive(Debug, Clone)]
 pub enum VizPayload {
-    VuStereo { l_db: f32, r_db: f32 },
-    VuMono   { m_db: f32 },
+    VuStereo { 
+        l_db: f32, 
+        r_db: f32 
+    },
+    VuMono { 
+        m_db: f32 
+    },
     PeakStereo {
         l_db: f32, r_db: f32,
         l_hold: u8,  r_hold: u8,
     },
-    PeakMono { m_db: f32, hold: u8 },
-    HistStereo { bands_l: Vec<u8>, bands_r: Vec<u8> },
-    HistMono   { bands: Vec<u8> },
-    VuStereoWithCenterPeak { l_db: f32, r_db: f32, m_db: f32, peak_hold: u8 },
-    AioVuMono { m_db: f32 },
-    AioHistMono { bands: Vec<u8> },
+    PeakMono { 
+        m_db: f32, 
+        hold: u8 
+    },
+    HistStereo { 
+        bands_l: Vec<u8>, 
+        bands_r: Vec<u8> 
+    },
+    HistMono { 
+        bands: Vec<u8> 
+    },
+    VuStereoWithCenterPeak { 
+        l_db: f32, 
+        r_db: f32, 
+        m_db: f32, 
+        peak_hold: u8 
+    },
+    AioVuMono { 
+        m_db: f32 
+    },
+    AioHistMono { 
+        bands: Vec<u8> 
+    },
     WaveformSpectrum {
         waveform_l: Vec<i16>,     // Downsampled waveform data (L channel)
         waveform_r: Vec<i16>,     // Downsampled waveform data (R channel)
@@ -215,7 +237,11 @@ async fn visualizer_worker(
                     let l_db = dbfs::dbfs_to_vudb(dbfs(rms_l)); // includes VU meter adj.
                     let r_db = dbfs::dbfs_to_vudb(dbfs(rms_r)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                        VizPayload::VuStereo { l_db, r_db });
+                        VizPayload::VuStereo { 
+                            l_db, 
+                            r_db 
+                        }
+                    );
                 }
                 Visualization::VuMono => {
                     let (_pk_l, rms_l) = peak_and_rms(left);
@@ -224,7 +250,9 @@ async fn visualizer_worker(
                     let m_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
                     let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                        VizPayload::VuMono { m_db }
+                        VizPayload::VuMono { 
+                            m_db 
+                        }
                     );
                 }
                 Visualization::AioVuMono => {
@@ -234,7 +262,9 @@ async fn visualizer_worker(
                     let m_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
                     let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                        VizPayload::AioVuMono { m_db }
+                        VizPayload::AioVuMono { 
+                            m_db 
+                        }
                     );
                 }
                 Visualization::PeakStereo => {
@@ -244,8 +274,10 @@ async fn visualizer_worker(
                     let r_db = dbfs::dbfs_to_vudb(dbfs(rms_r));                 
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::PeakStereo {
-                            l_db, r_db,
-                            l_hold: 0, r_hold: 0,
+                            l_db, 
+                            r_db,
+                            l_hold: 0, 
+                            r_hold: 0,
                         }
                     );
                 }
@@ -257,7 +289,8 @@ async fn visualizer_worker(
                     let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::PeakMono { 
-                            m_db, hold: 0, 
+                            m_db, 
+                            hold: 0, 
                         }
                     );
                 }
@@ -280,7 +313,10 @@ async fn visualizer_worker(
                                      .map(|(a,b)| (*a).max(*b))
                                      .collect::<Vec<u8>>();
                         publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                            VizPayload::HistMono { bands });
+                            VizPayload::HistMono { 
+                                bands 
+                            }
+                        );
                     }
                 }
                 Visualization::AioHistMono => {
@@ -291,7 +327,10 @@ async fn visualizer_worker(
                                      .map(|(a,b)| (*a).max(*b))
                                      .collect::<Vec<u8>>();
                         publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                            VizPayload::AioHistMono { bands });
+                            VizPayload::AioHistMono { 
+                                bands 
+                            }
+                        );
                     }
                 }
                 Visualization::VuStereoWithCenterPeak => {
@@ -304,8 +343,12 @@ async fn visualizer_worker(
                     let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
                         VizPayload::VuStereoWithCenterPeak {
-                            l_db, r_db, m_db, peak_hold: 0
-                        });
+                            l_db, 
+                            r_db, 
+                            m_db, 
+                            peak_hold: 0
+                        }
+                    );
                 }
                 Visualization::WaveformSpectrum => {
                     // Downsample waveform to display width (assume 256px max)
@@ -399,10 +442,3 @@ impl PeakHold {
         self.peak_index
     }
 }
-
-/* 
-let mut leds_l = compute_leds(l_db, &level_brackets);
-if let Some(peak_idx) = peak_hold_l.update(&leds_l) {
-    leds_l[peak_idx] = true;
-}
-*/
