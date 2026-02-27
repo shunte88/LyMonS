@@ -6,7 +6,7 @@
 
 **An LMS Monitor For The Future**
 
-> LyMonS version 0.2.8 | Built: 2026-02-24
+> LyMonS version 0.3.0 | Built: 2026-02-27
 
 OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
 
@@ -63,16 +63,32 @@ sudo nano /etc/lymons/lymons.yaml
 
 ### Options
 ```bash
-Usage: lymons --name "NAME" [OPTIONS...]
-OLED information display for piCorePlayer or other Raspberry Pi and LMS based audio device.
 
-  -n, --name PLAYERNAME      Name of the squeeze device to monitor
-  -o, --oled [OLEDTYPE]      Specify OLED "driver" type (see options below)
-  -r, --remain               Display remaining time rather than track time
-  -S, --scroll [SCROLLMODE]  Label scroll mode: cylon, or loop
-  -V, --verbose              Maximum log level
-  -z, --splash               Show Splash Screen
-  -e, --egg                  Show animated easter eggs wh track playing
+Usage: LyMonS [OPTIONS] --name <name>
+
+Options:
+  -v, --debug              Enable debug log level
+  -N, --name <name>        LMS player name to monitor
+  -W, --weather <weather>  Weather API key,units,transl,latitude,longitude [default: ]
+  -z, --scroll <scroll>    Text display scroll mode [default: cylon] [possible values: loop, loopleft, cylon]
+  -r, --remain             Display Remaining Time rather than Total Time
+  -F, --font <font>        Clock font to use [default: 7seg] [possible values: 7seg, holdeco, holfestus, noto, roboto, soldeco, solfestus, space1999]
+  -E, --eggs <eggs>        Easter Egg Animation [default: none] [possible values: bass, cassette, ibmpc, moog, pipboy, radio40, radio50, reel2reel, scope, technics, tubeamp, tvtime, vcr, none]
+      --no-splash          Skip splash screen (shown by default)
+  -k, --metrics            Display device metrics
+  -c, --config <config>    monitor config file [default: config.toml]
+      --i2c-bus <i2c-bus>  I2C bus device path for OLED display (e.g., /dev/i2c-1) [default: /dev/i2c-1]
+  -d, --driver <driver>    Display driver type for emulator, overrides config (ssd1306, ssd1309, ssd1322, sh1106, sharpmemory) [possible values: ssd1306, ssd1309, ssd1322, sh1106, sharpmemory]
+  -a, --viz <viz>          Visualization, meters, VU, Peak, Histograms, and more [default: no_viz] [possible values: aio_hist_mono, aio_vu_mono, combination, hist_mono, hist_stereo, peak_mono, peak_stereo, vu_mono, vu_stereo, waveform_spectrum, no_viz]
+  -h, --help               Print help
+  -V, --version            Print version
+
+LyMonS:
+LMS monitor
+
+	Display LMS details and animations
+	Clock, Weather, Meters, and more
+
 
 Supported OLED types:
     SH1106
@@ -127,22 +143,24 @@ And, in the Various Options add *-v*
 See the squeezelite page for more details
 
 ## Easter Eggs
-<p>
-<img width="130" align="right" src="assets/eastereggs.jpg"/>
 
+<img width="800" src="assets/github/screens.webp" align="center" />
+
+<p>
 There are several "easter egg" modes provided for those setups that cannot process the audio data for visualization.
 That said theres nothing stopping you using them as your main visualization.
 
 There are currently 7 easter egg modes:
-- <b>[cassette]</b> Compact Cassette, as visually correct as possible given the OLED limitations.  Hubs turn and the tape window shows the track "progress"
+- <b>[cassette]</b> Compact Cassette, as visually correct as possible given the OLED limitations.  Hubs turn and the tape llops from one hub to the other with the tape window showing the track "progress"
 - <b>[technics]</b> Technics SL-1200, as visually correct as possible given the OLED limitations.  Tone arm traverses platter to indicate progress.
 - <b>[reel2reel]</b> Open Reel To Reel, pure fantasy. Reels rotate, minor animation.
 - <b>[vcr]</b> VCR with flashing 12:00 AM clock! No additional animation - the clock is annoying enough.
 - <b>[radio40]</b> An large ornate radio. Minor animation, radio changes station as track progresses.
 - <b>[radio50]</b> An old bakelite radio. Minor animation, radio changes station as track progresses.
-- <b>[tvtime]</b> An old analog TV in all its 5x4 glory... VHF or UHF... no it's currently blank
-- <b>[pctime]</b> A crusty old IBM PS/2 clone... simple animation just for fun
+- <b>[tvtime]</b> An old analog TV in all its 5x4 glory... VHF or UHF... no a dancing news reader
+- <b>[pctime]</b> A crusty old IBM PS/2 clone... simple starfield animation just for fun
 - <b>[bass]</b> A rubbish bass guitar - and why not...
+- <b>[pipboy]</b> Its pipboy...
 
 Specify --egg <name> to display eggs on track playback
 </p>
