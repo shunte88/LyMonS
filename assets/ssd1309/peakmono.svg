@@ -67,39 +67,39 @@
   <path
      id="PEAK_00"
      d="m 21.076491,30.52945 c -0.0019,0 -0.0033,0.01957 -0.0033,0.04031 v 9.772775 c 0,0.02192 0.0014,0.04031 0.0033,0.04031 h 3.850318 v -9.85369 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_00}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_00}}" />
   <path
      id="PEAK_01"
      d="m 27.0765,30.5295 c -0.0019,0 -0.0033,0.0196 -0.0033,0.0403 v 9.7728 c 0,0.0219 0.0014,0.0403 0.0033,0.0403 h 3.8503 v -9.8537 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_01}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_01}}" />
   <path
      id="PEAK_02"
      d="m 33.0764,30.5295 c -0.0019,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0013,0.0403 0.0032,0.0403 h 3.8504 v -9.8537 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_02}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_02}}" />
   <path
      id="PEAK_03"
      d="m 39.07645,30.5295 c -0.0019,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0013,0.0403 0.0032,0.0403 h 3.8503 v -9.8537 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_03}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_03}}" />
   <path
      id="PEAK_04"
      d="m 45.07645,30.5295 c -0.002,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0012,0.0403 0.0032,0.0403 h 3.8503 v -9.8537 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_04}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_04}}" />
   <path
      id="PEAK_05"
      d="m 51.0764,30.5295 c -0.0019,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0013,0.0403 0.0032,0.0403 h 3.8504 v -9.8537 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_05}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_05}}" />
   <path
      id="PEAK_06"
      d="m 57.07645,30.5295 c -0.0019,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0013,0.0403 0.0032,0.0403 h 3.8503 v -9.8537 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_06}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_06}}" />
   <path
      id="PEAK_07"
      d="m 63.07645,30.5295 c -0.002,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0012,0.0403 0.0032,0.0403 h 3.8503 v -9.8537 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_07}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_07}}" />
   <path
      id="PEAK_08"
      d="m 69.07635,30.5295 c -0.0019,0 -0.0031,0.0196 -0.0031,0.0403 v 9.7728 c 0,0.0219 0.0012,0.0403 0.0031,0.0403 h 3.8504 v -9.8537 z"
-     style="fill:#d6fffb;fill-opacity:fill-opacity:{{peak_08}}" />
+     style="fill:#d6fffb;fill-opacity:{{peak_08}}" />
   <path
      id="PEAK_09"
      d="m 75.0764,30.5295 c -0.002,0 -0.0031,0.0196 -0.0031,0.0403 v 9.7728 c 0,0.0219 0.0011,0.0403 0.0031,0.0403 h 3.8503 v -9.8537 z"

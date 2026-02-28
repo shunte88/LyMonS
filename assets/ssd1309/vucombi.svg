@@ -44,82 +44,100 @@
      height="56"
      x="58.5"
      y="4.1910257" />
-     <path
+<path
      id="PEAK_18"
-     style="fill:#ffffff;fill-opacity:{{peak_18}};stroke-width:0.758031"
-     d="m 58,7.3902702 h 11.492234 v 2 H 58 Z"
-     aria-label="peak 8 dB" /><path
-     d="m 58,10.168 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_17}};stroke-width:0.758031"
+     style="fill:#ffffff;fill-opacity:{{peak_18}};stroke-width:0.536009"
+     d="m 58,8 h 11.492234 v 2 H 58 Z"
+     aria-label="peak 8 dB" />
+     <path
+     d="m 58,11 h 11.492234 v 2 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_17}};stroke-width:0.536009"
      id="PEAK_17"
-     aria-label="peak 5 dB" /><path
-     d="m 58,12.9458 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_16}};stroke-width:0.758031"
+     aria-label="peak 5 dB" />
+     <path
+     d="m 58,14 h 11.492234 v 2 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_16}};stroke-width:0.536009"
      id="PEAK_16"
-     aria-label="peak 3 dB" /><path
-     d="m 58,15.7236 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_15}};stroke-width:0.758031"
+     aria-label="peak 3 dB" />
+     <path
+     d="m 58,17 h 11.492234 v 2 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_15}};stroke-width:0.536009"
      id="PEAK_15"
-     aria-label="peak 2 dB" /><path
-     d="m 58,18.5014 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_14}};stroke-width:0.758031"
+     aria-label="peak 2 dB" />
+     <path
+     d="m 58,22 h 11.5 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_14}};stroke-width:0.536189"
      id="PEAK_14"
-     aria-label="peak 0 dB" /><path
-     d="m 58,21.2792 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_13}};stroke-width:0.758031"
+     aria-label="peak 0 dB" />
+     <path
+     d="m 58,24 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_13}};stroke-width:0.536009"
      id="PEAK_13"
-     aria-label="peak -1 dB" /><path
-     d="m 58,24.0569 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_12}};stroke-width:0.758031"
+     aria-label="peak -1 dB" />
+     <path
+     d="m 58,26 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_12}};stroke-width:0.536009"
      id="PEAK_12"
-     aria-label="peak -2 dB" /><path
-     d="m 58,26.8347 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_11}};stroke-width:0.758031"
+     aria-label="peak -2 dB" />
+     <path
+     d="m 58,28 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_11}};stroke-width:0.536009"
      id="PEAK_11"
-     aria-label="peak -3 dB" /><path
-     d="m 58,29.6125 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_10}};stroke-width:0.758031"
+     aria-label="peak -3 dB" />
+     <path
+     d="m 58,30 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_10}};stroke-width:0.536009"
      id="PEAK_10"
-     aria-label="peak -4 dB" /><path
-     d="m 58,32.3903 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_09}};stroke-width:0.758031"
+     aria-label="peak -4 dB" />
+     <path
+     d="m 58,32 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_09}};stroke-width:0.536009"
      id="PEAK_09"
-     aria-label="peak -5 dB" /><path
-     d="m 58,35.168 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_08}};stroke-width:0.758031"
+     aria-label="peak -5 dB" />
+     <path
+     d="m 58,34 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_08}};stroke-width:0.536009"
      id="PEAK_08"
-     aria-label="peak -6 dB" /><path
-     d="m 58,37.9458 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_07}};stroke-width:0.758031"
+     aria-label="peak -6 dB" />
+     <path
+     d="m 58,36 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_07}};stroke-width:0.536009"
      id="PEAK_07"
-     aria-label="peak -7dB" /><path
-     d="m 58,40.7236 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_06}};stroke-width:0.758031"
+     aria-label="peak -7dB" />
+     <path
+     d="m 58,38 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_06}};stroke-width:0.536009"
      id="PEAK_06"
-     aria-label="peak -8dB" /><path
-     d="m 58,43.5014 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_05}};stroke-width:0.758031"
+     aria-label="peak -8dB" />
+     <path
+     d="m 58,40 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_05}};stroke-width:0.536009"
      id="PEAK_05"
-     aria-label="peak -10dB" /><path
-     d="m 58,46.2792 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_04}};stroke-width:0.758031"
+     aria-label="peak -10dB" />
+     <path
+     d="m 58,42 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_04}};stroke-width:0.536009"
      id="PEAK_04"
-     aria-label="peak -13dB" /><path
-     d="m 58,49.0569 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_03}};stroke-width:0.758031"
+     aria-label="peak -13dB" />
+     <path
+     d="m 58,44 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_03}};stroke-width:0.536009"
      id="PEAK_03"
-     aria-label="peak -17dB" /><path
-     d="m 58,51.8347 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_02}};stroke-width:0.758031"
+     aria-label="peak -17dB" />
+     <path
+     d="m 58,46 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_02}};stroke-width:0.536009"
      id="PEAK_02"
-     aria-label="peak -20dB" /><path
-     d="m 58,54.6125 h 11.492234 v 2 H 58 Z"
-     style="fill:#ffffff;fill-opacity:{{peak_01}};stroke-width:0.758031"
+     aria-label="peak -20dB" />
+     <path
+     d="m 58,48 h 11.492234 v 1 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_01}};stroke-width:0.536009"
      id="PEAK_01"
-     aria-label="Peak -30 dB" /><path
+     aria-label="Peak -30 dB" />
+     <path
      id="PEAK_00"
-     style="fill:#ffffff;fill-opacity:{{peak_00}};stroke-width:0.758031"
-     d="m 58,57.39027 h 11.492234 v 2 H 58 Z"
+     style="fill:#ffffff;fill-opacity:{{peak_00}};stroke-width:0.536009"
+     d="m 58,50 h 11.492234 v 1 H 58 Z"
      aria-label="peak -36dB" />
      </g>
 <g

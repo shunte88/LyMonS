@@ -599,14 +599,15 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
     let size = if wide { Size::new(256, 64) } else { Size::new(128, 64) };
     let viz = match kind {
         Visualization::VuStereo => {
+            let sweep: f64 = if size.width > 128 {44.01} else {36.12};
             Visual::new(
                 kind,
                 String::from(format!("{folder}vu2up.svg")),
                 Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
                 -25.0,
                 5.0,
-                -44.01,
-                44.01,
+                -sweep,
+                sweep,
                 true,
                 false,
                 0,

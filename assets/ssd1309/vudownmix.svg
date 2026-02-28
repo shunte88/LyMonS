@@ -31,8 +31,7 @@
      inkscape:window-x="0"
      inkscape:window-y="32"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg1" /><defs
-     id="defs1" /><g
+     inkscape:current-layer="svg1" /><g
      id="layer1"
      transform="translate(99.190331,176.52516)"><rect
        style="fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.529167;stroke-linejoin:round;stroke-miterlimit:0;stroke-opacity:0.635294"
@@ -59,4 +58,17 @@
        d="m -83.831394,-163.13975 -1.486031,-3.58088 h 0.445155 l 1.230721,3.06371 1.237268,-3.06371 h 0.432062 l -1.492577,3.58088 z m 2.179941,-3.58088 h 0.39933 v 2.22577 q 0,0.41897 0.117835,0.62846 0.137475,0.24876 0.373145,0.36005 0.150567,0.072 0.340412,0.072 0.189845,0 0.32732,-0.072 0.242216,-0.11129 0.37969,-0.35351 0.06546,-0.11783 0.09165,-0.2684 0.03273,-0.15711 0.03273,-0.3666 v -2.22577 h 0.392783 v 2.22577 q 0,0.22913 -0.03273,0.41243 -0.03273,0.1833 -0.104742,0.34041 -0.157113,0.3535 -0.504072,0.5368 -0.281495,0.12438 -0.582629,0.12438 -0.30768,0 -0.576082,-0.11783 -0.353506,-0.1833 -0.517165,-0.54335 -0.137475,-0.30768 -0.137475,-0.75284 z"
        id="text29"
        style="font-size:6.35px;line-height:1.1;font-family:NATS;-inkscape-font-specification:NATS;text-align:center;letter-spacing:0px;text-anchor:middle;fill:none;stroke:#ffffff;stroke-width:0.264583;stroke-linejoin:round;stroke-miterlimit:0"
-       aria-label="VU" /></g></svg>
+       aria-label="VU" />
+       </g>
+       <path
+     id="NEEDLE"
+   transform="rotate({{needle}}, 16.773437, 19.38238)"
+     style="fill:#ffffff;fill-opacity:1;stroke-width:0.4;stroke-linecap:round;stroke-opacity:1"
+     d="m 16.934617,0.87484348 -0.0057,0.35087992 c -0.0461,0.10704 -0.442867,1.06079 -0.442867,2.2220901 0,1.09519 0.158046,2.0057801 0.366386,2.1957401 l -0.0041,0.23874 h 0.0093 l -0.307992,17.7575924 -5.17e-4,10e-4 c -0.03925,0.11872 -0.0043,0.20452 0.05116,0.31419 0.05549,0.10967 0.195806,0.18293 0.33538,0.18293 0.139575,0 0.248788,-0.11306 0.334863,-0.18293 0.08607,-0.0699 0.06492,-0.26112 0.05013,-0.31678 v -5.1e-4 -5.2e-4 L 17.012648,5.8817936 h 0.0093 l -0.0041,-0.24184 c 0.2065,-0.1973 0.362768,-1.1039301 0.362768,-2.1926401 0,-1.1345101 -0.378789,-2.0714001 -0.439249,-2.2138201 z" /><rect
+     style="fill:#000000;fill-opacity:1;stroke-width:0.264583;stroke-linejoin:round"
+     id="MASK"
+     width="33.866665"
+     height="2.6458333"
+     x="0"
+     y="14.287499" />
+     </svg>
