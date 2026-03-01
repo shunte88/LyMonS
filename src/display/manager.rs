@@ -2435,44 +2435,20 @@ impl DisplayManager {
             }
         }
 
-        // Match on framebuffer type and render accordingly
-        // We handle the render and text extraction separately for each type to avoid borrow issues
+        // Render and draw the easter egg SVG; color depth is inferred from the framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                // Render the easter egg SVG
-                let raw_image = self.easter_egg
-                    .update_and_render_blocking(
-                        &self.artist,
-                        &self.title,
-                        self.audio_level,
-                        track_percent,
-                        self.current_track_time_secs,
-                    )
-                    .map_err(|e| DisplayError::DrawingError(format!("Easter egg render failed: {}", e)))?;
-
-                // Draw SVG image
-                embedded_graphics::image::Image::new(&raw_image, position)
-                    .draw(fb)
+                self.easter_egg
+                    .render_and_draw(fb, &self.artist, &self.title,
+                        self.audio_level, track_percent, self.current_track_time_secs)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
-            } // raw_image dropped here, borrow of self.easter_egg ends
-
+            }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                // Render the easter egg SVG with full Gray4 color support
-                let raw_image = self.easter_egg
-                    .update_and_render_blocking_gray4(
-                        &self.artist,
-                        &self.title,
-                        self.audio_level,
-                        track_percent,
-                        self.current_track_time_secs,
-                    )
-                    .map_err(|e| DisplayError::DrawingError(format!("Easter egg render failed: {}", e)))?;
-
-                // Draw Gray4 SVG image directly
-                embedded_graphics::image::Image::new(&raw_image, position)
-                    .draw(fb)
+                self.easter_egg
+                    .render_and_draw(fb, &self.artist, &self.title,
+                        self.audio_level, track_percent, self.current_track_time_secs)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
-            } // raw_image dropped here, borrow of self.easter_egg ends
+            }
         }
 
         // Now draw text overlays (borrow of self.easter_egg is free)

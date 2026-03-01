@@ -265,10 +265,12 @@ impl StatusBar {
         };
         Text::new(&vol_text, Point::new(current_x, text_y), text_style).draw(target)?;
 
+        let mut audio_glyph = &glyphs::GLYPH_AUDIO_SD;
         // CENTER: Bitrate text (centered)
         let bitrate_text = if !self.state.samplesize.is_empty() && !self.state.samplerate.is_empty() {
             // Check for DSD/DSF (1-bit formats)
             if self.state.samplesize.as_str() == "1" || self.state.samplesize.as_str().starts_with("DSD") {
+                audio_glyph = &glyphs::GLYPH_AUDIO_DSD;
                 if let Ok(rate) = self.state.samplerate.parse::<u32>() {
                     let dsd_multiple = rate / 44100;
                     format!("DSD{}", dsd_multiple)
@@ -277,6 +279,9 @@ impl StatusBar {
                 }
             } else {
                 // Regular PCM: convert sample rate to kHz
+                if self.state.samplesize.parse::<u32>().unwrap_or(16) > 16 {
+                    audio_glyph = &glyphs::GLYPH_AUDIO_HD;
+                }
                 let rate_str = if let Ok(rate) = self.state.samplerate.parse::<u32>() {
                     if rate >= 1000 {
                         format!("{}k", rate / 1000)
@@ -302,13 +307,17 @@ impl StatusBar {
         let glyph_width = 8;
         let glyph_gap = 2;
 
-        // Shuffle glyph (rightmost)
+        // audio glyph (audio)
+        let audio_glyph_x = field_pos.x + field_width - glyph_width;
+        self.draw_glyph(target, audio_glyph, audio_glyph_x, glyph_y, text_color)?;
+
+        // Shuffle glyph (left of audio)
         let shuffle_glyph = match self.state.shuffle_mode {
             ShuffleMode::ByTracks => &glyphs::GLYPH_SHUFFLE_TRACKS,
             ShuffleMode::ByAlbums => &glyphs::GLYPH_SHUFFLE_ALBUMS,
             ShuffleMode::Off => &glyphs::GLYPH_NONE,
         };
-        let shuffle_x = field_pos.x + field_width - glyph_width;
+        let shuffle_x = audio_glyph_x - glyph_width - glyph_gap;
         self.draw_glyph(target, shuffle_glyph, shuffle_x, glyph_y, text_color)?;
 
         // Repeat glyph (to the left of shuffle)
