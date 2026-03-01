@@ -559,7 +559,7 @@ impl Eggs {
                     let buffer_size = D::Color::required_buffer_size(width, height);
                     self.buffer.resize(buffer_size, 0);
                     if D::Color::render_to_buffer(&svg_renderer, &mut self.buffer).is_ok() {
-                        D::Color::draw_buffer_to_display(&self.buffer, width, display)?;
+                        D::Color::draw_buffer_to_display(&self.buffer, width, Point::zero(), display)?;
                     }
                 }
             }

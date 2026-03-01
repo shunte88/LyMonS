@@ -1209,7 +1209,7 @@ impl DisplayManager {
                             let date_str = chrono::Local::now().format("%a %b %d").to_string();
 
                             // Use DRY helper for text rendering
-                            Self::draw_field_text_mono(fb, field, &date_str, style)
+                            Self::draw_field_text(fb, field, &date_str, style)
                                 .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
                         }
                         _ => {}
@@ -1273,7 +1273,7 @@ impl DisplayManager {
                             let date_str = chrono::Local::now().format("%a %b %d").to_string();
 
                             // Use DRY helper for text rendering
-                            Self::draw_field_text_gray4(fb, field, &date_str, style)
+                            Self::draw_field_text(fb, field, &date_str, style)
                                 .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
                         }
                         _ => {}
@@ -1361,33 +1361,33 @@ impl DisplayManager {
         // Dispatch rendering based on framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                Self::render_weather_fields_mono(
-                    fb, 
-                    &page, 
-                    &svg_path, 
-                    &conditions_text, 
-                    &temp_text, 
-                    &humidity_text, 
-                    &wind_text, 
-                    &precip_text, 
-                    &sunrise_text, 
-                    &sunset_text, 
+                Self::render_weather_fields(
+                    fb,
+                    &page,
+                    &svg_path,
+                    &conditions_text,
+                    &temp_text,
+                    &humidity_text,
+                    &wind_text,
+                    &precip_text,
+                    &sunrise_text,
+                    &sunset_text,
                     &moonrise_text,
                     &moonset_text,
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                Self::render_weather_fields_gray4(
-                    fb, 
-                    &page, 
-                    &svg_path, 
-                    &conditions_text, 
-                    &temp_text, 
-                    &humidity_text, 
-                    &wind_text, 
-                    &precip_text, 
-                    &sunrise_text, 
-                    &sunset_text, 
+                Self::render_weather_fields(
+                    fb,
+                    &page,
+                    &svg_path,
+                    &conditions_text,
+                    &temp_text,
+                    &humidity_text,
+                    &wind_text,
+                    &precip_text,
+                    &sunrise_text,
+                    &sunset_text,
                     &moonrise_text,
                     &moonset_text,
                 )?;
@@ -1397,9 +1397,9 @@ impl DisplayManager {
         Ok(())
     }
 
-    /// Render weather fields to monochrome display (static method to avoid borrow issues)
-    fn render_weather_fields_mono(
-        target: &mut impl DrawTarget<Color = BinaryColor>,
+    /// Render weather fields (generic over color depth)
+    fn render_weather_fields<D>(
+        target: &mut D,
         page: &crate::display::PageLayout,
         svg_path: &str,
         conditions_text: &str,
@@ -1410,81 +1410,85 @@ impl DisplayManager {
         sunrise_text: &str,
         sunset_text: &str,
         moonrise_text: &str,
-        moonset_text: &str, // and moon phase idx
-    ) -> Result<(), DisplayError> {
+        moonset_text: &str,
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<D::Color>,
+    {
         use embedded_graphics::prelude::*;
         use embedded_graphics::Pixel;
         use embedded_graphics::mono_font::MonoTextStyle;
         use embedded_graphics::text::{Text, Baseline};
         use embedded_graphics::mono_font::iso_8859_13::{FONT_5X8, FONT_6X13_BOLD, FONT_7X14};
+        use crate::visualization::SvgColorDepth;
+        use crate::display::color_proxy::ConvertColor;
 
-        // Render all fields
         for field in page.fields() {
             let pos = field.position();
 
             match field.name.as_str() {
                 "weather_icon" => {
-                    // Render SVG weather icon
                     if !svg_path.is_empty() && svg_path.contains(".svg") {
-                        let full_path = format!("./assets/mono/{}", svg_path);
+                        let full_path = format!("{}/{}", D::Color::weather_asset_folder(), svg_path);
                         let icon_width = field.bounds.size.width;
                         let icon_height = field.bounds.size.height;
 
-                        // Render SVG to buffer
-                        let mut svg_buffer = Vec::new();
-                        if let Ok(_) = crate::drawsvg::get_svg(&full_path, icon_width, icon_height, &mut svg_buffer) {
-                            // Draw the SVG buffer as ImageRaw
-                            use embedded_graphics::image::{Image, ImageRaw};
-                            let raw_image = ImageRaw::<BinaryColor>::new(&svg_buffer, icon_width);
-                            Image::new(&raw_image, Point::new(pos.x, pos.y))
-                                .draw(target)
-                                .map_err(|_| DisplayError::DrawingError("Failed to draw weather icon".to_string()))?;
+                        if let Ok(data) = std::fs::read_to_string(&full_path) {
+                            if let Ok(renderer) = crate::svgimage::SvgImageRenderer::new(&data, icon_width, icon_height) {
+                                let mut svg_buffer = vec![0u8; D::Color::required_buffer_size(icon_width, icon_height)];
+                                if D::Color::render_to_buffer(&renderer, &mut svg_buffer).is_ok() {
+                                    D::Color::draw_buffer_to_display(&svg_buffer, icon_width, Point::new(pos.x, pos.y), target)
+                                        .map_err(|_| DisplayError::DrawingError("Failed to draw weather icon".to_string()))?;
+                                }
+                            }
                         }
                     }
                 }
                 "temp_glyph" => {
                     use crate::weather_glyph::GLYPH_TEMPERATURE;
-                    Self::draw_weather_glyph(target, GLYPH_TEMPERATURE, pos.x, pos.y, field.fg_color.to_binary())
+                    Self::draw_weather_glyph(target, GLYPH_TEMPERATURE, pos.x, pos.y, field.fg_color.to_color())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw temp glyph".to_string()))?;
                 }
                 "humidity_glyph" => {
                     use crate::weather_glyph::GLYPH_HUMIDITY;
-                    Self::draw_weather_glyph(target, GLYPH_HUMIDITY, pos.x, pos.y, field.fg_color.to_binary())
+                    Self::draw_weather_glyph(target, GLYPH_HUMIDITY, pos.x, pos.y, field.fg_color.to_color())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw humidity glyph".to_string()))?;
                 }
                 "wind_glyph" => {
                     use crate::weather_glyph::GLYPH_WIND;
-                    Self::draw_weather_glyph(target, GLYPH_WIND, pos.x, pos.y, field.fg_color.to_binary())
+                    Self::draw_weather_glyph(target, GLYPH_WIND, pos.x, pos.y, field.fg_color.to_color())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw wind glyph".to_string()))?;
                 }
                 "precip_glyph" => {
                     use crate::weather_glyph::GLYPH_PRECIPITATION;
-                    Self::draw_weather_glyph(target, GLYPH_PRECIPITATION, pos.x, pos.y, field.fg_color.to_binary())
+                    Self::draw_weather_glyph(target, GLYPH_PRECIPITATION, pos.x, pos.y, field.fg_color.to_color())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw precip glyph".to_string()))?;
                 }
                 "temperature" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), field.fg_color.to_color());
                     Text::with_baseline(temp_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw temperature".to_string()))?;
                 }
                 "humidity" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     Text::with_baseline(humidity_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw humidity".to_string()))?;
                 }
                 "wind" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     Text::with_baseline(wind_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw wind".to_string()))?;
                 }
                 "precipitation" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     Text::with_baseline(precip_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
@@ -1492,18 +1496,17 @@ impl DisplayManager {
                 }
                 "conditions" => {
                     let font = field.font.unwrap_or(&FONT_7X14);
-                    let style = MonoTextStyle::new(font, BinaryColor::On);
-                    // Use DRY helper for text rendering
-                    Self::draw_field_text_mono(target, field, conditions_text, style)
+                    let style = MonoTextStyle::new(font, D::Color::on());
+                    Self::draw_field_text(target, field, conditions_text, style)
                         .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
                 }
                 "sunrise_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNRISE;
-                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, field.fg_color.to_binary())
+                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, field.fg_color.to_color())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
                 }
                 "sunrise_text" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
@@ -1511,11 +1514,11 @@ impl DisplayManager {
                 }
                 "sunset_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNSET;
-                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, field.fg_color.to_binary())
+                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, field.fg_color.to_color())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
                 }
                 "sunset_text" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     Text::with_baseline(sunset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
@@ -1523,11 +1526,11 @@ impl DisplayManager {
                 }
                 "moonrise_glyph" => {
                     use crate::weather_glyph::GLYPH_MOONRISE;
-                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_binary())
+                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_color())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
                 }
                 "moonrise_text" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     Text::with_baseline(moonrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
@@ -1535,166 +1538,11 @@ impl DisplayManager {
                 }
                 "moonset_glyph" => {
                     use crate::weather_glyph::GLYPH_MOONSET;
-                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_binary())
+                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_color())
                         .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
                 }
                 "moonset_text" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_binary());
-                    Text::with_baseline(moonset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
-                        .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
-                }
-                _ => {}
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Render weather fields to Gray4 display (static method to avoid borrow issues)
-    fn render_weather_fields_gray4(
-        target: &mut impl DrawTarget<Color = Gray4>,
-        page: &crate::display::PageLayout,
-        svg_path: &str,
-        conditions_text: &str,
-        temp_text: &str,
-        humidity_text: &str,
-        wind_text: &str,
-        precip_text: &str,
-        sunrise_text: &str,
-        sunset_text: &str,
-        moonrise_text: &str,
-        moonset_text: &str, // and moon phase idx
-    ) -> Result<(), DisplayError> {
-        use embedded_graphics::prelude::*;
-        use embedded_graphics::Pixel;
-        use embedded_graphics::mono_font::MonoTextStyle;
-        use embedded_graphics::text::{Text, Baseline};
-        use embedded_graphics::mono_font::iso_8859_13::{FONT_5X8, FONT_6X13_BOLD, FONT_7X14};
-
-        // Render all fields
-        for field in page.fields() {
-            let pos = field.position();
-
-            match field.name.as_str() {
-                "weather_icon" => {
-                    // Render SVG weather icon for Gray4
-                    if !svg_path.is_empty() && svg_path.contains(".svg") {
-                        let full_path = format!("./assets/color/{}", svg_path);
-                        let icon_width = field.bounds.size.width;
-                        let icon_height = field.bounds.size.height;
-
-                        // Render SVG to Gray4 buffer with color support
-                        let mut svg_buffer = Vec::new();
-                        if let Ok(_) = crate::drawsvg::get_svg_gray4(&full_path, icon_width, icon_height, &mut svg_buffer) {
-                            // Draw the SVG buffer as ImageRaw
-                            use embedded_graphics::image::{Image, ImageRaw};
-                            let raw_image = ImageRaw::<Gray4>::new(&svg_buffer, icon_width);
-                            Image::new(&raw_image, Point::new(pos.x, pos.y))
-                                .draw(target)
-                                .map_err(|_| DisplayError::DrawingError("Failed to draw weather icon".to_string()))?;
-                        }
-                    }
-                }
-                "temp_glyph" => {
-                    use crate::weather_glyph::GLYPH_TEMPERATURE;
-                    Self::draw_weather_glyph(target, GLYPH_TEMPERATURE, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw temp glyph".to_string()))?;
-                }
-                "humidity_glyph" => {
-                    use crate::weather_glyph::GLYPH_HUMIDITY;
-                    Self::draw_weather_glyph(target, GLYPH_HUMIDITY, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw humidity glyph".to_string()))?;
-                }
-                "wind_glyph" => {
-                    use crate::weather_glyph::GLYPH_WIND;
-                    Self::draw_weather_glyph(target, GLYPH_WIND, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw wind glyph".to_string()))?;
-                }
-                "precip_glyph" => {
-                    use crate::weather_glyph::GLYPH_PRECIPITATION;
-                    Self::draw_weather_glyph(target, GLYPH_PRECIPITATION, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw precip glyph".to_string()))?;
-                }
-                "temperature" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), field.fg_color.to_gray4());
-                    Text::with_baseline(temp_text, Point::new(pos.x, pos.y), style, Baseline::Top)
-                        .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw temperature".to_string()))?;
-                }
-                "humidity" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
-                    Text::with_baseline(humidity_text, Point::new(pos.x, pos.y), style, Baseline::Top)
-                        .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw humidity".to_string()))?;
-                }
-                "wind" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
-                    Text::with_baseline(wind_text, Point::new(pos.x, pos.y), style, Baseline::Top)
-                        .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw wind".to_string()))?;
-                }
-                "precipitation" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
-                    Text::with_baseline(precip_text, Point::new(pos.x, pos.y), style, Baseline::Top)
-                        .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw precipitation".to_string()))?;
-                }
-                "conditions" => {
-                    let font = field.font.unwrap_or(&FONT_7X14);
-                    let style = MonoTextStyle::new(font, Gray4::WHITE);
-                    // Use DRY helper for text rendering
-                    Self::draw_field_text_gray4(target, field, conditions_text, style)
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
-                }
-                "sunrise_glyph" => {
-                    use crate::weather_glyph::GLYPH_SUNRISE;
-                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
-                }
-                "sunrise_text" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
-                    Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
-                        .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise".to_string()))?;
-                }
-                "sunset_glyph" => {
-                    use crate::weather_glyph::GLYPH_SUNSET;
-                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
-                }
-                "sunset_text" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
-                    Text::with_baseline(sunset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
-                        .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunset".to_string()))?;
-                }
-                "moonrise_glyph" => {
-                    use crate::weather_glyph::GLYPH_MOONRISE;
-                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
-                }
-                "moonrise_text" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
-                    Text::with_baseline(moonrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
-                        .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
-                }
-                "moonset_glyph" => {
-                    use crate::weather_glyph::GLYPH_MOONSET;
-                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_gray4())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
-                }
-                "moonset_text" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_gray4());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     Text::with_baseline(moonset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
@@ -1829,7 +1677,7 @@ impl DisplayManager {
         // Dispatch rendering
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                Self::render_forecast_fields_mono(
+                Self::render_forecast_fields(
                     fb, &page,
                     &day1_name, &day1_temp, &day1_precip, &day1_svg,
                     &day2_name, &day2_temp, &day2_precip, &day2_svg,
@@ -1840,7 +1688,7 @@ impl DisplayManager {
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                Self::render_forecast_fields_gray4(
+                Self::render_forecast_fields(
                     fb, &page,
                     &day1_name, &day1_temp, &day1_precip, &day1_svg,
                     &day2_name, &day2_temp, &day2_precip, &day2_svg,
@@ -1855,9 +1703,9 @@ impl DisplayManager {
         Ok(())
     }
 
-    /// Render forecast fields to monochrome display
-    fn render_forecast_fields_mono(
-        target: &mut impl DrawTarget<Color = BinaryColor>,
+    /// Render forecast fields (generic over color depth)
+    fn render_forecast_fields<D>(
+        target: &mut D,
         page: &crate::display::PageLayout,
         day1_name: &str, day1_temp: &str, day1_precip: &str, day1_svg: &str,
         day2_name: &str, day2_temp: &str, day2_precip: &str, day2_svg: &str,
@@ -1865,116 +1713,56 @@ impl DisplayManager {
         day4_name: &str, day4_temp: &str, day4_precip: &str, day4_svg: &str,
         day5_name: &str, day5_temp: &str, day5_precip: &str, day5_svg: &str,
         day6_name: &str, day6_temp: &str, day6_precip: &str, day6_svg: &str,
-    ) -> Result<(), DisplayError> {
-
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<D::Color>,
+    {
         for field in page.fields() {
 
             match field.name.as_str() {
                 // Day 1
-                "day1_icon" => Self::render_forecast_icon_mono(target, field, day1_svg)?,
-                "day1_name" => Self::render_centered_text_mono(target, field, day1_name)?,
-                "day1_data_box" => Self::render_box_mono(target, field)?,
-                "day1_temp" => Self::render_centered_text_mono(target, field, day1_temp)?,
-                "day1_precip" => Self::render_centered_text_mono(target, field, day1_precip)?,
+                "day1_icon" => Self::render_forecast_icon(target, field, day1_svg)?,
+                "day1_name" => Self::render_centered_text(target, field, day1_name)?,
+                "day1_data_box" => Self::render_box(target, field)?,
+                "day1_temp" => Self::render_centered_text(target, field, day1_temp)?,
+                "day1_precip" => Self::render_centered_text(target, field, day1_precip)?,
 
                 // Day 2
-                "day2_icon" => Self::render_forecast_icon_mono(target, field, day2_svg)?,
-                "day2_name" => Self::render_centered_text_mono(target, field, day2_name)?,
-                "day2_data_box" => Self::render_box_mono(target, field)?,
-                "day2_temp" => Self::render_centered_text_mono(target, field, day2_temp)?,
-                "day2_precip" => Self::render_centered_text_mono(target, field, day2_precip)?,
+                "day2_icon" => Self::render_forecast_icon(target, field, day2_svg)?,
+                "day2_name" => Self::render_centered_text(target, field, day2_name)?,
+                "day2_data_box" => Self::render_box(target, field)?,
+                "day2_temp" => Self::render_centered_text(target, field, day2_temp)?,
+                "day2_precip" => Self::render_centered_text(target, field, day2_precip)?,
 
                 // Day 3
-                "day3_icon" => Self::render_forecast_icon_mono(target, field, day3_svg)?,
-                "day3_name" => Self::render_centered_text_mono(target, field, day3_name)?,
-                "day3_data_box" => Self::render_box_mono(target, field)?,
-                "day3_temp" => Self::render_centered_text_mono(target, field, day3_temp)?,
-                "day3_precip" => Self::render_centered_text_mono(target, field, day3_precip)?,
+                "day3_icon" => Self::render_forecast_icon(target, field, day3_svg)?,
+                "day3_name" => Self::render_centered_text(target, field, day3_name)?,
+                "day3_data_box" => Self::render_box(target, field)?,
+                "day3_temp" => Self::render_centered_text(target, field, day3_temp)?,
+                "day3_precip" => Self::render_centered_text(target, field, day3_precip)?,
 
                 // Day 4 (wide display)
-                "day4_icon" => Self::render_forecast_icon_mono(target, field, day4_svg)?,
-                "day4_name" => Self::render_centered_text_mono(target, field, day4_name)?,
-                "day4_data_box" => Self::render_box_mono(target, field)?,
-                "day4_temp" => Self::render_centered_text_mono(target, field, day4_temp)?,
-                "day4_precip" => Self::render_centered_text_mono(target, field, day4_precip)?,
+                "day4_icon" => Self::render_forecast_icon(target, field, day4_svg)?,
+                "day4_name" => Self::render_centered_text(target, field, day4_name)?,
+                "day4_data_box" => Self::render_box(target, field)?,
+                "day4_temp" => Self::render_centered_text(target, field, day4_temp)?,
+                "day4_precip" => Self::render_centered_text(target, field, day4_precip)?,
 
                 // Day 5 (wide display)
-                "day5_icon" => Self::render_forecast_icon_mono(target, field, day5_svg)?,
-                "day5_name" => Self::render_centered_text_mono(target, field, day5_name)?,
-                "day5_data_box" => Self::render_box_mono(target, field)?,
-                "day5_temp" => Self::render_centered_text_mono(target, field, day5_temp)?,
-                "day5_precip" => Self::render_centered_text_mono(target, field, day5_precip)?,
+                "day5_icon" => Self::render_forecast_icon(target, field, day5_svg)?,
+                "day5_name" => Self::render_centered_text(target, field, day5_name)?,
+                "day5_data_box" => Self::render_box(target, field)?,
+                "day5_temp" => Self::render_centered_text(target, field, day5_temp)?,
+                "day5_precip" => Self::render_centered_text(target, field, day5_precip)?,
 
                 // Day 6 (wide display)
-                "day6_icon" => Self::render_forecast_icon_mono(target, field, day6_svg)?,
-                "day6_name" => Self::render_centered_text_mono(target, field, day6_name)?,
-                "day6_data_box" => Self::render_box_mono(target, field)?,
-                "day6_temp" => Self::render_centered_text_mono(target, field, day6_temp)?,
-                "day6_precip" => Self::render_centered_text_mono(target, field, day6_precip)?,
-
-                _ => {}
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Render forecast fields to Gray4 display
-    fn render_forecast_fields_gray4(
-        target: &mut impl DrawTarget<Color = Gray4>,
-        page: &crate::display::PageLayout,
-        day1_name: &str, day1_temp: &str, day1_precip: &str, day1_svg: &str,
-        day2_name: &str, day2_temp: &str, day2_precip: &str, day2_svg: &str,
-        day3_name: &str, day3_temp: &str, day3_precip: &str, day3_svg: &str,
-        day4_name: &str, day4_temp: &str, day4_precip: &str, day4_svg: &str,
-        day5_name: &str, day5_temp: &str, day5_precip: &str, day5_svg: &str,
-        day6_name: &str, day6_temp: &str, day6_precip: &str, day6_svg: &str,
-    ) -> Result<(), DisplayError> {
-
-        for field in page.fields() {
-
-            match field.name.as_str() {
-                // Day 1
-                "day1_icon" => Self::render_forecast_icon_gray4(target, field, day1_svg)?,
-                "day1_name" => Self::render_centered_text_gray4(target, field, day1_name)?,
-                "day1_data_box" => Self::render_box_gray4(target, field)?,
-                "day1_temp" => Self::render_centered_text_gray4(target, field, day1_temp)?,
-                "day1_precip" => Self::render_centered_text_gray4(target, field, day1_precip)?,
-
-                // Day 2
-                "day2_icon" => Self::render_forecast_icon_gray4(target, field, day2_svg)?,
-                "day2_name" => Self::render_centered_text_gray4(target, field, day2_name)?,
-                "day2_data_box" => Self::render_box_gray4(target, field)?,
-                "day2_temp" => Self::render_centered_text_gray4(target, field, day2_temp)?,
-                "day2_precip" => Self::render_centered_text_gray4(target, field, day2_precip)?,
-
-                // Day 3
-                "day3_icon" => Self::render_forecast_icon_gray4(target, field, day3_svg)?,
-                "day3_name" => Self::render_centered_text_gray4(target, field, day3_name)?,
-                "day3_data_box" => Self::render_box_gray4(target, field)?,
-                "day3_temp" => Self::render_centered_text_gray4(target, field, day3_temp)?,
-                "day3_precip" => Self::render_centered_text_gray4(target, field, day3_precip)?,
-
-                // Day 4 (wide display)
-                "day4_icon" => Self::render_forecast_icon_gray4(target, field, day4_svg)?,
-                "day4_name" => Self::render_centered_text_gray4(target, field, day4_name)?,
-                "day4_data_box" => Self::render_box_gray4(target, field)?,
-                "day4_temp" => Self::render_centered_text_gray4(target, field, day4_temp)?,
-                "day4_precip" => Self::render_centered_text_gray4(target, field, day4_precip)?,
-
-                // Day 5 (wide display)
-                "day5_icon" => Self::render_forecast_icon_gray4(target, field, day5_svg)?,
-                "day5_name" => Self::render_centered_text_gray4(target, field, day5_name)?,
-                "day5_data_box" => Self::render_box_gray4(target, field)?,
-                "day5_temp" => Self::render_centered_text_gray4(target, field, day5_temp)?,
-                "day5_precip" => Self::render_centered_text_gray4(target, field, day5_precip)?,
-
-                // Day 6 (wide display)
-                "day6_icon" => Self::render_forecast_icon_gray4(target, field, day6_svg)?,
-                "day6_name" => Self::render_centered_text_gray4(target, field, day6_name)?,
-                "day6_data_box" => Self::render_box_gray4(target, field)?,
-                "day6_temp" => Self::render_centered_text_gray4(target, field, day6_temp)?,
-                "day6_precip" => Self::render_centered_text_gray4(target, field, day6_precip)?,
+                "day6_icon" => Self::render_forecast_icon(target, field, day6_svg)?,
+                "day6_name" => Self::render_centered_text(target, field, day6_name)?,
+                "day6_data_box" => Self::render_box(target, field)?,
+                "day6_temp" => Self::render_centered_text(target, field, day6_temp)?,
+                "day6_precip" => Self::render_centered_text(target, field, day6_precip)?,
 
                 _ => {}
             }
@@ -1984,190 +1772,100 @@ impl DisplayManager {
     }
 
     // Helper methods for forecast rendering
-    fn render_forecast_icon_mono(
-        target: &mut impl DrawTarget<Color = BinaryColor>,
+    fn render_forecast_icon<D>(
+        target: &mut D,
         field: &crate::display::Field,
         svg_path: &str,
-    ) -> Result<(), DisplayError> {
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth,
+    {
+        use crate::visualization::SvgColorDepth;
+
         if !svg_path.is_empty() && svg_path.contains(".svg") {
-            let full_path = format!("./assets/mono/{}", svg_path);
+            let full_path = format!("{}/{}", D::Color::weather_asset_folder(), svg_path);
             let icon_width = field.bounds.size.width;
             let icon_height = field.bounds.size.height;
 
-            let mut svg_buffer = Vec::new();
-            if let Ok(_) = crate::drawsvg::get_svg(&full_path, icon_width, icon_height, &mut svg_buffer) {
-                use embedded_graphics::image::{Image, ImageRaw};
-                let raw_image = ImageRaw::<BinaryColor>::new(&svg_buffer, icon_width);
-                Image::new(&raw_image, field.position())
-                    .draw(target)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw forecast icon".to_string()))?;
+            if let Ok(data) = std::fs::read_to_string(&full_path) {
+                if let Ok(renderer) = crate::svgimage::SvgImageRenderer::new(&data, icon_width, icon_height) {
+                    let mut svg_buffer = vec![0u8; D::Color::required_buffer_size(icon_width, icon_height)];
+                    if D::Color::render_to_buffer(&renderer, &mut svg_buffer).is_ok() {
+                        D::Color::draw_buffer_to_display(&svg_buffer, icon_width, field.position(), target)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw forecast icon".to_string()))?;
+                    }
+                }
             }
         }
         Ok(())
     }
 
-    fn render_forecast_icon_gray4(
-        target: &mut impl DrawTarget<Color = Gray4>,
-        field: &crate::display::Field,
-        svg_path: &str,
-    ) -> Result<(), DisplayError> {
-        if !svg_path.is_empty() && svg_path.contains(".svg") {
-            let full_path = format!("./assets/color/{}", svg_path);
-            let icon_width = field.bounds.size.width;
-            let icon_height = field.bounds.size.height;
-
-            let mut svg_buffer = Vec::new();
-            if let Ok(_) = crate::drawsvg::get_svg_gray4(&full_path, icon_width, icon_height, &mut svg_buffer) {
-                use embedded_graphics::image::{Image, ImageRaw};
-                let raw_image = ImageRaw::<Gray4>::new(&svg_buffer, icon_width);
-                Image::new(&raw_image, field.position())
-                    .draw(target)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw forecast icon".to_string()))?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Text rendering helper for BinaryColor using TextBoxStyleBuilder
-    ///
-    /// Uses embedded_text's TextBoxStyleBuilder for proper text alignment and layout.
+    /// Text rendering helper using TextBoxStyleBuilder (generic over color depth).
     #[inline]
-    fn draw_field_text_mono(
-        target: &mut impl DrawTarget<Color = BinaryColor>,
+    fn draw_field_text<D>(
+        target: &mut D,
         field: &crate::display::Field,
         text: &str,
-        style: embedded_graphics::mono_font::MonoTextStyle<'static, BinaryColor>,
+        style: embedded_graphics::mono_font::MonoTextStyle<'static, D::Color>,
     ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: PixelColor + Default,
     {
-        use embedded_text::{
-            style::TextBoxStyleBuilder,
-            TextBox,
-        };
+        use embedded_text::{style::TextBoxStyleBuilder, TextBox};
 
         let textbox_style = TextBoxStyleBuilder::new()
             .alignment(field.horizontal_alignment)
             .vertical_alignment(field.vertical_alignment)
             .build();
 
-        TextBox::with_textbox_style(
-            text,
-            field.bounds,
-            style,
-            textbox_style,
-        )
-        .draw(target)
-        .map(|_| ()) // TextBox::draw returns &str, map to ()
-        .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))
+        TextBox::with_textbox_style(text, field.bounds, style, textbox_style)
+            .draw(target)
+            .map(|_| ())
+            .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))
     }
 
-    /// Text rendering helper for Gray4 using TextBoxStyleBuilder
-    ///
-    /// Uses embedded_text's TextBoxStyleBuilder for proper text alignment and layout.
-    #[inline]
-    fn draw_field_text_gray4(
-        target: &mut impl DrawTarget<Color = Gray4>,
+    fn render_centered_text<D>(
+        target: &mut D,
         field: &crate::display::Field,
         text: &str,
-        style: embedded_graphics::mono_font::MonoTextStyle<'static, Gray4>,
     ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<D::Color>,
     {
-        use embedded_text::{
-            style::TextBoxStyleBuilder,
-            TextBox,
-        };
-
-        let textbox_style = TextBoxStyleBuilder::new()
-            .alignment(field.horizontal_alignment)
-            .vertical_alignment(field.vertical_alignment)
-            .build();
-
-        TextBox::with_textbox_style(
-            text,
-            field.bounds,
-            style,
-            textbox_style,
-        )
-        .draw(target)
-        .map(|_| ()) // TextBox::draw returns &str, map to ()
-        .map_err(|_| DisplayError::DrawingError("Failed to draw text".to_string()))
-    }
-
-    fn render_centered_text_mono(
-        target: &mut impl DrawTarget<Color = BinaryColor>,
-        field: &crate::display::Field,
-        text: &str,
-    ) -> Result<(), DisplayError> {
         use embedded_graphics::mono_font::MonoTextStyle;
         use embedded_graphics::primitives::{PrimitiveStyle, Rectangle as EgRect};
+        use crate::display::color_proxy::ConvertColor;
 
-        // Draw border if specified
         if field.border > 0 {
             let rect = EgRect::new(field.position(), field.bounds.size);
-            rect.into_styled(PrimitiveStyle::with_stroke(field.fg_color.to_binary(), field.border as u32))
+            rect.into_styled(PrimitiveStyle::with_stroke(field.fg_color.to_color(), field.border as u32))
                 .draw(target)
                 .map_err(|_| DisplayError::DrawingError("Failed to draw border".to_string()))?;
         }
 
         let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_4X6);
-        let style = MonoTextStyle::new(font, field.fg_color.to_binary());
-
-        // Use DRY helper for text rendering
-        Self::draw_field_text_mono(target, field, text, style)
+        let style = MonoTextStyle::new(font, field.fg_color.to_color());
+        Self::draw_field_text(target, field, text, style)
     }
 
-    fn render_centered_text_gray4(
-        target: &mut impl DrawTarget<Color = Gray4>,
+    fn render_box<D>(
+        target: &mut D,
         field: &crate::display::Field,
-        text: &str,
-    ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::MonoTextStyle;
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth,
+    {
         use embedded_graphics::primitives::{PrimitiveStyle, Rectangle as EgRect};
+        use crate::visualization::SvgColorDepth;
 
-        // Draw border if specified
         if field.border > 0 {
             let rect = EgRect::new(field.position(), field.bounds.size);
-            rect.into_styled(PrimitiveStyle::with_stroke(field.fg_color.to_gray4(), field.border as u32))
-                .draw(target)
-                .map_err(|_| DisplayError::DrawingError("Failed to draw border".to_string()))?;
-        }
-
-        let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_4X6);
-        let style = MonoTextStyle::new(font, field.fg_color.to_gray4());
-
-        // Use DRY helper for text rendering
-        Self::draw_field_text_gray4(target, field, text, style)
-    }
-
-    fn render_box_mono(
-        target: &mut impl DrawTarget<Color = BinaryColor>,
-        field: &crate::display::Field,
-    ) -> Result<(), DisplayError> {
-        use embedded_graphics::primitives::{PrimitiveStyle, Rectangle as EgRect};
-
-        if field.border > 0 {
-            let rect = EgRect::new(
-                field.position(),
-                field.bounds.size
-            );
-            rect.into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, field.border as u32))
-                .draw(target)
-                .map_err(|_| DisplayError::DrawingError("Failed to draw box".to_string()))?;
-        }
-        Ok(())
-    }
-
-    fn render_box_gray4(
-        target: &mut impl DrawTarget<Color = Gray4>,
-        field: &crate::display::Field,
-    ) -> Result<(), DisplayError> {
-        use embedded_graphics::primitives::{PrimitiveStyle, Rectangle as EgRect};
-
-        if field.border > 0 {
-            let rect = EgRect::new(
-                field.position(),
-                field.bounds.size
-            );
-            rect.into_styled(PrimitiveStyle::with_stroke(Gray4::WHITE, field.border as u32))
+            rect.into_styled(PrimitiveStyle::with_stroke(D::Color::on(), field.border as u32))
                 .draw(target)
                 .map_err(|_| DisplayError::DrawingError("Failed to draw box".to_string()))?;
         }
@@ -2206,17 +1904,17 @@ impl DisplayManager {
                 }
                 "version" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X13_BOLD), field.fg_color.to_binary());
-                    Self::draw_field_text_mono(target, field, version, style)?;
+                    Self::draw_field_text(target, field, version, style)?;
                 }
                 "build_date" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_binary());
-                    Self::draw_field_text_mono(target, field, build_date, style)?;
+                    Self::draw_field_text(target, field, build_date, style)?;
                 }
                 "status" => {
                     // Optional status field - render if provided
                     if let Some(status_text) = status {
                         let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_binary());
-                        Self::draw_field_text_mono(target, field, status_text, style)?;
+                        Self::draw_field_text(target, field, status_text, style)?;
                     }
                 }
                 _ => {}
@@ -2256,17 +1954,17 @@ impl DisplayManager {
                 }
                 "version" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X13_BOLD), field.fg_color.to_gray4());
-                    Self::draw_field_text_gray4(target, field, version, style)?;
+                    Self::draw_field_text(target, field, version, style)?;
                 }
                 "build_date" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_gray4());
-                    Self::draw_field_text_gray4(target, field, build_date, style)?;
+                    Self::draw_field_text(target, field, build_date, style)?;
                 }
                 "status" => {
                     // Optional status field - render if provided
                     if let Some(status_text) = status {
                         let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_gray4());
-                        Self::draw_field_text_gray4(target, field, status_text, style)?;
+                        Self::draw_field_text(target, field, status_text, style)?;
                     }
                 }
                 _ => {}

@@ -23,7 +23,7 @@
 
 use super::field::{Field, FieldType};
 use super::page::PageLayout;
-use super::layout::LayoutConfig;
+use super::layout::{LayoutConfig, LayoutCategory};
 use super::color::Color;
 use embedded_graphics::mono_font::ascii::FONT_6X9;
 use embedded_graphics::primitives::Rectangle;
@@ -200,7 +200,7 @@ impl LayoutManager {
     pub fn create_weather_current_page(&self) -> PageLayout {
         let width = self.layout_config.width;
         let height = self.layout_config.height;
-        let is_wide = width > 128;
+        let is_wide = matches!(self.layout_config.category, LayoutCategory::Large | LayoutCategory::ExtraLarge);
 
         // Original: icon_w = height/2 + 2 = 34 for 128x64
         let icon_size = height / 2 + 2;
@@ -433,7 +433,7 @@ impl LayoutManager {
     pub fn create_weather_forecast_page(&self) -> PageLayout {
         let width = self.layout_config.width;
         let height = self.layout_config.height;
-        let is_wide = width > 128;
+        let is_wide = matches!(self.layout_config.category, LayoutCategory::Large | LayoutCategory::ExtraLarge);
 
         // Original: icon_w = height/2 + 2 = 34, icon size = icon_w - 4 = 30
         let header_y = 2;

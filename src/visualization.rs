@@ -46,31 +46,40 @@ pub trait SvgColorDepth: PixelColor + From<<Self as PixelColor>::Raw> {
     /// Rasterize `renderer` into `buffer` using this color depth's format.
     fn render_to_buffer(renderer: &SvgImageRenderer, buffer: &mut Vec<u8>) -> Result<(), VizError>;
 
-    /// Draw a rendered buffer to `display`.
+    /// Draw a rendered buffer to `display` at `position`.
     ///
     /// Implemented concretely per color depth so the compiler sees the exact
     /// `ImageRaw<BinaryColor>` / `ImageRaw<Gray4>` type and can satisfy the
     /// `ImageDrawable` trait bound without additional HRTB constraints on callers.
-    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, display: &mut D) -> Result<(), D::Error>
+    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, position: Point, display: &mut D) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Self>;
+
+    /// Asset sub-folder for weather SVG icons (path differs by color depth).
+    fn weather_asset_folder() -> &'static str;
+
+    /// Maximum brightness / "on" color for this depth.
+    fn on() -> Self;
 }
 
 impl SvgColorDepth for BinaryColor {
     fn required_buffer_size(width: u32, height: u32) -> usize {
-        (width * height / 8) as usize
+        // Ceiling division: each row needs (width+7)/8 bytes
+        height as usize * ((width + 7) / 8) as usize
     }
     fn render_to_buffer(renderer: &SvgImageRenderer, buffer: &mut Vec<u8>) -> Result<(), VizError> {
         renderer.render_to_buffer(buffer)
             .map_err(|e| VizError::VizBufferError(e.to_string()))
     }
-    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, display: &mut D) -> Result<(), D::Error>
+    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, position: Point, display: &mut D) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = BinaryColor>,
     {
         let raw = ImageRaw::<BinaryColor>::new(buffer, width);
-        Image::new(&raw, Point::zero()).draw(display)
+        Image::new(&raw, position).draw(display)
     }
+    fn weather_asset_folder() -> &'static str { "./assets/mono" }
+    fn on() -> Self { BinaryColor::On }
 }
 
 impl SvgColorDepth for Gray4 {
@@ -81,13 +90,15 @@ impl SvgColorDepth for Gray4 {
         renderer.render_to_buffer_gray4(buffer)
             .map_err(|e| VizError::VizBufferError(e.to_string()))
     }
-    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, display: &mut D) -> Result<(), D::Error>
+    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, position: Point, display: &mut D) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Gray4>,
     {
         let raw = ImageRaw::<Gray4>::new(buffer, width);
-        Image::new(&raw, Point::zero()).draw(display)
+        Image::new(&raw, position).draw(display)
     }
+    fn weather_asset_folder() -> &'static str { "./assets/color" }
+    fn on() -> Self { Gray4::WHITE }
 }
 
 /// Which visualization to produce.
@@ -496,7 +507,7 @@ impl Visual {
                 let buffer_size = D::Color::required_buffer_size(width, height);
                 self.buffer.resize(buffer_size, 0);
                 if D::Color::render_to_buffer(&svg_renderer, &mut self.buffer).is_ok() {
-                    D::Color::draw_buffer_to_display(&self.buffer, width, display)?;
+                    D::Color::draw_buffer_to_display(&self.buffer, width, Point::zero(), display)?;
                 }
             }
         }
