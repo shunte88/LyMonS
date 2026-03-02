@@ -41,12 +41,6 @@ use crate::visualization::{Visual, get_visualizer_panel};
 // for the "old" display calls
 use crate::visualization::{Visualization};
 use crate::drawsvg::{get_svg};
-
-// added for VuNeedle in state - future color support
-use embedded_graphics::{
-    pixelcolor::{BinaryColor, PixelColor},
-};
-
 use crate::shm_path::find_squeezelite_shm_path;
 
 const VIS_BUF_SIZE:usize = 16_384;              // Predefined in Squeezelite.
@@ -62,7 +56,6 @@ const LOCK_TRY_WINDOW_MS: u32 = 5;              // total budget for try-loop
 // Timings
 pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~60 FPS
 pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
-
 
 /// simple state carried across calls (last metrics + peak-hold)
 #[derive(Debug, PartialEq, Clone)]
@@ -268,76 +261,6 @@ impl LastVizState {
         self.cap_last_update_r = Vec::new();
 
     }
-
-}
-
-// needed for display_old - burn when done
-pub fn ensure_band_state_old(
-    state: &mut LastVizState, 
-    n_l: usize, 
-    n_r: usize, 
-    n_m: usize,
-    vk: Visualization,
-    init_svg: bool,
-    // ADDED FOR TESTING BUT MAY CARRY OVER TO VUNEEDLE
-    sweep_min: f64,
-    sweep_max: f64,
-    scale_min: f64,
-    scale_max: f64,
-    top_scale: i32,
-    bottom_scale: i32, 
-) 
-{
-
-    let now = Instant::now();
-    let ensure = |buf: &mut Vec<u8>, n: usize| { if buf.len() != n { *buf = vec![0; n]; }};
-    let ensure_t = |buf: &mut Vec<Instant>, n: usize| { if buf.len() != n { *buf = vec![now; n]; }};
-
-    if state.init_svg && init_svg {
-        let width = if state.wide {256}else{128};
-        state.svg_file = get_visualizer_panel(vk, state.wide);
-        let _ = get_svg(state.svg_file.as_str(), width as u32, 64, &mut state.buffer);
-        state.init_svg = false;
-        state.vu_m.set_sweep(
-            scale_min,
-            scale_max,
-            sweep_min,
-            sweep_max,
-        );
-        state.vu_l.set_sweep(
-            scale_min,
-            scale_max,
-            sweep_min,
-            sweep_max,
-        );
-        state.vu_r.set_sweep(
-            scale_min,
-            scale_max,
-            sweep_min,
-            sweep_max,
-        );
-
-    } // init svg
-
-    ensure(&mut state.draw_bands_m, n_m);
-    ensure(&mut state.draw_bands_l, n_l);
-    ensure(&mut state.draw_bands_r, n_r);
-
-    ensure(&mut state.last_bands_m, n_m);
-    ensure(&mut state.last_bands_l, n_l);
-    ensure(&mut state.last_bands_r, n_r);
-
-    ensure(&mut state.cap_m, n_m);
-    ensure(&mut state.cap_l, n_l);
-    ensure(&mut state.cap_r, n_r);
-
-    ensure_t(&mut state.cap_hold_until_m, n_m);
-    ensure_t(&mut state.cap_hold_until_l, n_l);
-    ensure_t(&mut state.cap_hold_until_r, n_r);
-
-    ensure_t(&mut state.cap_last_update_m, n_m);
-    ensure_t(&mut state.cap_last_update_l, n_l);
-    ensure_t(&mut state.cap_last_update_r, n_r);
 
 }
 
