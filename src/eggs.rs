@@ -147,28 +147,33 @@ pub struct Eggs {
 /// Loads/sets the active easter_egg
 pub fn set_easter_egg(egg_name: &str) -> Eggs {
     info!("Load egg: {}",egg_name);
+    let ypos = 3;
     match egg_name {
         "bass" => {
+            let xpos = 4;
+            let tw = 120;
             Eggs::new(
                 EGGS_TYPE_BASS,
                 "./assets/bass.svg",
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(4,4), Size::new(120,6)),
-                Rectangle::new(Point::new(4,12), Size::new(120,6)),
+                Rectangle::new(Point::new(xpos,4), Size::new(tw,6)),
+                Rectangle::new(Point::new(xpos,12), Size::new(tw,6)),
                 48.0,
                 88.0,
                 false,
-                Rectangle::new(Point::new(48,26), Size::new(48,12)),
+                Rectangle::new(Point::new(46,26), Size::new(48,12)),
                 false,
             )
         },
         "cassette" => {
+            let xpos = 18;
+            let tw = 90;
             Eggs::new(
                 EGGS_TYPE_CASSETTE,
                 "./assets/compactcassette.svg",
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(18,6), Size::new(90,6)), 
-                Rectangle::new(Point::new(18,12), Size::new(90,6)), 
+                Rectangle::new(Point::new(xpos,6), Size::new(tw,6)), 
+                Rectangle::new(Point::new(xpos,12), Size::new(tw,6)), 
                 // 13.5=0%, 0=100%
                 // scale in play here for tape reels
                 25.000,  // 25.000 small right
@@ -180,34 +185,40 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
             )
         },
         "ibmpc" => {
+            let xpos = 70;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_IBMPC,
                 "./assets/ibmpc.svg", 
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(70,3), Size::new(64,58)), 
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)), 
                 Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 0.0, 
                 true,
-                Rectangle::new(Point::new(70,52), Size::new(54,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
         },
         "moog" => {
+            let xpos = 83;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_MOOG,
                 "./assets/moog.svg",
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(83,3), Size::new(41,58)), 
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)), 
                 Rectangle::new(Point::zero(), Size::new(0,0)), 
                 -10.0, 
                 0.0, 
                 true,
-                Rectangle::new(Point::new(83,52), Size::new(41,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
         },
         "pipboy" => {
+            let xpos = 72;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_PIPBOY,
                 "./assets/pipboy.svg", 
@@ -217,109 +228,125 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 0.0, 
                 false,
-                Rectangle::new(Point::new(72,52), Size::new(52,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 false,
             )
         },
         "reel2reel" => {
+            let xpos = 72;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_REEL2REEL,
                 "./assets/reel2reels.svg", 
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(72,3), Size::new(52,58)), 
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)), 
                 Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 0.0, 
                 true,
-                Rectangle::new(Point::new(72,52), Size::new(52,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
             },
         "radio40" => {
+            let xpos = 64;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_RADIO40,
                 "./assets/radio40s.svg", 
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(64,3), Size::new(60,58)), 
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)), 
                 Rectangle::new(Point::zero(), Size::new(0,0)),
                 -5.0, 
                 5.0, 
                 true,
-                Rectangle::new(Point::new(64,52), Size::new(60,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
             },
         "radio50" => {
+            let xpos = 74;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_RADIO50,
                 "./assets/radio50s.svg", 
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(74,3), Size::new(46,58)), 
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)), 
                 Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 0.0, 
                 true,
-                Rectangle::new(Point::new(74,52), Size::new(46,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
             },
         "scope" => {
+            let xpos = 65;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_SCOPE,
                 "./assets/scope.svg", 
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(65,3), Size::new(59,58)), 
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)), 
                 Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 10.0, 
                 true,
-                Rectangle::new(Point::new(65,52), Size::new(59,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
         },
         "technics" => {
+            let xpos = 85;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_TECHNICS,
                 "./assets/sl1200.svg",
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(85,5), Size::new(39,56)),
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,56)),
                 Rectangle::new(Point::zero(), Size::new(0,0)),
                 -10.0,
                 12.0,
                 true,
-                Rectangle::new(Point::new(85,52), Size::new(39,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
             },
-        "tubeamp" => {        
+        "tubeamp" => {
+            let xpos = 87;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_TUBEAMP,
                 "./assets/tubeampd.svg", 
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(87,3), Size::new(37,58)), 
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)), 
                 Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0, 
                 100.0, 
                 true,
-                Rectangle::new(Point::new(87,52), Size::new(37,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
             },
         "tvtime" => {
+            let xpos = 85;
+            let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_TVTIME,
                 "./assets/tvtime.svg",
                 Rectangle::new(Point::zero(), Size::new(128,64)),
-                Rectangle::new(Point::new(85,3), Size::new(43,58)),
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)),
                 Rectangle::new(Point::zero(), Size::new(0,0)),
                 0.0,
                 0.0,
                 true,
-                Rectangle::new(Point::new(85,52), Size::new(43,12)),
+                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
                 true,
             )
             },
         "vcr" => {
+            //let xpos = 30;
+            //let tw = 128 - xpos as u32 - 2;
             Eggs::new(
                 EGGS_TYPE_VCR,
                 "./assets/vcr2000.svg", 

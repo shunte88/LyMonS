@@ -1873,97 +1873,53 @@ impl DisplayManager {
     }
 
 
-    /// Render splash screen for monochrome displays
-    fn render_splash_mono(
-        target: &mut impl DrawTarget<Color = BinaryColor>,
+    /// Render splash screen (generic over color depth)
+    fn render_splash<D>(
+        target: &mut D,
         page: &crate::display::PageLayout,
         version: &str,
         build_date: &str,
         status: Option<&str>,
-    ) -> Result<(), DisplayError> {
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<D::Color>,
+    {
         use embedded_graphics::mono_font::MonoTextStyle;
+        use crate::visualization::SvgColorDepth;
+        use crate::display::color_proxy::ConvertColor;
 
         for field in page.fields() {
             match field.name.as_str() {
                 "logo_svg" => {
-                    // Render logo SVG
                     let svg_path = "./assets/lymonslogo.svg";
-                    let mut svg_buffer = Vec::new();
-                    if let Ok(_) = crate::drawsvg::get_svg(
-                        svg_path,
-                        field.bounds.size.width,
-                        field.bounds.size.height,
-                        &mut svg_buffer
-                    ) {
-                        use embedded_graphics::image::{Image, ImageRaw};
-                        let raw_image = ImageRaw::<BinaryColor>::new(&svg_buffer, field.bounds.size.width);
-                        Image::new(&raw_image, field.position())
-                            .draw(target)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw logo".to_string()))?;
+                    if let Ok(data) = std::fs::read_to_string(svg_path) {
+                        if let Ok(renderer) = crate::svgimage::SvgImageRenderer::new(
+                            &data, field.bounds.size.width, field.bounds.size.height
+                        ) {
+                            let mut svg_buffer = vec![0u8; D::Color::required_buffer_size(
+                                field.bounds.size.width, field.bounds.size.height
+                            )];
+                            if D::Color::render_to_buffer(&renderer, &mut svg_buffer).is_ok() {
+                                D::Color::draw_buffer_to_display(
+                                    &svg_buffer, field.bounds.size.width, field.position(), target
+                                ).map_err(|_| DisplayError::DrawingError("Failed to draw logo".to_string()))?;
+                            }
+                        }
                     }
                 }
                 "version" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X13_BOLD), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X13_BOLD), field.fg_color.to_color());
                     Self::draw_field_text(target, field, version, style)?;
                 }
                 "build_date" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_binary());
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_color());
                     Self::draw_field_text(target, field, build_date, style)?;
                 }
                 "status" => {
-                    // Optional status field - render if provided
                     if let Some(status_text) = status {
-                        let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_binary());
-                        Self::draw_field_text(target, field, status_text, style)?;
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    /// Render splash screen for grayscale displays
-    fn render_splash_gray4(
-        target: &mut impl DrawTarget<Color = Gray4>,
-        page: &crate::display::PageLayout,
-        version: &str,
-        build_date: &str,
-        status: Option<&str>,
-    ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::MonoTextStyle;
-
-        for field in page.fields() {
-            match field.name.as_str() {
-                "logo_svg" => {
-                    // Render logo SVG with color support
-                    let svg_path = "./assets/lymonslogo.svg";
-                    let mut svg_buffer = Vec::new();
-                    if let Ok(_) = crate::drawsvg::get_svg_gray4(
-                        svg_path,
-                        field.bounds.size.width,
-                        field.bounds.size.height,
-                        &mut svg_buffer
-                    ) {
-                        use embedded_graphics::image::{Image, ImageRaw};
-                        let raw_image = ImageRaw::<Gray4>::new(&svg_buffer, field.bounds.size.width);
-                        Image::new(&raw_image, field.position())
-                            .draw(target)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw logo".to_string()))?;
-                    }
-                }
-                "version" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X13_BOLD), field.fg_color.to_gray4());
-                    Self::draw_field_text(target, field, version, style)?;
-                }
-                "build_date" => {
-                    let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_gray4());
-                    Self::draw_field_text(target, field, build_date, style)?;
-                }
-                "status" => {
-                    // Optional status field - render if provided
-                    if let Some(status_text) = status {
-                        let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_gray4());
+                        let style = MonoTextStyle::new(field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8), field.fg_color.to_color());
                         Self::draw_field_text(target, field, status_text, style)?;
                     }
                 }
@@ -2156,27 +2112,31 @@ impl DisplayManager {
         let show_remaining = self.show_remaining;
         let remaining_time = self.remaining_time_secs;
 
+        // Combined mode horizontal alignment: wide displays center, narrow displays left-align
+        use embedded_text::alignment::HorizontalAlignment;
+        let combined_h_align = if is_wide { HorizontalAlignment::Center } else { HorizontalAlignment::Left };
+
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
                 if !artist_rect.is_zero_sized() {
-                    Self::draw_egg_artist_text_mono(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen)?;
+                    Self::draw_egg_artist_text(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen, combined_h_align)?;
                 }
                 if !is_combined && !title_rect.is_zero_sized() {
-                    Self::draw_egg_title_text_mono(fb, &title_rect, &title_text, is_wide, can_widen)?;
+                    Self::draw_egg_title_text(fb, &title_rect, &title_text, is_wide, can_widen)?;
                 }
                 if !time_rect.is_zero_sized() {
-                    Self::draw_egg_time_text_mono(fb, &time_rect, track_time, show_remaining, remaining_time)?;
+                    Self::draw_egg_time_text(fb, &time_rect, track_time, show_remaining, remaining_time)?;
                 }
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
                 if !artist_rect.is_zero_sized() {
-                    Self::draw_egg_artist_text_gray4(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen)?;
+                    Self::draw_egg_artist_text(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen, combined_h_align)?;
                 }
                 if !is_combined && !title_rect.is_zero_sized() {
-                    Self::draw_egg_title_text_gray4(fb, &title_rect, &title_text, is_wide, can_widen)?;
+                    Self::draw_egg_title_text(fb, &title_rect, &title_text, is_wide, can_widen)?;
                 }
                 if !time_rect.is_zero_sized() {
-                    Self::draw_egg_time_text_gray4(fb, &time_rect, track_time, show_remaining, remaining_time)?;
+                    Self::draw_egg_time_text(fb, &time_rect, track_time, show_remaining, remaining_time)?;
                 }
             }
         }
@@ -2184,169 +2144,38 @@ impl DisplayManager {
         Ok(())
     }
 
-    /// Draw artist text for easter egg (monochrome)
-    fn draw_egg_artist_text_mono(
-        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
+    /// Draw artist text for easter egg (generic over color depth)
+    fn draw_egg_artist_text<D>(
+        target: &mut D,
         rect: &embedded_graphics::primitives::Rectangle,
         artist_text: &str,
         is_combined: bool,
         is_wide: bool,
         can_widen: bool,
-    ) -> Result<(), DisplayError> {
+        combined_h_align: embedded_text::alignment::HorizontalAlignment,
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default,
+    {
         use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_7X13_BOLD}, MonoTextStyle};
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
             style::TextBoxStyleBuilder,
             TextBox,
         };
+        use crate::visualization::SvgColorDepth;
 
         if artist_text.is_empty() {
             return Ok(());
         }
 
-        // Use larger font for wide displays (double size: 4x6 -> 8x13)
-        let font = if is_wide && can_widen{ &FONT_7X13_BOLD } else { &FONT_4X6 };
-        let character_style = MonoTextStyle::new(font, BinaryColor::On);
-
-        // Use TextBox for automatic text wrapping (like original implementation)
-        let textbox_style = if is_combined {
-            // Combined mode: Left-aligned, Top
-            TextBoxStyleBuilder::new()
-                .alignment(HorizontalAlignment::Left)
-                .vertical_alignment(VerticalAlignment::Top)
-                .build()
-        } else {
-            // Non-combined: Centered, Middle
-            TextBoxStyleBuilder::new()
-                .alignment(HorizontalAlignment::Center)
-                .vertical_alignment(VerticalAlignment::Middle)
-                .build()
-        };
-
-        TextBox::with_textbox_style(
-            artist_text,
-            *rect,
-            character_style,
-            textbox_style,
-        )
-        .draw(target)
-        .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
-
-        Ok(())
-    }
-
-    /// Draw title text for easter egg (static method)
-    fn draw_egg_title_text_mono(
-        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
-        rect: &embedded_graphics::primitives::Rectangle,
-        title_text: &str,
-        is_wide: bool,
-        can_widen: bool,
-    ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_7X13_BOLD}, MonoTextStyle};
-        use embedded_text::{
-            alignment::{HorizontalAlignment, VerticalAlignment},
-            style::TextBoxStyleBuilder,
-            TextBox,
-        };
-
-        if title_text.is_empty() {
-            return Ok(());
-        }
-
-        // Use larger font for wide displays (double size: 4x6 -> 8x13)
-        let font = if is_wide && can_widen{ &FONT_7X13_BOLD } else { &FONT_4X6 };
-        let character_style = MonoTextStyle::new(font, BinaryColor::On);
-
-        // Center alignment, Middle vertical alignment (with wrapping)
-        let textbox_style = TextBoxStyleBuilder::new()
-            .alignment(HorizontalAlignment::Center)
-            .vertical_alignment(VerticalAlignment::Middle)
-            .build();
-
-        TextBox::with_textbox_style(
-            title_text,
-            *rect,
-            character_style,
-            textbox_style,
-        )
-        .draw(target)
-        .map_err(|_| DisplayError::DrawingError("Failed to draw title text".to_string()))?;
-
-        Ok(())
-    }
-
-    /// Draw time text for easter egg (monochrome)
-    fn draw_egg_time_text_mono(
-        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = BinaryColor>,
-        rect: &embedded_graphics::primitives::Rectangle,
-        track_time: f32,
-        show_remaining: bool,
-        remaining_time: f32,
-    ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::{iso_8859_13::FONT_6X10, MonoTextStyle};
-        use embedded_text::{
-            alignment::{HorizontalAlignment, VerticalAlignment},
-            style::TextBoxStyleBuilder,
-            TextBox,
-        };
-        use crate::deutils::seconds_to_hms;
-
-        let time_str = if show_remaining {
-            format!("-{}", seconds_to_hms(remaining_time))
-        } else {
-            seconds_to_hms(track_time)
-        };
-
-        let character_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
-
-        // Right alignment, Middle vertical alignment
-        let textbox_style = TextBoxStyleBuilder::new()
-            .alignment(HorizontalAlignment::Right)
-            .vertical_alignment(VerticalAlignment::Middle)
-            .build();
-
-        TextBox::with_textbox_style(
-            &time_str,
-            *rect,
-            character_style,
-            textbox_style,
-        )
-        .draw(target)
-        .map_err(|_| DisplayError::DrawingError("Failed to draw time text".to_string()))?;
-
-        Ok(())
-    }
-
-    /// Draw artist text for easter egg (grayscale)
-    fn draw_egg_artist_text_gray4(
-        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = embedded_graphics::pixelcolor::Gray4>,
-        rect: &embedded_graphics::primitives::Rectangle,
-        artist_text: &str,
-        is_combined: bool,
-        is_wide: bool,
-        can_widen: bool,
-    ) -> Result<(), DisplayError> {
-        use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_7X13_BOLD}, MonoTextStyle};
-        use embedded_graphics::pixelcolor::Gray4;
-        use embedded_text::{
-            alignment::{HorizontalAlignment, VerticalAlignment},
-            style::TextBoxStyleBuilder,
-            TextBox,
-        };
-
-        if artist_text.is_empty() {
-            return Ok(());
-        }
-
-        // Use larger font for wide displays (double size: 4x6 -> 8x13)
         let font = if is_wide && can_widen { &FONT_7X13_BOLD } else { &FONT_4X6 };
-        let character_style = MonoTextStyle::new(font, Gray4::WHITE);
+        let character_style = MonoTextStyle::new(font, D::Color::on());
 
-        // Center alignment, Top/Middle based on is_combined
         let textbox_style = if is_combined {
             TextBoxStyleBuilder::new()
-                .alignment(HorizontalAlignment::Center)
+                .alignment(combined_h_align)
                 .vertical_alignment(VerticalAlignment::Top)
                 .build()
         } else {
@@ -2356,75 +2185,72 @@ impl DisplayManager {
                 .build()
         };
 
-        TextBox::with_textbox_style(
-            artist_text,
-            *rect,
-            character_style,
-            textbox_style,
-        )
-        .draw(target)
-        .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
+        TextBox::with_textbox_style(artist_text, *rect, character_style, textbox_style)
+            .draw(target)
+            .map_err(|_| DisplayError::DrawingError("Failed to draw artist text".to_string()))?;
 
         Ok(())
     }
 
-    fn draw_egg_title_text_gray4(
-        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = embedded_graphics::pixelcolor::Gray4>,
+    /// Draw title text for easter egg (generic over color depth)
+    fn draw_egg_title_text<D>(
+        target: &mut D,
         rect: &embedded_graphics::primitives::Rectangle,
         title_text: &str,
         is_wide: bool,
         can_widen: bool,
-    ) -> Result<(), DisplayError> {
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default,
+    {
         use embedded_graphics::mono_font::{iso_8859_13::{FONT_4X6, FONT_7X13_BOLD}, MonoTextStyle};
-        use embedded_graphics::pixelcolor::Gray4;
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
             style::TextBoxStyleBuilder,
             TextBox,
         };
+        use crate::visualization::SvgColorDepth;
 
         if title_text.is_empty() {
             return Ok(());
         }
 
-        // Use larger font for wide displays (double size: 4x6 -> 8x13)
         let font = if is_wide && can_widen { &FONT_7X13_BOLD } else { &FONT_4X6 };
-        let character_style = MonoTextStyle::new(font, Gray4::WHITE);
+        let character_style = MonoTextStyle::new(font, D::Color::on());
 
-        // Center alignment, Middle vertical alignment (with wrapping)
         let textbox_style = TextBoxStyleBuilder::new()
             .alignment(HorizontalAlignment::Center)
             .vertical_alignment(VerticalAlignment::Middle)
             .build();
 
-        TextBox::with_textbox_style(
-            title_text,
-            *rect,
-            character_style,
-            textbox_style,
-        )
-        .draw(target)
-        .map_err(|_| DisplayError::DrawingError("Failed to draw title text".to_string()))?;
+        TextBox::with_textbox_style(title_text, *rect, character_style, textbox_style)
+            .draw(target)
+            .map_err(|_| DisplayError::DrawingError("Failed to draw title text".to_string()))?;
 
         Ok(())
     }
 
-    /// Draw time text for easter egg (grayscale)
-    fn draw_egg_time_text_gray4(
-        target: &mut impl embedded_graphics::prelude::DrawTarget<Color = embedded_graphics::pixelcolor::Gray4>,
+    /// Draw time text for easter egg (generic over color depth)
+    fn draw_egg_time_text<D>(
+        target: &mut D,
         rect: &embedded_graphics::primitives::Rectangle,
         track_time: f32,
         show_remaining: bool,
         remaining_time: f32,
-    ) -> Result<(), DisplayError> {
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default,
+    {
         use embedded_graphics::mono_font::{iso_8859_13::FONT_6X10, MonoTextStyle};
-        use embedded_graphics::pixelcolor::Gray4;
         use embedded_text::{
             alignment::{HorizontalAlignment, VerticalAlignment},
             style::TextBoxStyleBuilder,
             TextBox,
         };
         use crate::deutils::seconds_to_hms;
+        use crate::visualization::SvgColorDepth;
 
         let time_str = if show_remaining {
             format!("-{}", seconds_to_hms(remaining_time))
@@ -2432,22 +2258,16 @@ impl DisplayManager {
             seconds_to_hms(track_time)
         };
 
-        let character_style = MonoTextStyle::new(&FONT_6X10, Gray4::WHITE);
+        let character_style = MonoTextStyle::new(&FONT_6X10, D::Color::on());
 
-        // Right alignment, Middle vertical alignment
         let textbox_style = TextBoxStyleBuilder::new()
             .alignment(HorizontalAlignment::Right)
             .vertical_alignment(VerticalAlignment::Middle)
             .build();
 
-        TextBox::with_textbox_style(
-            &time_str,
-            *rect,
-            character_style,
-            textbox_style,
-        )
-        .draw(target)
-        .map_err(|_| DisplayError::DrawingError("Failed to draw time text".to_string()))?;
+        TextBox::with_textbox_style(&time_str, *rect, character_style, textbox_style)
+            .draw(target)
+            .map_err(|_| DisplayError::DrawingError("Failed to draw time text".to_string()))?;
 
         Ok(())
     }
@@ -2665,10 +2485,10 @@ impl DisplayManager {
         // Render based on framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                Self::render_splash_mono(fb, &splash_page, version, build_date, None)?;
+                Self::render_splash(fb, &splash_page, version, build_date, None)?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                Self::render_splash_gray4(fb, &splash_page, version, build_date, None)?;
+                Self::render_splash(fb, &splash_page, version, build_date, None)?;
             }
         }
 
@@ -2696,22 +2516,10 @@ impl DisplayManager {
         // Render with status message
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                Self::render_splash_mono(
-                    fb,
-                    &splash_page,
-                    &self.splash_version,
-                    &self.splash_build_date,
-                    Some(status)
-                )?;
+                Self::render_splash(fb, &splash_page, &self.splash_version, &self.splash_build_date, Some(status))?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                Self::render_splash_gray4(
-                    fb,
-                    &splash_page,
-                    &self.splash_version,
-                    &self.splash_build_date,
-                    Some(status)
-                )?;
+                Self::render_splash(fb, &splash_page, &self.splash_version, &self.splash_build_date, Some(status))?;
             }
         }
 
