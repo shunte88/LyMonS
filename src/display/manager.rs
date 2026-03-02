@@ -1981,35 +1981,73 @@ impl DisplayManager {
                         viz_state.this.db_m = m_db;
                         viz_state.this.hold_m = peak_hold;
                     }
-                    VizPayload::AioVuMono { m_db } => {
+                    VizPayload::VuAio { m_db, l_db, r_db } => {
+                        // Gather data before mutably borrowing viz_state
+                        let aio_volume = self.status_bar.state().volume_percent;
+                        let aio_is_muted = self.status_bar.state().is_muted;
+                        let aio_audio_level = self.audio_level;
+                        let aio_time_str = chrono::Local::now().format("%H:%M").to_string();
+                        let time_secs = if self.show_remaining { self.remaining_time_secs } else { self.current_track_time_secs };
+                        let aio_track_str = if self.show_remaining {
+                            format!("-{}", crate::deutils::seconds_to_hms(time_secs))
+                        } else {
+                            crate::deutils::seconds_to_hms(time_secs)
+                        };
+                        let scroll_text = match (self.artist.is_empty(), self.title.is_empty()) {
+                            (false, false) => format!("{} - {}", self.artist, self.title),
+                            (false, true)  => self.artist.clone(),
+                            (true,  false) => self.title.clone(),
+                            _              => String::new(),
+                        };
+
                         let viz_state = self.visualizer.viz_state_mut();
                         viz_state.this.db_m = m_db;
-                        // Update track info for AIO display
-                        let track_info = if !self.artist.is_empty() && !self.title.is_empty() {
-                            format!("{} - {}", self.artist, self.title)
-                        } else if !self.artist.is_empty() {
-                            self.artist.clone()
-                        } else if !self.title.is_empty() {
-                            self.title.clone()
-                        } else {
-                            String::from("No track playing")
-                        };
-                        viz_state.last_artist = track_info;
+                        viz_state.this.db_l = l_db;
+                        viz_state.this.db_r = r_db;
+                        viz_state.aio_volume = aio_volume;
+                        viz_state.aio_is_muted = aio_is_muted;
+                        viz_state.aio_audio_level = aio_audio_level;
+                        viz_state.aio_time_str = aio_time_str;
+                        viz_state.aio_track_str = aio_track_str;
+                        if scroll_text != viz_state.aio_scroll_text {
+                            viz_state.aio_scroll_text = scroll_text;
+                            viz_state.aio_scroll_offset = 0;
+                            viz_state.aio_scroll_pause = 30;
+                        }
                     }
-                    VizPayload::AioHistMono { bands } => {
+                    VizPayload::HistAio { bands, bands_l, bands_r } => {
+                        // Gather data before mutably borrowing viz_state
+                        let aio_volume = self.status_bar.state().volume_percent;
+                        let aio_is_muted = self.status_bar.state().is_muted;
+                        let aio_audio_level = self.audio_level;
+                        let aio_time_str = chrono::Local::now().format("%H:%M").to_string();
+                        let time_secs = if self.show_remaining { self.remaining_time_secs } else { self.current_track_time_secs };
+                        let aio_track_str = if self.show_remaining {
+                            format!("-{}", crate::deutils::seconds_to_hms(time_secs))
+                        } else {
+                            crate::deutils::seconds_to_hms(time_secs)
+                        };
+                        let scroll_text = match (self.artist.is_empty(), self.title.is_empty()) {
+                            (false, false) => format!("{} - {}", self.artist, self.title),
+                            (false, true)  => self.artist.clone(),
+                            (true,  false) => self.title.clone(),
+                            _              => String::new(),
+                        };
+
                         let viz_state = self.visualizer.viz_state_mut();
                         viz_state.last_bands_m = bands;
-                        // Update track info for AIO display
-                        let track_info = if !self.artist.is_empty() && !self.title.is_empty() {
-                            format!("{} - {}", self.artist, self.title)
-                        } else if !self.artist.is_empty() {
-                            self.artist.clone()
-                        } else if !self.title.is_empty() {
-                            self.title.clone()
-                        } else {
-                            String::from("No track playing")
-                        };
-                        viz_state.last_artist = track_info;
+                        viz_state.last_bands_l = bands_l;
+                        viz_state.last_bands_r = bands_r;
+                        viz_state.aio_volume = aio_volume;
+                        viz_state.aio_is_muted = aio_is_muted;
+                        viz_state.aio_audio_level = aio_audio_level;
+                        viz_state.aio_time_str = aio_time_str;
+                        viz_state.aio_track_str = aio_track_str;
+                        if scroll_text != viz_state.aio_scroll_text {
+                            viz_state.aio_scroll_text = scroll_text;
+                            viz_state.aio_scroll_offset = 0;
+                            viz_state.aio_scroll_pause = 30;
+                        }
                     }
                     VizPayload::WaveformSpectrum { waveform_l, waveform_r, spectrum_column } => {
                         let viz_state = self.visualizer.viz_state_mut();
@@ -2022,7 +2060,7 @@ impl DisplayManager {
                         }
                     }
                     _ => {
-                        // TODO: Handle other visualization types (combi modes, AIO, etc.)
+                        // TODO: Handle other visualization types
                     }
                 }
             }
@@ -2596,7 +2634,7 @@ impl DisplayManager {
         use crate::display::layout::LayoutCategory;
         if matches!(self.layout.category, LayoutCategory::Large | LayoutCategory::ExtraLarge) {
             viz_kind = match viz_kind {
-                Visualization::VuMono => Visualization::AioVuMono,
+                Visualization::VuMono => Visualization::VuAio,
                 _ => viz_kind,
             };
         }
@@ -2682,8 +2720,8 @@ impl DisplayManager {
             Visualization::HistStereo,
             Visualization::HistMono,
             Visualization::VuStereoWithCenterPeak,
-            Visualization::AioVuMono,
-            Visualization::AioHistMono,
+            Visualization::VuAio,
+            Visualization::HistAio,
         ];
 
         // Find current viz index

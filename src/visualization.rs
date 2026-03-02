@@ -111,8 +111,8 @@ pub enum Visualization {
     HistStereo,               // two histogram bars (L/R)
     HistMono,                 // mono histogram (downmix)
     VuStereoWithCenterPeak,   // L/R VU with a central mono peak meter
-    AioVuMono,                // All In One with downmix VU
-    AioHistMono,              // All In One with downmix histogram
+    VuAio,                    // All In One with downmix VU
+    HistAio,                  // All In One with downmix histogram
     WaveformSpectrum,         // Waveform + Spectrogram (oscilloscope + waterfall)
     NoVisualization,          // no visualization
 }
@@ -281,22 +281,22 @@ impl Visual {
         let mut data = self.svg_data.clone();
 
         // overage beacon
-        if over_left {
-            data = data.replace("{{overflow}}", "1"); // downmix
-            data = data.replace("{{overflow_left}}", "1");
-        } else {
-            data = data.replace("{{overflow}}", "0"); // downmix
-            data = data.replace("{{overflow_left}}", "0");
-        }
-        if over_right {
-            data = data.replace("{{overflow_right}}", "1");
-        } else {
-            data = data.replace("{{overflow_right}}", "0");
-        }
+        let over = if over_left { "1" } else { "0" };
+        data = data
+            .replace("{{overflow}}", over.clone()) // downmix
+            .replace("{{overflow-left}}", over.clone())
+            .replace("{{overflow_left}}", over.clone());
+        let over = if over_right { "1" } else { "0" };
+        data = data
+            .replace("{{overflow-right}}", over.clone())
+            .replace("{{overflow_right}}", over.clone());
 
-        data = data.replace("{{needle}}", metric_left.to_string().as_str());
-        data = data.replace("{{needle_left}}", metric_left.to_string().as_str());
-        data = data.replace("{{needle_right}}", metric_right.to_string().as_str());
+        data = data
+            .replace("{{needle}}", metric_left.to_string().as_str())
+            .replace("{{needle_left}}", metric_left.to_string().as_str())
+            .replace("{{needle-left}}", metric_left.to_string().as_str())
+            .replace("{{needle_right}}", metric_right.to_string().as_str())
+            .replace("{{needle-right}}", metric_right.to_string().as_str());
 
         data = self.apply_template(&data, &peak_m, &hold_m, "peak");
         data = self.apply_template(&data, &peak_l, &hold_l, "peak_left");
@@ -352,7 +352,7 @@ impl Visual {
                 let buffer_size = D::Color::required_buffer_size(width, height);
                 self.buffer.resize(buffer_size, 0);
                 if D::Color::render_to_buffer(&svg_renderer, &mut self.buffer).is_ok() {
-                    D::Color::draw_buffer_to_display(&self.buffer, width, Point::zero(), display)?;
+                    D::Color::draw_buffer_to_display(&self.buffer, width, self.rect.top_left, display)?;
                 }
             }
         }
@@ -379,8 +379,8 @@ pub fn transpose_kind(kind: &str) -> Visualization {
         "hist_mono" => Visualization::HistMono,
         "vu_stereo_with_center_peak" | "combination" | "vu_combi" 
             => Visualization::VuStereoWithCenterPeak,
-        "aio_vu_mono" => Visualization::AioVuMono,
-        "aio_hist_mono" => Visualization::AioHistMono,
+        "vu_aio" => Visualization::VuAio,
+        "hist_aio" => Visualization::HistAio,
         "waveform_spectrum" => Visualization::WaveformSpectrum,
         "no_viz" => Visualization::NoVisualization,
         &_ => Visualization::NoVisualization,
@@ -393,14 +393,16 @@ pub fn transpose_kind(kind: &str) -> Visualization {
 /// asset path based on display resolution and capabilities.
 pub fn get_visualizer_panel_with_layout(kind: Visualization, layout: &LayoutConfig) -> String {
     let folder = &layout.asset_path;
+    //let vu_aio_svg = if layout.width > 132 { "vuaio.svg" } else { "vudownmix.svg" };
+    let vu_aio_svg = "vuaio.svg";
     let panel = match kind {
         Visualization::VuStereo => format!("{}vu2up.svg", folder),
         Visualization::VuMono  => format!("{}vudownmix.svg", folder),
         Visualization::VuStereoWithCenterPeak => format!("{}vucombi.svg", folder),
-        Visualization::AioVuMono => format!("{}vuaio.svg", folder),
+        Visualization::VuAio => format!("{}{}", folder, vu_aio_svg),
         Visualization::PeakStereo => format!("{}peak.svg", folder),
         Visualization::PeakMono  => format!("{}peakmono.svg", folder),
-        Visualization::AioHistMono => format!("{}histaio.svg", folder),
+        Visualization::HistAio => format!("{}histaio.svg", folder),
         Visualization::HistStereo |
         Visualization::HistMono |
         Visualization::WaveformSpectrum |
@@ -414,10 +416,10 @@ pub fn visualizer_svg_supported(kind: Visualization) -> bool {
         Visualization::VuStereo |
         Visualization::VuMono |
         Visualization::VuStereoWithCenterPeak |
-        Visualization::AioVuMono |
+        Visualization::VuAio |
         Visualization::PeakStereo |
         Visualization::PeakMono  |
-        Visualization::AioHistMono => true,
+        Visualization::HistAio => true,
         Visualization::HistStereo |
         Visualization::HistMono |
         Visualization::WaveformSpectrum |
@@ -437,10 +439,10 @@ pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
         Visualization::VuStereo => format!("{folder}vu2up.svg"),
         Visualization::VuMono  => format!("{folder}vudownmix.svg"),
         Visualization::VuStereoWithCenterPeak => format!("{folder}vucombi.svg"),
-        Visualization::AioVuMono => format!("{folder}vuaio.svg"),
+        Visualization::VuAio => format!("{folder}vuaio.svg"),
         Visualization::PeakStereo => format!("{folder}peak.svg"),
         Visualization::PeakMono  => format!("{folder}peakmono.svg"),
-        Visualization::AioHistMono => format!("{folder}histaio.svg"),
+        Visualization::HistAio => format!("{folder}histaio.svg"),
         Visualization::HistStereo |
         Visualization::HistMono |
         Visualization::WaveformSpectrum |
@@ -497,11 +499,20 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 false,
                 19,
             )},
-        Visualization::AioVuMono  => {
+        Visualization::VuAio  => {
+            // Wide: stereo VU using ssd1309/vu2up.svg drawn at x=128 (right half of 256px display)
+            // Narrow: mono VU using vuaio.svg covering full 128px (VU face in right portion)
+            let (svg_file, rect) = if wide {
+                (String::from("./assets/ssd1309/vu2up.svg"),
+                 Rectangle::new(Point::new(128, 0), Size::new(128, 64)))
+            } else {
+                (String::from(format!("{folder}vuaio.svg")),
+                 Rectangle::new(Point::zero(), Size::new(128, 64)))
+            };
             Visual::new(
                 kind,
-                String::from(format!("{folder}vuaio.svg")),
-                Rectangle::new(Point::zero(), Size::new(size.width, size.height)),
+                svg_file,
+                rect,
                 -25.0,
                 5.0,
                 -44.01,
@@ -539,7 +550,7 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
                 16,
             )
         },
-        Visualization::AioHistMono  => {
+        Visualization::HistAio  => {
             Visual::new(
                 kind,
                 String::from(format!("{folder}none.svg")),

@@ -92,11 +92,15 @@ pub enum VizPayload {
         m_db: f32, 
         peak_hold: u8 
     },
-    AioVuMono { 
-        m_db: f32 
+    VuAio {
+        m_db: f32,
+        l_db: f32,
+        r_db: f32,
     },
-    AioHistMono { 
-        bands: Vec<u8> 
+    HistAio {
+        bands: Vec<u8>,
+        bands_l: Vec<u8>,
+        bands_r: Vec<u8>,
     },
     WaveformSpectrum {
         waveform_l: Vec<i16>,     // Downsampled waveform data (L channel)
@@ -254,16 +258,16 @@ async fn visualizer_worker(
                         }
                     );
                 }
-                Visualization::AioVuMono => {
+                Visualization::VuAio => {
                     let (_pk_l, rms_l) = peak_and_rms(left);
                     let (_pk_r, rms_r) = peak_and_rms(right);
+                    let l_db = dbfs::dbfs_to_vudb(dbfs(rms_l));
+                    let r_db = dbfs::dbfs_to_vudb(dbfs(rms_r));
                     // downmix RMS ≈ sqrt((L^2 + R^2)/2)
                     let m_rms = (((rms_l*rms_l) + (rms_r*rms_r)) * 0.5).sqrt();
                     let m_db = dbfs::dbfs_to_vudb(dbfs(m_rms)); // includes VU meter adj.
                     publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                        VizPayload::AioVuMono { 
-                            m_db 
-                        }
+                        VizPayload::VuAio { m_db, l_db, r_db }
                     );
                 }
                 Visualization::PeakStereo => {
@@ -318,17 +322,15 @@ async fn visualizer_worker(
                         );
                     }
                 }
-                Visualization::AioHistMono => {
+                Visualization::HistAio => {
                     if let Some(e) = &mut eng {
-                        let (l, r) = e.compute_levels(left, right);
+                        let (bands_l, bands_r) = e.compute_levels(left, right);
                         // downmix = max(L,R) per band (punchier than mean)
-                        let bands = l.iter().zip(r.iter())
+                        let bands = bands_l.iter().zip(bands_r.iter())
                                      .map(|(a,b)| (*a).max(*b))
                                      .collect::<Vec<u8>>();
                         publish(&mut out_tx, frame.timestamp, is_playing, frame.sample_rate, kind,
-                            VizPayload::AioHistMono { 
-                                bands 
-                            }
+                            VizPayload::HistAio { bands, bands_l, bands_r }
                         );
                     }
                 }

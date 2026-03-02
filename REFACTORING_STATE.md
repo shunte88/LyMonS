@@ -1111,18 +1111,8 @@ cargo run --features emulator -- --name mythy --emulated -a peak_stereo
 
 3. **Combination Modes**
    - VuStereoWithCenterPeak - L/R VU + center peak meter
-   - AioVuMono - All-in-One with VU + track info
-   - AioHistMono - All-in-One with histogram + track info
-
-### Reference Implementation
-
-All visualization rendering in `src/display_old.rs`:
-- Lines 1884-2016: Peak meters (DONE ✓)
-- Lines 2018-2175: Histogram pairs
-- Lines 2177-2343: Histogram mono
-- Lines 2345-2593: VU stereo
-- Lines 2595-2737: VU mono
-- Lines 2739-2985: Combination modes
+   - VuAio - All-in-One with VU + track info
+   - HistAio - All-in-One with histogram + track info
 
 ### Future Enhancements
 
