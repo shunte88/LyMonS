@@ -227,7 +227,7 @@ impl StatusBar {
     {
         use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
         use embedded_graphics::text::Text;
-        use embedded_graphics::primitives::{Line};
+        
         use embedded_graphics::geometry::Point;
 
         // Only render if this is a status_bar field

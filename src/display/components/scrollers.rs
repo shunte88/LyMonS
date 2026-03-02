@@ -23,7 +23,6 @@
 
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
-use embedded_graphics::text::TextStyle;
 use crate::display::layout::LayoutConfig;
 use crate::display::field::Field;
 use crate::textable::{TextScroller, ScrollMode};

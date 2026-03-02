@@ -38,7 +38,6 @@ use crate::display::{
     FrameBuffer,
     LayoutConfig,
     LayoutManager,
-    PageLayout,
 };
 use crate::display::components::{
     StatusBar,
@@ -1418,7 +1417,7 @@ impl DisplayManager {
         crate::display::color::Color: crate::display::color_proxy::ConvertColor<D::Color>,
     {
         use embedded_graphics::prelude::*;
-        use embedded_graphics::Pixel;
+        
         use embedded_graphics::mono_font::MonoTextStyle;
         use embedded_graphics::text::{Text, Baseline};
         use embedded_graphics::mono_font::iso_8859_13::{FONT_5X8, FONT_6X13_BOLD, FONT_7X14};
@@ -1594,7 +1593,7 @@ impl DisplayManager {
         use embedded_graphics::text::{Text, Baseline};
         use embedded_graphics::mono_font::iso_8859_13::FONT_6X10;
         use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
-        use embedded_graphics::primitives::{PrimitiveStyle, Rectangle as EgRect};
+        
 
         // Get the weather forecast page layout
         let page = self.layout_manager.create_weather_forecast_page();

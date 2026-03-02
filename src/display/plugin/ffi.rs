@@ -27,8 +27,7 @@
 //! between the host application and plugins. All types use `#[repr(C)]`
 //! to ensure consistent memory layout across compilation units.
 
-use std::ffi::{c_void, c_char};
-use std::os::raw::c_int;
+use std::ffi::c_char;
 use std::mem::ManuallyDrop;
 use crate::config::{DisplayConfig, BusConfig};
 use crate::display::{DisplayCapabilities, ColorDepth};

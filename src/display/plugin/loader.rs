@@ -22,7 +22,6 @@
  */
 
 use std::path::{Path, PathBuf};
-use std::ffi::CStr;
 use log::{debug, info, warn};
 use libloading::{Library, Symbol};
 

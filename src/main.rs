@@ -31,7 +31,6 @@ use std::{time::Duration};
 use log::{info, error, warn};
 use env_logger::Env;
 use clap::{Arg, ArgAction, Command};
-use chrono::{Timelike, Local};
 use local_ip_address::{local_ip};
 
 #[cfg(unix)] // Only compile this block on Unix-like systems

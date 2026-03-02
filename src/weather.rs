@@ -29,7 +29,7 @@ use log::{info, error};
 use tokio::sync::{mpsc, watch, Mutex as TokMutex};
 use tokio::task::JoinHandle;
 use std::sync::Arc;
-use chrono::{DateTime, Local, FixedOffset, Utc};
+use chrono::{DateTime, Local};
 
 use flate2::read::GzDecoder;
 use std::io::Read;

@@ -38,8 +38,7 @@ use crate::dbfs;
 use crate::vision::{
     VisReader, 
     peak_and_rms, dbfs,
-    PEAK_METER_LEVELS_MAX, 
-    LEVEL_DECAY_STEPS_PER_FRAME,
+    PEAK_METER_LEVELS_MAX,
     LEVEL_FLOOR_DB, 
     LEVEL_CEIL_DB,
     // Timings
@@ -191,9 +190,9 @@ async fn visualizer_worker(
     let mut kind = Visualization::VuStereo;
 
     // Peak-hold (for peak meters & center peak). Units: 0..=PEAK_METER_LEVELS_MAX
-    let mut peak_hold_l: u8 = 0;
-    let mut peak_hold_r: u8 = 0;
-    let mut peak_hold_m: u8 = 0;
+    let peak_hold_l: u8 = 0;
+    let peak_hold_r: u8 = 0;
+    let peak_hold_m: u8 = 0;
 
     info!("visualizer worker started (idle)");
 

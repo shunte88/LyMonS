@@ -68,16 +68,15 @@ pub mod emulator_window;
 pub mod emulator_controller;
 
 // Re-exports for convenience
-pub use traits::{DisplayDriver, DrawableDisplay, DisplayCapabilities, ColorDepth};
-pub use error::{DisplayError, DisplayFactoryError};
+pub use traits::{DisplayDriver, DisplayCapabilities, ColorDepth};
+pub use error::DisplayError;
 pub use framebuffer::FrameBuffer;
 pub use factory::{DisplayDriverFactory, BoxedDriver};
-pub use layout::{LayoutConfig, LayoutCategory, AssetType, FontSize};
+pub use layout::LayoutConfig;
 pub use manager::DisplayManager;
-pub use field::{Field, FieldType};
+pub use field::Field;
 pub use page::PageLayout;
 pub use layout_manager::LayoutManager;
-pub use color::{Color, ColorValue};
 pub use mode_controller::{DisplayModeController, ModeControllerConfig};
 
 /// Display mode enum - controls what content is shown on the display
@@ -96,14 +95,6 @@ pub enum DisplayMode {
 //pub use crate::display_old::OledDisplay;
 
 // Re-export driver types when features are enabled
-#[cfg(feature = "driver-ssd1306")]
-pub use drivers::ssd1306::Ssd1306Driver;
 
-#[cfg(feature = "driver-ssd1309")]
-pub use drivers::ssd1309::Ssd1309Driver;
 
-#[cfg(feature = "driver-ssd1322")]
-pub use drivers::ssd1322::Ssd1322Driver;
 
-#[cfg(feature = "driver-sh1106")]
-pub use drivers::sh1106::Sh1106Driver;

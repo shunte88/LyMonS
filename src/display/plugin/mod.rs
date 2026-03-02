@@ -61,17 +61,6 @@ pub mod loader;
 pub mod adapter;
 
 // Re-exports for convenience
-pub use ffi::{
-    LyMonsPluginVTable,
-    LyMonsDriverHandle,
-    LyMonsErrorCode,
-    LyMonsError,
-    LyMonsDisplayConfig,
-    LyMonsDisplayCapabilities,
-    LyMonsBusConfig,
-    LyMonsBusType,
-    LyMonsColorDepth,
-};
 
-pub use loader::{PluginLoader, LoadedPlugin};
+pub use loader::PluginLoader;
 pub use adapter::PluginDriverAdapter;

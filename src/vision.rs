@@ -36,7 +36,7 @@ use std::thread::sleep;
 
 use crate::vuphysics_new::{VuMeter};
 
-use crate::visualization::{Visual, get_visualizer_panel};
+use crate::visualization::Visual;
 
 // for the "old" display calls
 use crate::visualization::{Visualization};

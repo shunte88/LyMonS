@@ -23,12 +23,12 @@
 
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
-use embedded_graphics::primitives::{PrimitiveStyle, PrimitiveStyleBuilder};
+use embedded_graphics::primitives::PrimitiveStyle;
 use embedded_graphics::mono_font::iso_8859_13::{FONT_4X6, FONT_5X8};
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
 use embedded_text::{TextBox, style::TextBoxStyleBuilder};
-use crate::display::color_proxy::{ConvertColor, ColorProxy, MonoProxy, Gray4Proxy, Pal16};
+use crate::display::color_proxy::{ColorProxy, MonoProxy, Gray4Proxy, Pal16};
 use crate::display::layout::LayoutConfig;
 use crate::visualizer::Visualizer;
 use crate::visualization::{Visualization, Visual, SvgColorDepth};

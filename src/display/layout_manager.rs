@@ -21,7 +21,7 @@
  *
  */
 
-use super::field::{Field, FieldType};
+use super::field::Field;
 use super::page::PageLayout;
 use super::layout::{LayoutConfig, LayoutCategory};
 use super::color::Color;

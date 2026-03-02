@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use clap::{ArgAction, Parser, ValueHint};
 use dirs_next::home_dir;
 use std::{fs, path::{Path, PathBuf}};

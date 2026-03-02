@@ -268,7 +268,7 @@ impl ClockDisplay {
         D: DrawTarget<Color = BinaryColor>,
     {
         use embedded_graphics::prelude::*;
-        use embedded_graphics::image::{Image, GetPixel};
+        use embedded_graphics::image::Image;
 
         // Get the image for this character from the clock font
         if let Some(image_raw) = self.clock_font.get_char_image_raw(c) {
@@ -293,7 +293,7 @@ impl ClockDisplay {
         D: DrawTarget<Color = Gray4>,
     {
         use embedded_graphics::prelude::*;
-        use embedded_graphics::primitives::Rectangle as EgRectangle;
+        
         use embedded_graphics::image::GetPixel;
 
         // Get the image for this character from the clock font
