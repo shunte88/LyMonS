@@ -2,7 +2,7 @@
  *  localization.rs
  * 
  *  LyMonS - worth the squeeze
- *	(c) 2020-25 Stuart Hunter
+ *	(c) 2020-26 Stuart Hunter
  *
  *	TODO:
  *
@@ -123,7 +123,7 @@ impl Default for ConfigLocales {
 			deny: "No, dont ask me again".to_string(),
 			always_auto: "Always check for a weather station".to_string(),
 			save_as_default: "Would you like to use this as your default?".to_string(),
-			reset_config: "This will wipe wthrr's configuration. Continue?".to_string(),
+			reset_config: "This will wipe weather configuration. Continue?".to_string(),
 			no_selection: "User did not select anything or exited".to_string(),
 		}
 	}
