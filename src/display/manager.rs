@@ -29,6 +29,7 @@ use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
 use embedded_graphics::prelude::*;
 
 use crate::config::DisplayConfig;
+use crate::display::layout_manager::{SCROLLING_AIO_PAGE, SCROLLING_AIO_WIDE_PAGE, SCROLLING_PAGE};
 use crate::display::{
     BoxedDriver,
     DisplayCapabilities,
@@ -295,6 +296,10 @@ pub struct DisplayManager {
     splash_active: bool,
     splash_version: String,
     splash_build_date: String,
+    /// Astral service for auto-brightness and moon data fallback
+    astral_service: Option<crate::astral::AstralService>,
+    /// Last time auto-brightness was applied (rate-limits hardware writes)
+    last_brightness_check: Option<std::time::Instant>,
 }
 
 impl DisplayManager {
@@ -424,6 +429,8 @@ impl DisplayManager {
             splash_active: false,
             splash_version: String::new(),
             splash_build_date: String::new(),
+            astral_service: None,
+            last_brightness_check: None,
             #[cfg(feature = "emulator")]
             emulator_state: None,
         })
@@ -474,6 +481,9 @@ impl DisplayManager {
     pub fn render(&mut self) -> Result<(), DisplayError> {
         let frame_start = Instant::now();
 
+        // Adjust display brightness based on time of day (rate-limited internally).
+        self.update_auto_brightness();
+
         // Clear framebuffer
         self.framebuffer.clear();
 
@@ -511,7 +521,7 @@ impl DisplayManager {
     /// Render scrolling text mode
     fn render_scrolling(&mut self) -> Result<(), DisplayError> {
         // Get the scrolling page layout
-        let page = self.layout_manager.create_scrolling_page("scrolling");
+        let page = self.layout_manager.create_scrolling_page(SCROLLING_PAGE);
 
         // Update scroll positions using field widths
         if let (
@@ -1335,29 +1345,40 @@ impl DisplayManager {
         );
         let precip_text = format!("{}%", weather_data.precipitation_probability_avg.round() as i32);
 
-        // Wide display fields (sunrise, sunset, moon phase)
-        let sunrise_text = if let Some(sunrise) = weather_data.sunrise_time {
-            format!("{}", sunrise.format("%l:%M %p"))
-        } else {
-            "--:--".to_string()
-        };
-        let sunset_text = if let Some(sunset) = weather_data.sunset_time {
-            format!("{}", sunset.format("%l:%M %p"))
-        } else {
-            "--:--".to_string()
-        };
-        let moonrise_text = if let Some(moonrise) = weather_data.moonrise_time {
-            format!("{}", moonrise.format("%l:%M %p"))
-        } else {
-            "--:--".to_string()
-        };
-        let moonset_text = if let Some(moonset) = weather_data.moonrise_time {
-            format!("{}", moonset.format("%l:%M %p"))
-        } else {
-            "--:--".to_string()
-        };
+        // Wide display fields (sunrise, sunset, moonrise, moonset).
+        // For sun times: prefer weather API data; fall back to astral calculations.
+        // For moon times: weather API rarely populates these, so astral is primary.
+        let astral_today = self.astral_service.as_ref().map(|a| a.get_today());
 
-        // Dispatch rendering based on framebuffer type
+        let sunrise_text = weather_data.sunrise_time
+            .or_else(|| astral_today.as_ref().and_then(|a| a.sunrise))
+            .map(|t| t.format("%H:%M").to_string())
+            .unwrap_or_else(|| "--:--".to_string());
+
+        let sunset_text = weather_data.sunset_time
+            .or_else(|| astral_today.as_ref().and_then(|a| a.sunset))
+            .map(|t| t.format("%H:%M").to_string())
+            .unwrap_or_else(|| "--:--".to_string());
+
+        let moonrise_text = weather_data.moonrise_time
+            .or_else(|| astral_today.as_ref().and_then(|a| a.moonrise))
+            .map(|t| t.format("%H:%M").to_string())
+            .unwrap_or_else(|| "--:--".to_string());
+
+        let moonset_text = weather_data.moonset_time
+            .or_else(|| astral_today.as_ref().and_then(|a| a.moonset))
+            .map(|t| t.format("%H:%M").to_string())
+            .unwrap_or_else(|| "--:--".to_string());
+
+        let moon_phase_index = self.astral_service.as_ref()
+            .map(|a| a.moon_phase_index_today())
+            .unwrap_or(0);
+
+        let moonphase_text = self.astral_service.as_ref()
+            .map(|a| a.moon_phase_description())
+            .unwrap_or("");
+
+            // Dispatch rendering based on framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
                 Self::render_weather_fields(
@@ -1373,6 +1394,8 @@ impl DisplayManager {
                     &sunset_text,
                     &moonrise_text,
                     &moonset_text,
+                    moon_phase_index,
+                    &moonphase_text
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
@@ -1389,6 +1412,8 @@ impl DisplayManager {
                     &sunset_text,
                     &moonrise_text,
                     &moonset_text,
+                    moon_phase_index,
+                    &moonphase_text
                 )?;
             }
         }
@@ -1410,6 +1435,8 @@ impl DisplayManager {
         sunset_text: &str,
         moonrise_text: &str,
         moonset_text: &str,
+        moon_phase_index: usize,
+        moonphase_text: &str,
     ) -> Result<(), DisplayError>
     where
         D: DrawTarget,
@@ -1497,7 +1524,7 @@ impl DisplayManager {
                     let font = field.font.unwrap_or(&FONT_7X14);
                     let style = MonoTextStyle::new(font, D::Color::on());
                     Self::draw_field_text(target, field, conditions_text, style)
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw conditions".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write conditions text".to_string()))?;
                 }
                 "sunrise_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNRISE;
@@ -1509,7 +1536,7 @@ impl DisplayManager {
                     Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write sunrise text".to_string()))?;
                 }
                 "sunset_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNSET;
@@ -1521,7 +1548,7 @@ impl DisplayManager {
                     Text::with_baseline(sunset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunset".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write sunset text".to_string()))?;
                 }
                 "moonrise_glyph" => {
                     use crate::weather_glyph::GLYPH_MOONRISE;
@@ -1533,7 +1560,7 @@ impl DisplayManager {
                     Text::with_baseline(moonrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write moonset text".to_string()))?;
                 }
                 "moonset_glyph" => {
                     use crate::weather_glyph::GLYPH_MOONSET;
@@ -1545,9 +1572,53 @@ impl DisplayManager {
                     Text::with_baseline(moonset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
                         .draw(target)
                         .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moon".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write moonset time".to_string()))?;
+                }
+                "moonphase_svg" => {
+                    Self::draw_moon_phase_glyph(target, moon_phase_index, pos.x, pos.y, D::Color::on())
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonphase".to_string()))?;
+                }
+                "moonphase_text" => {
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
+                    Text::with_baseline(moonphase_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                        .draw(target)
+                        .map(|_| ())
+                        .map_err(|_| DisplayError::DrawingError("Failed to write moonphase description".to_string()))?;
                 }
                 _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Draw a moon phase glyph (30x30 from MOON_PHASE_RAW_DATA)
+    fn draw_moon_phase_glyph<D, C>(target: &mut D, phase_index: usize, x: i32, y: i32, color: C) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = C>,
+        C: PixelColor,
+    {
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::Pixel;
+        use crate::weather_glyph::{MOON_PHASE_RAW_DATA, MOON_PHASE_WIDTH, MOON_PHASE_HEIGHT};
+        use crate::glyphs::get_glyph_slice;
+
+        let slice = get_glyph_slice(MOON_PHASE_RAW_DATA, phase_index, MOON_PHASE_WIDTH, MOON_PHASE_HEIGHT);
+        let bytes_per_row = ((MOON_PHASE_WIDTH + 7) / 8) as usize; // 4 bytes for 30px
+
+        for row in 0..MOON_PHASE_HEIGHT as usize {
+            let base = row * bytes_per_row;
+            let word = ((slice[base] as u32) << 24)
+                     | ((slice[base + 1] as u32) << 16)
+                     | ((slice[base + 2] as u32) << 8)
+                     |  (slice[base + 3] as u32);
+            for col in 0..MOON_PHASE_WIDTH as usize {
+                if word & (1u32 << (31 - col)) != 0 {
+                    target.draw_iter(core::iter::once(Pixel(
+                        Point::new(x + col as i32, y + row as i32),
+                        color,
+                    )))?;
+                }
             }
         }
 
@@ -2046,7 +2117,7 @@ impl DisplayManager {
         if is_wide {
 
             // Wide: full scroller page layout rendered in the left half (width/2)
-            let page = self.layout_manager.create_scrolling_page("aio_wide");
+            let page = self.layout_manager.create_scrolling_page(SCROLLING_AIO_WIDE_PAGE);
 
             // Update scroll positions using field widths
             if let (
@@ -2678,6 +2749,33 @@ impl DisplayManager {
         self.driver.set_brightness(brightness)
     }
 
+    /// Attach an astral service.  Enables auto-brightness and moon data fallback.
+    pub fn set_astral_service(&mut self, service: crate::astral::AstralService) {
+        self.astral_service = Some(service);
+    }
+
+    /// Apply auto-brightness based on local sunrise/sunset.
+    /// Rate-limited to at most one hardware write every 5 minutes.
+    fn update_auto_brightness(&mut self) {
+        use std::time::{Duration, Instant};
+        const CHECK_INTERVAL_SECS: u64 = 300; // 5 minutes
+        const BRIGHTNESS_DAY:   u8 = 255;
+        const BRIGHTNESS_NIGHT: u8 = 32;
+
+        let now = Instant::now();
+        if let Some(last) = self.last_brightness_check {
+            if now.duration_since(last).as_secs() < CHECK_INTERVAL_SECS {
+                return;
+            }
+        }
+        self.last_brightness_check = Some(now);
+
+        if let Some(ref astral) = self.astral_service {
+            let brightness = if astral.is_daytime() { BRIGHTNESS_DAY } else { BRIGHTNESS_NIGHT };
+            let _ = self.set_brightness(brightness);
+        }
+    }
+
     /// Get current display mode
     pub fn display_mode(&self) -> DisplayMode {
         self.current_mode
@@ -2976,11 +3074,15 @@ impl DisplayManager {
     }
 
     pub async fn test(&mut self, _run: bool) {}
-    /// Setup visualizer with playing state receiver
+    /// Setup visualizer with playing state receiver.
+    ///
+    /// `sse_config` is forwarded to `Visualizer::spawn` as the visionon SSE
+    /// fallback — used when local shared-memory is unavailable (remote player).
     pub async fn setup_visualizer(
         &mut self,
         viz_type: &str,
         playing_rx: tokio::sync::watch::Receiver<bool>,
+        sse_config: Option<crate::visualizer::SseConfig>,
     ) -> Result<(), DisplayError> {
         use crate::visualization::transpose_kind;
 
@@ -3003,8 +3105,8 @@ impl DisplayManager {
             };
         }
 
-        // Spawn the visualizer worker
-        let visualizer = crate::visualizer::Visualizer::spawn(viz_type, playing_rx)
+        // Spawn the visualizer worker (falls back to SSE if sse_config is given)
+        let visualizer = crate::visualizer::Visualizer::spawn(viz_type, playing_rx, sse_config)
             .map_err(|e| DisplayError::InitializationFailed(format!("Failed to spawn visualizer: {}", e)))?;
 
         // Set the visualizer in the component

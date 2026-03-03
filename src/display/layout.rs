@@ -61,6 +61,7 @@ pub struct LayoutConfig {
 
     /// Weather display layout
     pub weather: WeatherLayout,
+
 }
 
 /// Layout category based on display resolution

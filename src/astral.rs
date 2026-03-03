@@ -94,10 +94,14 @@ impl AstralService {
         let sunrise = sun_times.sunrise_utc.map(|dt| dt.with_timezone(&Local));
         let sunset = sun_times.sunset_utc.map(|dt| dt.with_timezone(&Local));
 
-        // TODO: Calculate moonrise/moonset
-        // For now, return None - will implement moon calculations later
-        let moonrise = None;
-        let moonset = None;
+        // Moonrise / moonset from the simplified Meeus algorithm.
+        let moon_times = sun::moon_times_for_date(
+            self.location.latitude,
+            self.location.longitude,
+            date,
+        );
+        let moonrise = moon_times.moonrise_utc.map(|dt| dt.with_timezone(&Local));
+        let moonset  = moon_times.moonset_utc.map(|dt| dt.with_timezone(&Local));
 
         AstralData {
             date,
@@ -105,6 +109,44 @@ impl AstralService {
             sunset,
             moonrise,
             moonset,
+        }
+    }
+
+    /// Moon illumination fraction [0.0, 1.0] for today.
+    /// 0.0 = new moon, 1.0 = full moon.
+    pub fn moon_phase_today(&self) -> f64 {
+        let today = Local::now().date_naive();
+        sun::moon_phase_fraction(today)
+    }
+
+    /// Moon phase index [0..=7] for today.
+    /// 0=New, 1=WaxingCrescent, 2=FirstQuarter, 3=WaxingGibbous,
+    /// 4=Full, 5=WaningGibbous, 6=ThirdQuarter, 7=WaningCrescent.
+    pub fn moon_phase_index_today(&self) -> usize {
+        let today = Local::now().date_naive();
+        sun::moon_phase_index(today)
+    }
+
+    /// Get a description of the moon phase
+    ///
+    /// # Arguments
+    /// * `phase` - Moon phase index value (0-7)
+    ///
+    /// # Returns
+    /// string description of the requested phase
+    // moon phase strings - these need to be translatable
+    pub fn moon_phase_description(&self) -> &'static str {
+        let phase = self.moon_phase_index_today();
+        match phase {
+            0 => "New Moon",
+            1 => "Waxing Cresent",
+            2 => "First Quarter",
+            3 => "Waxing Gibbous",
+            4 => "Full Moon",
+            5 => "Waning Gibbous",
+            6 => "Third Quarter",
+            7 => "Waning Crescent",
+            _ => ""
         }
     }
 

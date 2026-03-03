@@ -73,7 +73,7 @@ pub const MOON_PHASE_HEIGHT: u32 = 30;
 
 /// Load moon phase glyphs from binary file
 /// 8 phases as described by the MoonPhase enum, 30x30 pixels each
-const MOON_PHASE_RAW_DATA: &[u8] = include_bytes!("../data/moonphase_30x30.bin");
+pub const MOON_PHASE_RAW_DATA: &[u8] = include_bytes!("../data/moonphase_30x30.bin");
 
 /// Get a slice for a specific moon phase glyph
 ///
@@ -89,4 +89,26 @@ pub fn get_moon_phase_slice(phase: MoonPhase) -> &'static [u8] {
         MOON_PHASE_WIDTH,
         MOON_PHASE_HEIGHT
     )
+}
+
+/// Get a description of the moon phase
+///
+/// # Arguments
+/// * `phase` - Moon phase enum value (0-7)
+///
+/// # Returns
+/// string description of the requested phase
+// moon phase strings - these need to be translatable
+pub fn get_moon_phase_description(phase: MoonPhase) -> &'static str {
+    match phase {
+        MoonPhase::New => "New Moon",
+        MoonPhase::WaxingCrescent => "Waxing Cresent",
+        MoonPhase::FirstQuarter => "First Quarter",
+        MoonPhase::WaxingGibbous => "Waxing Gibbous",
+        MoonPhase::Full => "Full Moon",
+        MoonPhase::WaningGibbous => "Waning Gibbous",
+        MoonPhase::ThirdQuarter => "Third Quarter",
+        MoonPhase::WaningCrescent => "Waning Crescent",
+        _ => ""
+    }
 }

@@ -6,13 +6,13 @@
 
 **An LMS Monitor For The Future**
 
-> LyMonS version 0.3.2 | Built: 2026-03-02
+> LyMonS version 0.3.3 | Built: 2026-03-03
 
 OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
 
 <img width="800" src="assets/lymons.webp" align="center" />
 
-## 📥 Download
+## Download
 
 Pre-compiled binaries for Raspberry Pi are available on the [binaries branch](https://github.com/shunte88/LyMonS/tree/binaries):
 
@@ -39,27 +39,23 @@ sudo nano /etc/lymons/lymons.yaml
 **Building from source?** See [CROSS_COMPILE.md](CROSS_COMPILE.md) for cross-compilation instructions.
 
 ### Features
-- Oled drivers loaded on demand - delete the ones you don't use and save space
-- SVG are utilized enabling support on many different OLED displays
-- Mono, Gray4, and Color supported - depending ondisplay you use
-- SVG are lightweight external files, embeded graphic are not stored in memory
+- OLED drivers loaded on demand — delete the ones you don't use and save space
+- SVG rendering gives clean, sharp graphics across many different OLED displays
+- Mono, Gray4, and Color support depending on the display you use
+- SVGs are lightweight external files, not baked into the binary
 - Track details are displayed only when playing
-- Display features independant scrolling of track details as required.
+- Display features independent scrolling of track details as required
 - When playing, remaining time can be displayed rather than total time
-- Audio attributes, volume, sample depth, and sample rate are shown
-- Player attributes, shuffle, repeat, and fidelity glyphs are shown
-- A retro clock is displayed when the audio is paused or stopped.
-- Display regions are utilized for alignment, text wrapping, and layout
-- You can display current weather and time. Requires an API key
-- Weather descriptions can be translated to any language, however the
-  display of same is not fully supported, Japanese, Korean, Chinese,
-  and cyrilic languages are not supported (TBD)
-- Automatically sets the brightness of the display at dawn and dusk.
-- Multiple audio visualization modes are supported
-- Multiple visualization styles are supported
-- If monitoring from a separate device animations can be displayed as the track plays
-- Alternatively can also be displayed instead of a visualization as the track plays
-- Written in Rust - robust and memory safe
+- Audio attributes — volume, sample depth, and sample rate — are shown
+- Player attributes — shuffle, repeat, and fidelity glyphs — are shown
+- A retro clock is displayed when the audio is paused or stopped
+- Display regions handle alignment, text wrapping, and layout
+- Current weather and time display. Requires a free API key
+- Weather descriptions can be translated to any language, though Japanese, Korean, Chinese, and Cyrillic scripts are not yet fully supported
+- Automatically sets display brightness at dawn and dusk
+- Multiple audio visualization modes, see below
+- If monitoring from a separate device, animations can be displayed as the track plays
+- Written in Rust — robust and memory safe
 
 ### Options
 ```bash
@@ -105,69 +101,67 @@ OLED Clock Fonts:
     solfestus ...: Festus Solid 25x44
     space1999 ...: Space 1999
     roboto ......: Roboto Thin
-    solnoto .....: noto 25x44
-    holnoto .....: noto fancy 25x44
+    solnoto .....: Noto 25x44
+    holnoto .....: Noto Fancy 25x44
 
 ```
 
 ### Visualizer Modes
 
-Several visualizer modes are supported
-- Stereo VU Meters - dBfs metered
+Several visualizer modes are supported:
+- Stereo VU Meters — dBFS metered
 - Stereo 12-band Spectrum Analysis
 - Stereo 20-band Spectrum Analysis for wide displays
-- Stereo Peak Meter - dBfs metered
-- Downmix (visual data only) Peak Meter
-- Large Downmix (visual data only) VU meter
-- Large Downmix (visual data only) Spectrum
-- All-In-One - track details and spectrum/VU "swoosh" - other keywords to come
-- All-In-One - fixed mode  - other keywords to come
-- Wave Forms - wigly waves - coming soon
-- Easter Eggs - fixed mode (use --egg <<name>>)
+- Stereo Peak Meter — dBFS metered
+- Downmix Peak Meter
+- Large Downmix VU meter
+- Large Downmix Spectrum
+- All-In-One — track details alongside spectrum or VU meter
+- Wave Forms — coming soon
+- Easter Eggs — fixed mode (use `--egg <name>`)
 
 ### Installation
 
-There are two modes of operation:
+LyMonS can run in two configurations:
 
-- LyMonS installed on piCore Player, consuming visualization data directly
-- LyMonS installed on an alternate device, the LMS Server for example, consuming streamed visualization data
+**On the player device** — installed directly on a piCorePlayer or any Pi running Squeezelite. LyMonS reads audio data from Squeezelite's shared memory, which gives it access to real-time PCM data for VU meters, peak meters, and spectrum analysis.
+
+**On a separate device** — installed on another machine on the same network, pointing at the LMS player by name. In this case LyMonS connects to the [visionon](https://github.com/shunte88/visionon) streaming daemon running on the player device and receives audio metrics over the network. LyMonS figures out which approach to use on its own — if shared memory is available it uses it, otherwise it connects to visionon. No flags, no configuration switches.
+
+The only thing you need for remote visualization is the visionon daemon running on the player device. Point LyMonS at the player name and the rest is handled for you.
 
 # Prerequisites
 
-If you are intending to consume visualization data you need to configure squeezelite to expose the shared memory
+If you intend to use visualization you need to configure Squeezelite to expose its shared memory.
 
-From the Squeezlite page of the pCP web frontend type 1 in the "m" ALSA parameter section
+From the Squeezelite page of the pCP web frontend, type `1` in the "m" ALSA parameter section and add `-v` in the Various Options field.
 
-And, in the Various Options add *-v*
+See the Squeezelite page for more details.
 
-See the squeezelite page for more details
+For **remote visualization** (LyMonS on a separate device), you also need the [visionon](https://github.com/shunte88/visionon) daemon running on the player device. Visionon is a lightweight process that reads Squeezelite's shared memory and streams the audio metrics out over HTTP. Once it's running, LyMonS connects to it automatically using the player's IP.
 
 ## Easter Eggs
 
 <img width="800" src="assets/github/screens.webp" align="center" />
 
 <p>
-There are several "easter egg" modes provided for those setups that cannot process the audio data for visualization.
-That said theres nothing stopping you using them as your main visualization.
+There are several "easter egg" modes for setups that can't or don't want to process audio data for visualization. There's nothing stopping you using them as your main display mode either.
 
-There are currently 7 easter egg modes:
-- <b>[cassette]</b> Compact Cassette, as visually correct as possible given the OLED limitations.  Hubs turn and the tape llops from one hub to the other with the tape window showing the track "progress"
-- <b>[technics]</b> Technics SL-1200, as visually correct as possible given the OLED limitations.  Tone arm traverses platter to indicate progress.
+There are currently 10 easter egg modes:
+- <b>[cassette]</b> Compact Cassette, as visually accurate as the OLED allows. Hubs turn and the tape loops from one hub to the other with the tape window showing track progress.
+- <b>[technics]</b> Technics SL-1200, as visually accurate as the OLED allows. Tone arm traverses the platter to indicate progress.
 - <b>[reel2reel]</b> Open Reel To Reel, pure fantasy. Reels rotate, minor animation.
-- <b>[vcr]</b> VCR with flashing 12:00 AM clock! No additional animation - the clock is annoying enough.
-- <b>[radio40]</b> An large ornate radio. Minor animation, radio changes station as track progresses.
-- <b>[radio50]</b> An old bakelite radio. Minor animation, radio changes station as track progresses.
-- <b>[tvtime]</b> An old analog TV in all its 5x4 glory... VHF or UHF... no a dancing news reader
-- <b>[pctime]</b> A crusty old IBM PS/2 clone... simple starfield animation just for fun
-- <b>[bass]</b> A rubbish bass guitar - and why not...
-- <b>[pipboy]</b> Its pipboy...
+- <b>[vcr]</b> VCR with flashing 12:00 AM clock. No additional animation — the clock is annoying enough.
+- <b>[radio40]</b> A large ornate radio. Minor animation, station changes as the track progresses.
+- <b>[radio50]</b> An old Bakelite radio. Minor animation, station changes as the track progresses.
+- <b>[tvtime]</b> An old analog TV in all its 5x4 glory. VHF or UHF — no, a dancing news reader.
+- <b>[ibmpc]</b> A crusty old IBM PS/2 clone. Simple starfield animation, just for fun.
+- <b>[bass]</b> A rubbish bass guitar — and why not.
+- <b>[pipboy]</b> It's Pip-Boy.
 
-Specify --egg <name> to display eggs on track playback
+Specify `--egg <name>` to display an easter egg during track playback.
 </p>
-These are just a fun display mode where visualization is not possible.
-
 
 ## Like The App - Git The Shirt
 
 Team Badger shirts and other goodies are available at [shunte88](https://www.zazzle.com/team_badger_t_shirt-235604841593837420)
-

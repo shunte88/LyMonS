@@ -36,12 +36,17 @@ use embedded_graphics::mono_font::iso_8859_13::{
 };
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
 
+pub const SCROLLING_PAGE: &str = "scrolling";
+pub const SCROLLING_AIO_PAGE: &str = "aio_small";
+pub const SCROLLING_AIO_WIDE_PAGE: &str = "aio_wide";
+
 /// Layout manager - creates and owns all page definitions
 pub struct LayoutManager {
     layout_config: LayoutConfig,
 }
 
 impl LayoutManager {
+
     /// Create a new layout manager
     pub fn new(layout_config: LayoutConfig) -> Self {
         Self { layout_config }
@@ -59,7 +64,7 @@ impl LayoutManager {
         let combination_width_adj = combination_width - 2 * border_adj as u32;
         let y_height: i32 = 9;
 
-        PageLayout::new("aio_small")
+        PageLayout::new(SCROLLING_AIO_PAGE)
             // Status bar at top (y=0)
             .add_field(
                 Field::new_text(
@@ -130,7 +135,7 @@ impl LayoutManager {
         page_name: &str,
     ) -> PageLayout {
         
-        let width = if page_name == "scroller" { self.layout_config.width } else { self.layout_config.width / 2 };
+        let width = if page_name == SCROLLING_PAGE { self.layout_config.width } else { self.layout_config.width / 2 };
         let height = self.layout_config.height;
         let width_adj = width-4;
         let border_adj = 2;
@@ -395,13 +400,13 @@ impl LayoutManager {
                 .colors(Color::Yellow, None)
             );
 
-        // Wide display additions (width > 128): Sunrise/Sunset/Moon on the right
+        // Wide display additions (width > 132): Sunrise/Sunset/Moon on the right
         // we're going to want Moonrise, Moonset, and Moonphase
         if is_wide {
 
             glyph_x = 130;
             text_x = glyph_x + 2 + glyph_w;
-            let astral_field_width = 33;
+            let mut astral_field_width = 33;
 
             page = page
                 // Sunrise glyph
@@ -496,7 +501,9 @@ impl LayoutManager {
                     .colors(Color::Cyan, None)
                 )
 ;
-            glyph_x += 40;
+            glyph_x += 48;
+            text_x = glyph_x - 30;
+            astral_field_width = width - text_x - 4;
             page = page
                 // Moonphase svg
                 .add_field(
@@ -506,6 +513,19 @@ impl LayoutManager {
                             Point::new(glyph_x as i32, 10),
                             Size::new(34, 34))
                     )
+                    .colors(Color::Yellow, None)
+                )
+                // moonset text
+                .add_field(
+                    Field::new_text(
+                        "moonphase_text",
+                        Rectangle::new(
+                            Point::new(text_x as i32, 43),
+                            Size::new(astral_field_width, 7)),
+                        &FONT_4X6
+                    )
+                    .styled_alignment(HorizontalAlignment::Right, VerticalAlignment::Middle)
+                    .colors(Color::Yellow, None)
                 );
         }
 

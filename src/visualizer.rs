@@ -28,7 +28,8 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
-use log::{info, error};
+use log::{info, error, warn};
+use chrono;
 
 use crate::spectrum::{
     SpectrumEngine,
@@ -36,10 +37,10 @@ use crate::spectrum::{
 };
 use crate::dbfs;
 use crate::vision::{
-    VisReader, 
+    VisReader,
     peak_and_rms, dbfs,
     PEAK_METER_LEVELS_MAX,
-    LEVEL_FLOOR_DB, 
+    LEVEL_FLOOR_DB,
     LEVEL_CEIL_DB,
     // Timings
     POLL_ENABLED,
@@ -47,9 +48,18 @@ use crate::vision::{
 
 };
 use crate::visualization::{
-    Visualization, 
+    Visualization,
     transpose_kind
 };
+
+/// Configuration for the visionon SSE fallback acquisition path.
+#[derive(Debug, Clone)]
+pub struct SseConfig {
+    /// Hostname or IP of the player device running the visionon daemon.
+    pub host: String,
+    /// TCP port visionon is listening on (default 8022).
+    pub port: u16,
+}
 
 /// A published frame for the display to render.
 #[derive(Debug, Clone)]
@@ -129,7 +139,15 @@ pub struct Visualizer {
 impl Visualizer {
     /// Spawn the background worker. It initializes at startup but does no
     /// heavy work until you `Enable(true)` *and* a track is playing.
-    pub fn spawn(kind: &str, playing_rx: watch::Receiver<bool>) -> std::io::Result<Self> {
+    ///
+    /// If `sse_config` is provided the worker will fall back to the visionon
+    /// SSE data source when the local shared-memory reader is unavailable
+    /// (i.e. the player is running on a different device).
+    pub fn spawn(
+        kind: &str,
+        playing_rx: watch::Receiver<bool>,
+        sse_config: Option<SseConfig>,
+    ) -> std::io::Result<Self> {
         // small bounded queues (drop newest when full via try_send)
         let (cmd_tx, cmd_rx) = mpsc::channel::<VizCommand>(16);
         let (out_tx, out_rx) = mpsc::channel::<VizFrameOut>(128);
@@ -141,7 +159,7 @@ impl Visualizer {
 
         // spawn async worker task
         let join = tokio::spawn(async move {
-            visualizer_worker(cmd_rx, out_tx, playing_rx).await
+            visualizer_worker(cmd_rx, out_tx, playing_rx, sse_config).await
         });
 
         Ok(Self { cmd_tx, join: Some(join), rx: out_rx })
@@ -176,17 +194,37 @@ impl Drop for Visualizer {
 
 async fn visualizer_worker(
     mut cmd_rx: Receiver<VizCommand>,
+    out_tx: Sender<VizFrameOut>,
+    playing_rx: watch::Receiver<bool>,
+    sse_config: Option<SseConfig>,
+) {
+    // Try the shared-memory reader first.
+    let reader_result = VisReader::new();
+
+    match reader_result {
+        Ok(reader) => {
+            // Local shared memory available — use the existing SHM path.
+            info!("visualizer: using shared-memory acquisition");
+            visualizer_shm_loop(cmd_rx, out_tx, playing_rx, reader).await;
+        }
+        Err(e) => {
+            if let Some(cfg) = sse_config {
+                warn!("visualizer: shared-memory unavailable ({e}), falling back to SSE");
+                visualizer_sse_loop(cmd_rx, out_tx, playing_rx, cfg).await;
+            } else {
+                error!("visualizer: shared-memory unavailable and no SSE config provided: {e}");
+            }
+        }
+    }
+}
+
+/// Original shared-memory acquisition loop (unchanged logic).
+async fn visualizer_shm_loop(
+    mut cmd_rx: Receiver<VizCommand>,
     mut out_tx: Sender<VizFrameOut>,
     playing_rx: watch::Receiver<bool>,
+    mut reader: VisReader,
 ) {
-    // Reader + FFT engine
-    let mut reader = match VisReader::new() {
-        Ok(r) => r,
-        Err(e) => {
-            error!("visualizer: failed to init VisReader: {e}");
-            return;
-        }
-    };
     let mut eng: Option<SpectrumEngine> = None;
 
     // State
@@ -386,7 +424,72 @@ async fn visualizer_worker(
         }
     }
 
-    info!("visualizer worker stopped");
+    info!("visualizer worker stopped (shm)");
+}
+
+/// SSE-based acquisition loop: connects to the visionon daemon on the remote
+/// player device and streams audio metrics.
+async fn visualizer_sse_loop(
+    mut cmd_rx: Receiver<VizCommand>,
+    out_tx: Sender<VizFrameOut>,
+    playing_rx: watch::Receiver<bool>,
+    cfg: SseConfig,
+) {
+    let url = format!("http://{}:{}/visionon?subscribe=SA-VU", cfg.host, cfg.port);
+
+    // Internal channel: sse_client → this loop.
+    let (sse_tx, mut sse_rx) = tokio::sync::mpsc::channel::<crate::sse_client::SseEvent>(256);
+
+    // Spawn the SSE HTTP streaming task independently.
+    tokio::spawn(crate::sse_client::run_sse_stream(url, sse_tx));
+
+    let mut enabled = false;
+    let mut kind = Visualization::VuStereo;
+
+    info!("visualizer SSE worker started (idle)");
+
+    loop {
+        // Drain pending commands.
+        while let Ok(cmd) = cmd_rx.try_recv() {
+            match cmd {
+                VizCommand::Enable(on)  => { enabled = on; }
+                VizCommand::SetKind(k)  => { kind = k; }
+                VizCommand::Shutdown    => {
+                    info!("visualizer SSE worker stopped");
+                    return;
+                }
+            }
+        }
+
+        if !enabled {
+            sleep(POLL_IDLE).await;
+            continue;
+        }
+
+        let is_playing = *playing_rx.borrow();
+        let ts = chrono::Utc::now().timestamp_millis();
+
+        // Drain all pending SSE events, publish the last matching one.
+        let mut published = false;
+        while let Ok(event) = sse_rx.try_recv() {
+            if let Some(payload) = crate::visionon::parse_event(&event.data, kind) {
+                // Best-effort, non-blocking publish.
+                let _ = out_tx.try_send(VizFrameOut {
+                    ts,
+                    playing: is_playing,
+                    sample_rate: 44100, // not available via SSE; use standard default
+                    kind,
+                    payload,
+                });
+                published = true;
+            }
+        }
+
+        if !published {
+            // No matching event available yet; yield briefly.
+            sleep(POLL_ENABLED).await;
+        }
+    }
 }
 
 #[inline]

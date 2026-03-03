@@ -145,6 +145,113 @@ fn ut_hours_to_utc(date: NaiveDate, ut_hours: f64) -> DateTime<Utc> {
     DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc)
 }
 
+#[derive(Debug, Clone)]
+pub struct MoonTimes {
+    pub moonrise_utc: Option<DateTime<Utc>>,
+    pub moonset_utc:  Option<DateTime<Utc>>,
+}
+
+/// Moon rise/set times for a specific date using a simplified Meeus algorithm.
+/// Accuracy is typically within ±10 minutes — adequate for a display.
+pub fn moon_times_for_date(lat_deg: f64, lon_deg: f64, date: NaiveDate) -> MoonTimes {
+    // Days from J2000.0 (noon UTC 2000-01-01) to noon on the target date.
+    let j2000 = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+    let d = (date - j2000).num_days() as f64;
+
+    // d0: days from J2000.0 to 0h UT on the target date.
+    let d0 = d - 0.5;
+
+    // Moon orbital elements (Meeus Chapter 47, simplified).
+    let l_prime = norm360(218.3164591 + 13.17639648 * d); // mean longitude
+    let m_moon  = norm360(134.9634114 + 13.06499295 * d); // mean anomaly
+    let f_moon  = norm360(93.2720993  + 13.22935024 * d); // argument of latitude
+
+    // Geocentric ecliptic coordinates.
+    let lambda = norm360(l_prime + 6.289 * sin_deg(m_moon));
+    let beta   = 5.128 * sin_deg(f_moon);
+
+    // Mean obliquity of the ecliptic (degrees).
+    let eps = 23.4393 - 0.0000003563 * d;
+
+    // Equatorial coordinates.
+    let sin_dec = sin_deg(beta) * cos_deg(eps)
+        + cos_deg(beta) * sin_deg(eps) * sin_deg(lambda);
+    let cos_dec = (1.0 - sin_dec * sin_dec).sqrt();
+
+    let ra_deg = norm360(
+        f64::atan2(
+            sin_deg(lambda) * cos_deg(eps) - tan_deg(beta) * sin_deg(eps),
+            cos_deg(lambda),
+        ) * RAD_TO_DEG,
+    );
+    let ra_h = ra_deg / 15.0;
+
+    // Hour angle at rise/set.  0.7° horizon correction (refraction + semi-diameter).
+    let cos_h0 = (cos_deg(90.7) - sin_dec * sin_deg(lat_deg))
+        / (cos_dec * cos_deg(lat_deg));
+
+    if cos_h0 > 1.0 || cos_h0 < -1.0 {
+        // Moon perpetually above or below horizon on this date.
+        return MoonTimes { moonrise_utc: None, moonset_utc: None };
+    }
+
+    let h0_h = acos_deg(cos_h0) / 15.0; // hours of half-arc
+
+    // GMST at 0h UT (degrees → hours).
+    let gmst_h = norm360(280.46061837 + 360.98564736629 * d0) / 15.0;
+
+    // Local sidereal time at 0h UT at the observer's longitude.
+    let lst0_h = (gmst_h + lon_deg / 15.0).rem_euclid(24.0);
+
+    // UT of meridian transit.
+    let transit_h = (ra_h - lst0_h).rem_euclid(24.0);
+
+    MoonTimes {
+        moonrise_utc: Some(ut_hours_to_utc(date, (transit_h - h0_h).rem_euclid(24.0))),
+        moonset_utc:  Some(ut_hours_to_utc(date, (transit_h + h0_h).rem_euclid(24.0))),
+    }
+}
+
+/// Today's moon rise/set times.
+pub fn moon_times_today(lat_deg: f64, lon_deg: f64) -> MoonTimes {
+    let today = Utc::now().date_naive();
+    moon_times_for_date(lat_deg, lon_deg, today)
+}
+
+/// Moon phase index [0..=7] for a given date.
+/// 0=New, 1=WaxingCrescent, 2=FirstQuarter, 3=WaxingGibbous,
+/// 4=Full, 5=WaningGibbous, 6=ThirdQuarter, 7=WaningCrescent.
+pub fn moon_phase_index(date: NaiveDate) -> usize {
+    let j2000 = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+    let d = (date - j2000).num_days() as f64;
+
+    let m_moon = norm360(134.9634114 + 13.06499295 * d);
+    let m_sun  = norm360(357.529     + 0.9856003   * d);
+    let l_moon = norm360(218.3164591 + 13.17639648 * d);
+    let l_sun  = norm360(280.4665    + 0.9856474   * d);
+
+    let i = norm360(l_moon - l_sun + 6.289 * sin_deg(m_moon) - 2.1 * sin_deg(m_sun));
+    ((i + 22.5) / 45.0) as usize % 8
+}
+
+/// Moon illumination fraction [0.0, 1.0] for a given date.
+/// 0.0 = new moon, 1.0 = full moon.
+pub fn moon_phase_fraction(date: NaiveDate) -> f64 {
+    let j2000 = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+    let d = (date - j2000).num_days() as f64;
+
+    let m_moon = norm360(134.9634114 + 13.06499295 * d); // moon mean anomaly
+    let m_sun  = norm360(357.529     + 0.9856003   * d); // sun  mean anomaly
+
+    // Elongation of the moon from the sun.
+    let l_moon = norm360(218.3164591 + 13.17639648 * d);
+    let l_sun  = norm360(280.4665    + 0.9856474   * d);
+    let i = norm360(l_moon - l_sun + 6.289 * sin_deg(m_moon) - 2.1 * sin_deg(m_sun));
+
+    // Illuminated fraction.
+    (1.0 - cos_deg(i)) * 0.5
+}
+
 /// sunrise/sunset for a specific date (UTC civil date).
 pub fn sun_times_for_date(lat_deg: f64, lon_deg: f64, date: NaiveDate) -> SunTimes {
     let doy = day_of_year(date) as u32;

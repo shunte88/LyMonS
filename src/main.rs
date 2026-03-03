@@ -67,6 +67,8 @@ mod vframebuf;
 mod vision;
 mod visualization;
 mod visualizer;
+mod sse_client;
+mod visionon;
 mod vuphysics_new;
 mod svgimage;
 mod shm_path;
@@ -123,8 +125,23 @@ async fn unified_display_loop(
     // Setup visualizer if requested
     if viz_type != "no_viz" {
         let lms = lms_arc.lock().await;
+
+        // Build SSE fallback config from the active player's IP.
+        // When shared memory is unavailable (remote player), the visualizer
+        // worker will fall back to the visionon SSE daemon on the player device.
+        let sse_config = if lms.active_player < lms.players.len() {
+            let player_ip = lms.players[lms.active_player].player_ip.clone();
+            if !player_ip.is_empty() {
+                Some(crate::visualizer::SseConfig { host: player_ip, port: 8022 })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let mut display_lock = display.lock().await;
-        display_lock.setup_visualizer(viz_type, lms.subscribe_playing()).await?;
+        display_lock.setup_visualizer(viz_type, lms.subscribe_playing(), sse_config).await?;
         drop(lms);
         drop(display_lock);
     }
@@ -1067,7 +1084,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         // Initialize astral service (if location is available)
-        let _astral_service = if let Some(loc) = location.clone() {
+        if let Some(loc) = location.clone() {
             if show_splash {
                 display_manager.update_splash_status("Calculating astronomical data...")?;
             }
@@ -1082,13 +1099,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(sunset) = astral_data.sunset {
                 info!("  Sunset: {}", sunset.format("%H:%M"));
             }
+            if let Some(moonrise) = astral_data.moonrise {
+                info!("  Moonrise: {}", moonrise.format("%H:%M"));
+            }
+            if let Some(moonset) = astral_data.moonset {
+                info!("  Moonset: {}", moonset.format("%H:%M"));
+            }
 
-            // TODO: Pass astral_service to DisplayManager for auto-brightness
-            // TODO: Use astral_data for sunrise/sunset display in weather/clock pages
-            Some(astral)
-        } else {
-            None
-        };
+            display_manager.set_astral_service(astral);
+        }
 
         if show_splash {
             display_manager.update_splash_status("Initialization complete")?;
@@ -1211,7 +1230,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Initialize astral service (if location is available)
-    let _astral_service = if let Some(loc) = location.clone() {
+    if let Some(loc) = location.clone() {
         if show_splash {
             display_manager.update_splash_status("Calculating astronomical data...")?;
         }
@@ -1226,13 +1245,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(sunset) = astral_data.sunset {
             info!("  Sunset: {}", sunset.format("%H:%M"));
         }
+        if let Some(moonrise) = astral_data.moonrise {
+            info!("  Moonrise: {}", moonrise.format("%H:%M"));
+        }
+        if let Some(moonset) = astral_data.moonset {
+            info!("  Moonset: {}", moonset.format("%H:%M"));
+        }
 
-        // TODO: Pass astral_service to DisplayManager for auto-brightness
-        // TODO: Use astral_data for sunrise/sunset display
-        Some(astral)
-    } else {
-        None
-    };
+        display_manager.set_astral_service(astral);
+    }
 
     if show_splash {
         display_manager.update_splash_status("Initialization complete")?;
