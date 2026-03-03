@@ -102,7 +102,7 @@ pub fn get_moon_phase_slice(phase: MoonPhase) -> &'static [u8] {
 pub fn get_moon_phase_description(phase: MoonPhase) -> &'static str {
     match phase {
         MoonPhase::New => "New Moon",
-        MoonPhase::WaxingCrescent => "Waxing Cresent",
+        MoonPhase::WaxingCrescent => "Waxing Crescent",
         MoonPhase::FirstQuarter => "First Quarter",
         MoonPhase::WaxingGibbous => "Waxing Gibbous",
         MoonPhase::Full => "Full Moon",

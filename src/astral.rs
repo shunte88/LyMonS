@@ -139,7 +139,7 @@ impl AstralService {
         let phase = self.moon_phase_index_today();
         match phase {
             0 => "New Moon",
-            1 => "Waxing Cresent",
+            1 => "Waxing Crescent",
             2 => "First Quarter",
             3 => "Waxing Gibbous",
             4 => "Full Moon",

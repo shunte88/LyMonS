@@ -2991,7 +2991,9 @@ impl DisplayManager {
             }
         }
 
-        // Flush to display
+        // Transfer framebuffer to driver, then flush to hardware/window
+        let buffer_data = self.framebuffer.to_packed_bytes();
+        self.driver.write_buffer(&buffer_data)?;
         self.driver.flush()?;
 
         // Hold splash for a moment
@@ -3022,7 +3024,9 @@ impl DisplayManager {
             }
         }
 
-        // Flush to display
+        // Transfer framebuffer to driver, then flush to hardware/window
+        let buffer_data = self.framebuffer.to_packed_bytes();
+        self.driver.write_buffer(&buffer_data)?;
         self.driver.flush()?;
 
         Ok(())
