@@ -25,14 +25,14 @@ use super::field::Field;
 use super::page::PageLayout;
 use super::layout::{LayoutConfig, LayoutCategory};
 use super::color::Color;
-use embedded_graphics::mono_font::ascii::FONT_6X9;
+use embedded_graphics::mono_font::ascii::{FONT_6X9};
 use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::geometry::{Point, Size};
 use embedded_graphics::mono_font::iso_8859_13::{
     FONT_4X6,
     FONT_5X7, FONT_5X8,
     FONT_6X10, FONT_6X13_BOLD,
-    FONT_7X14
+    FONT_7X13_BOLD, FONT_7X14
 };
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
 
@@ -47,15 +47,96 @@ impl LayoutManager {
         Self { layout_config }
     }
 
+    pub fn create_aio_scrolling_page(&self) -> PageLayout {
+
+        let combination_width = self.layout_config.width;
+        let width = self.layout_config.width / 2;
+        let height = self.layout_config.height;
+        let border_adj: i32 = 2;
+        let time_adj: i32 = 29;
+        let width_time_adj = width - time_adj as u32 - border_adj as u32;
+        let width_adj = width - 2 * border_adj as u32;
+        let combination_width_adj = combination_width - 2 * border_adj as u32;
+        let y_height: i32 = 9;
+
+        PageLayout::new("aio_small")
+            // Status bar at top (y=0)
+            .add_field(
+                Field::new_text(
+                    "status_bar_small",
+                    Rectangle::new(
+                        Point::new(border_adj, border_adj), 
+                        Size::new(width_adj, y_height as u32)),
+                    &FONT_6X9
+                )
+                .scrollable(false)
+            )
+            .add_field(
+                Field::new_text(
+                    "current_time",
+                    Rectangle::new(
+                        Point::new(time_adj, 2 + border_adj+y_height), 
+                        Size::new(width_time_adj, y_height as u32)),
+                    &FONT_7X13_BOLD
+                )
+                .scrollable(false)
+            )
+            .add_field(
+                Field::new_text(
+                    "duration_time",
+                    Rectangle::new(
+                        Point::new(time_adj, 5 + border_adj+2*y_height), 
+                        Size::new(width_time_adj, y_height as u32)),
+                    &FONT_7X13_BOLD
+                )
+                .scrollable(false)
+            )
+            .add_field(
+                Field::new_text(
+                    "track_time",
+                    Rectangle::new(
+                        Point::new(time_adj, 9 + border_adj+3*y_height), 
+                        Size::new(width_time_adj, y_height as u32)),
+                    &FONT_7X13_BOLD
+                )
+                .scrollable(false)
+            )
+            // Progress bar
+            .add_field(
+                Field::new_custom(
+                    "progress_bar",
+                    Rectangle::new(
+                        Point::new(border_adj, height.saturating_sub(5 + y_height as u32) as i32), 
+                        Size::new(width_adj, 4))
+                )
+                .scrollable(false)
+            )
+            // combination scroller occupies the full width of the device
+            .add_field(
+                Field::new_text(
+                    "combination",
+                    Rectangle::new(
+                        Point::new(border_adj, height.saturating_sub(3 + y_height as u32) as i32), 
+                        Size::new(combination_width_adj, y_height as u32)),
+                    &FONT_6X10
+                )
+                .scrollable(true)
+            )
+    }
+
     /// Create the scrolling music page layout
-    pub fn create_scrolling_page(&self) -> PageLayout {
-        let width = self.layout_config.width;
+    pub fn create_scrolling_page(
+        &self,
+        page_name: &str,
+    ) -> PageLayout {
+        
+        let width = if page_name == "scroller" { self.layout_config.width } else { self.layout_config.width / 2 };
         let height = self.layout_config.height;
         let width_adj = width-4;
         let border_adj = 2;
         let y_height: i32 = 9;
 
-        PageLayout::new("scrolling")
+        PageLayout::new(page_name)
             // Status bar at top (y=0)
             .add_field(
                 Field::new_text(
@@ -195,12 +276,15 @@ impl LayoutManager {
             )
     }
 
+    pub fn is_wide(&self) -> bool{
+        matches!(self.layout_config.category, LayoutCategory::Large | LayoutCategory::ExtraLarge)
+    }
+
     /// Create the current weather page layout
-    /// Based on original display_old.rs rendering at lines 2480-2563
     pub fn create_weather_current_page(&self) -> PageLayout {
         let width = self.layout_config.width;
         let height = self.layout_config.height;
-        let is_wide = matches!(self.layout_config.category, LayoutCategory::Large | LayoutCategory::ExtraLarge);
+        let is_wide = self.is_wide();
 
         // Original: icon_w = height/2 + 2 = 34 for 128x64
         let icon_size = height / 2 + 2;
@@ -429,11 +513,10 @@ impl LayoutManager {
     }
 
     /// Create the weather forecast page layout
-    /// Based on original display_old.rs rendering at lines 2565-2664
     pub fn create_weather_forecast_page(&self) -> PageLayout {
-        let width = self.layout_config.width;
+        let _width = self.layout_config.width;
         let height = self.layout_config.height;
-        let is_wide = matches!(self.layout_config.category, LayoutCategory::Large | LayoutCategory::ExtraLarge);
+        let is_wide = self.is_wide();
 
         // Original: icon_w = height/2 + 2 = 34, icon size = icon_w - 4 = 30
         let header_y = 2;
@@ -531,44 +614,6 @@ impl LayoutManager {
         }
 
         page
-    }
-
-    /// Create the visualizer page layout
-    pub fn create_visualizer_page(&self) -> PageLayout {
-        let width = self.layout_config.width;
-        let height = self.layout_config.height;
-
-        PageLayout::new("visualizer")
-            // Status bar at top
-            .add_field(
-                Field::new_text(
-                    "status_bar",
-                    Rectangle::new(Point::new(0, 0), Size::new(width, 10)),
-                    &FONT_6X10
-                )
-            )
-            // Visualizer area (custom rendering)
-            .add_field(
-                Field::new_custom(
-                    "visualizer",
-                    Rectangle::new(Point::new(0, 10), Size::new(width, height - 10))
-                )
-            )
-    }
-
-    /// Create the easter eggs page layout
-    pub fn create_easter_eggs_page(&self) -> PageLayout {
-        let width = self.layout_config.width;
-        let height = self.layout_config.height;
-
-        PageLayout::new("easter_eggs")
-            // Full screen custom rendering for animations
-            .add_field(
-                Field::new_custom(
-                    "animation",
-                    Rectangle::new(Point::new(0, 0), Size::new(width, height))
-                )
-            )
     }
 
     /// Create the splash screen layout

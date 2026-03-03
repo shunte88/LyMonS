@@ -112,15 +112,7 @@ pub struct LastVizState {
     pub last_artist: String,
     pub last_title: String,
 
-    // AIO info panel data (populated by manager on each payload)
-    pub aio_volume: u8,
-    pub aio_is_muted: bool,
-    pub aio_audio_level: u8,    // 0=unknown, 1=SD, 2=HD, 3=DSD
-    pub aio_time_str: String,   // wall clock, e.g. "14:32"
-    pub aio_track_str: String,  // track elapsed/remaining, e.g. "3:45" or "-1:23"
-    pub aio_scroll_text: String,
-    pub aio_scroll_offset: i32,
-    pub aio_scroll_pause: u32,
+    pub is_aio: bool,  // true when VuAio or HistAio payload active
 
     pub this: VizState,
     pub last: VizState,
@@ -178,14 +170,7 @@ impl Default for LastVizState {
             last_artist: String::new(),
             last_title: String::new(),
 
-            aio_volume: 50,
-            aio_is_muted: false,
-            aio_audio_level: 0,
-            aio_time_str: String::new(),
-            aio_track_str: String::new(),
-            aio_scroll_text: String::new(),
-            aio_scroll_offset: 0,
-            aio_scroll_pause: 0,
+            is_aio: false,
 
             this: VizState::default(),
             last: VizState::default(),
@@ -259,12 +244,6 @@ impl LastVizState {
 
         self.last_artist = String::new();
         self.last_title = String::new();
-
-        self.aio_time_str = String::new();
-        self.aio_track_str = String::new();
-        self.aio_scroll_text = String::new();
-        self.aio_scroll_offset = 0;
-        self.aio_scroll_pause = 0;
 
         self.this = VizState::default();
         self.last = VizState::default();

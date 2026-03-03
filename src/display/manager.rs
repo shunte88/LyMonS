@@ -511,7 +511,7 @@ impl DisplayManager {
     /// Render scrolling text mode
     fn render_scrolling(&mut self) -> Result<(), DisplayError> {
         // Get the scrolling page layout
-        let page = self.layout_manager.create_scrolling_page();
+        let page = self.layout_manager.create_scrolling_page("scrolling");
 
         // Update scroll positions using field widths
         if let (
@@ -544,126 +544,126 @@ impl DisplayManager {
                             self.scrolling_text.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
                         }
-                "progress_bar" => {
-                    if self.track_duration_secs > 0.0 {
-                        // Extract data inline to avoid borrow conflicts
-                        use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
-                        use embedded_graphics::prelude::*;
-                        let field_pos = field.position();
-                        let field_width = field.width();
-                        let field_height = field.height();
-                        let track_duration = self.track_duration_secs;
-                        let current_time = self.current_track_time_secs;
+                        "progress_bar" => {
+                            if self.track_duration_secs > 0.0 {
+                                // Extract data inline to avoid borrow conflicts
+                                use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
+                                use embedded_graphics::prelude::*;
+                                let field_pos = field.position();
+                                let field_width = field.width();
+                                let field_height = field.height();
+                                let track_duration = self.track_duration_secs;
+                                let current_time = self.current_track_time_secs;
 
-                        // Draw outline (inset by 2 pixels on sides)
-                        Rectangle::new(
-                            Point::new(field_pos.x + 2, field_pos.y),
-                            Size::new(field_width - 4, field_height),
-                        )
-                        .into_styled(PrimitiveStyleBuilder::new()
-                            .stroke_color(BinaryColor::On)
-                            .stroke_width(1)
-                            .build())
-                        .draw(fb)
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar".to_string()))?;
+                                // Draw outline (inset by 2 pixels on sides)
+                                Rectangle::new(
+                                    Point::new(field_pos.x + 2, field_pos.y),
+                                    Size::new(field_width - 4, field_height),
+                                )
+                                .into_styled(PrimitiveStyleBuilder::new()
+                                    .stroke_color(BinaryColor::On)
+                                    .stroke_width(1)
+                                    .build())
+                                .draw(fb)
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar".to_string()))?;
 
-                        // Draw fill
-                        let progress = (current_time / track_duration).clamp(0.0, 1.0);
-                        let fill_width = ((field_width - 6) as f32 * progress) as u32;
+                                // Draw fill
+                                let progress = (current_time / track_duration).clamp(0.0, 1.0);
+                                let fill_width = ((field_width - 6) as f32 * progress) as u32;
 
-                        if fill_width > 0 {
-                            Rectangle::new(
-                                Point::new(field_pos.x + 3, field_pos.y + 1),
-                                Size::new(fill_width, field_height.saturating_sub(2)),
-                            )
-                            .into_styled(PrimitiveStyleBuilder::new()
-                                .fill_color(BinaryColor::On)
-                                .build())
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
+                                if fill_width > 0 {
+                                    Rectangle::new(
+                                        Point::new(field_pos.x + 3, field_pos.y + 1),
+                                        Size::new(fill_width, field_height.saturating_sub(2)),
+                                    )
+                                    .into_styled(PrimitiveStyleBuilder::new()
+                                        .fill_color(BinaryColor::On)
+                                        .build())
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
+                                }
+                            }
                         }
-                    }
-                }
-                "info_line" => {
-                    // Inline the info line rendering to avoid borrow conflicts
-                    use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
-                    use embedded_graphics::prelude::*;
-                    use embedded_text::{
-                        alignment::{HorizontalAlignment, VerticalAlignment},
-                        style::TextBoxStyleBuilder,
-                        TextBox,
-                    };
+                        "info_line" => {
+                            // Inline the info line rendering to avoid borrow conflicts
+                            use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
+                            use embedded_graphics::prelude::*;
+                            use embedded_text::{
+                                alignment::{HorizontalAlignment, VerticalAlignment},
+                                style::TextBoxStyleBuilder,
+                                TextBox,
+                            };
 
-                    let font = field.font.unwrap_or(&FONT_5X8);
-                    let style = MonoTextStyle::new(font, field.fg_binary());
+                            let font = field.font.unwrap_or(&FONT_5X8);
+                            let style = MonoTextStyle::new(font, field.fg_binary());
 
-                    let textbox_style_left = TextBoxStyleBuilder::new()
-                        .alignment(HorizontalAlignment::Left)
-                        .vertical_alignment(VerticalAlignment::Middle)
-                        .build();
-                    let textbox_style_center = TextBoxStyleBuilder::new()
-                        .alignment(HorizontalAlignment::Center)
-                        .vertical_alignment(VerticalAlignment::Middle)
-                        .build();
-                    let textbox_style_right = TextBoxStyleBuilder::new()
-                        .alignment(HorizontalAlignment::Right)
-                        .vertical_alignment(VerticalAlignment::Middle)
-                        .build();
+                            let textbox_style_left = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Left)
+                                .vertical_alignment(VerticalAlignment::Middle)
+                                .build();
+                            let textbox_style_center = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Center)
+                                .vertical_alignment(VerticalAlignment::Middle)
+                                .build();
+                            let textbox_style_right = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Right)
+                                .vertical_alignment(VerticalAlignment::Middle)
+                                .build();
 
-                    // Current time (left)
-                    let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
+                            // Current time (left)
+                            let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
 
-                    TextBox::with_textbox_style(
-                        &self.mode_text,
-                        field.bounds,
-                        style,
-                        textbox_style_center,
-                    )
-                    .draw(fb)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
+                            TextBox::with_textbox_style(
+                                &self.mode_text,
+                                field.bounds,
+                                style,
+                                textbox_style_center,
+                            )
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
 
-                    let fix_width = 30;
-                    let mut rect = field.bounds;
-                    rect.size.width = fix_width;
+                            let fix_width = 30;
+                            let mut rect = field.bounds;
+                            rect.size.width = fix_width;
 
-                    TextBox::with_textbox_style(
-                        current_time_str,
-                        rect,
-                        style,
-                        textbox_style_left,
-                    )
-                    .draw(fb)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
+                            TextBox::with_textbox_style(
+                                current_time_str,
+                                rect,
+                                style,
+                                textbox_style_left,
+                            )
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
 
-                    let mut rect = field.bounds;
-                    rect.top_left.x = (rect.size.width - fix_width) as i32;
-                    rect.size.width = fix_width;
+                            let mut rect = field.bounds;
+                            rect.top_left.x = (rect.size.width - fix_width) as i32;
+                            rect.size.width = fix_width;
 
-                    // Remaining/total time (right)
-                    self.render_buffers.temp_buffer.clear();
-                    let time_secs = if self.show_remaining {
-                        self.remaining_time_secs
-                    } else {
-                        self.track_duration_secs
-                    };
-                    let mins = (time_secs as u32) / 60;
-                    let secs = (time_secs as u32) % 60;
-                    if self.show_remaining {
-                        let _ = write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs);
-                    } else {
-                        let _ = write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs);
-                    }
-                    let time_str = self.render_buffers.temp_buffer.as_str();
+                            // Remaining/total time (right)
+                            self.render_buffers.temp_buffer.clear();
+                            let time_secs = if self.show_remaining {
+                                self.remaining_time_secs
+                            } else {
+                                self.track_duration_secs
+                            };
+                            let mins = (time_secs as u32) / 60;
+                            let secs = (time_secs as u32) % 60;
+                            if self.show_remaining {
+                                let _ = write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs);
+                            } else {
+                                let _ = write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs);
+                            }
+                            let time_str = self.render_buffers.temp_buffer.as_str();
 
-                    TextBox::with_textbox_style(
-                        time_str,
-                        rect,
-                        style,
-                        textbox_style_right,
-                    )
-                    .draw(fb)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw time".to_string()))?;
-                }
+                            TextBox::with_textbox_style(
+                                time_str,
+                                rect,
+                                style,
+                                textbox_style_right,
+                            )
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw time".to_string()))?;
+                        }
                         _ => {}
                     }
                 }
@@ -1942,6 +1942,8 @@ impl DisplayManager {
 
             // If we got a frame, update component state based on payload
             if let Some(frame) = latest_frame {
+                // Clear is_aio; only VuAio/HistAio arms will re-set it true
+                self.visualizer.viz_state_mut().is_aio = false;
                 match frame.payload {
                     VizPayload::PeakStereo { l_db, r_db, l_hold, r_hold } => {
                         // Update viz state directly
@@ -1982,72 +1984,18 @@ impl DisplayManager {
                         viz_state.this.hold_m = peak_hold;
                     }
                     VizPayload::VuAio { m_db, l_db, r_db } => {
-                        // Gather data before mutably borrowing viz_state
-                        let aio_volume = self.status_bar.state().volume_percent;
-                        let aio_is_muted = self.status_bar.state().is_muted;
-                        let aio_audio_level = self.audio_level;
-                        let aio_time_str = chrono::Local::now().format("%H:%M").to_string();
-                        let time_secs = if self.show_remaining { self.remaining_time_secs } else { self.current_track_time_secs };
-                        let aio_track_str = if self.show_remaining {
-                            format!("-{}", crate::deutils::seconds_to_hms(time_secs))
-                        } else {
-                            crate::deutils::seconds_to_hms(time_secs)
-                        };
-                        let scroll_text = match (self.artist.is_empty(), self.title.is_empty()) {
-                            (false, false) => format!("{} - {}", self.artist, self.title),
-                            (false, true)  => self.artist.clone(),
-                            (true,  false) => self.title.clone(),
-                            _              => String::new(),
-                        };
-
                         let viz_state = self.visualizer.viz_state_mut();
                         viz_state.this.db_m = m_db;
                         viz_state.this.db_l = l_db;
                         viz_state.this.db_r = r_db;
-                        viz_state.aio_volume = aio_volume;
-                        viz_state.aio_is_muted = aio_is_muted;
-                        viz_state.aio_audio_level = aio_audio_level;
-                        viz_state.aio_time_str = aio_time_str;
-                        viz_state.aio_track_str = aio_track_str;
-                        if scroll_text != viz_state.aio_scroll_text {
-                            viz_state.aio_scroll_text = scroll_text;
-                            viz_state.aio_scroll_offset = 0;
-                            viz_state.aio_scroll_pause = 30;
-                        }
+                        viz_state.is_aio = true;
                     }
                     VizPayload::HistAio { bands, bands_l, bands_r } => {
-                        // Gather data before mutably borrowing viz_state
-                        let aio_volume = self.status_bar.state().volume_percent;
-                        let aio_is_muted = self.status_bar.state().is_muted;
-                        let aio_audio_level = self.audio_level;
-                        let aio_time_str = chrono::Local::now().format("%H:%M").to_string();
-                        let time_secs = if self.show_remaining { self.remaining_time_secs } else { self.current_track_time_secs };
-                        let aio_track_str = if self.show_remaining {
-                            format!("-{}", crate::deutils::seconds_to_hms(time_secs))
-                        } else {
-                            crate::deutils::seconds_to_hms(time_secs)
-                        };
-                        let scroll_text = match (self.artist.is_empty(), self.title.is_empty()) {
-                            (false, false) => format!("{} - {}", self.artist, self.title),
-                            (false, true)  => self.artist.clone(),
-                            (true,  false) => self.title.clone(),
-                            _              => String::new(),
-                        };
-
                         let viz_state = self.visualizer.viz_state_mut();
                         viz_state.last_bands_m = bands;
                         viz_state.last_bands_l = bands_l;
                         viz_state.last_bands_r = bands_r;
-                        viz_state.aio_volume = aio_volume;
-                        viz_state.aio_is_muted = aio_is_muted;
-                        viz_state.aio_audio_level = aio_audio_level;
-                        viz_state.aio_time_str = aio_time_str;
-                        viz_state.aio_track_str = aio_track_str;
-                        if scroll_text != viz_state.aio_scroll_text {
-                            viz_state.aio_scroll_text = scroll_text;
-                            viz_state.aio_scroll_offset = 0;
-                            viz_state.aio_scroll_pause = 30;
-                        }
+                        viz_state.is_aio = true;
                     }
                     VizPayload::WaveformSpectrum { waveform_l, waveform_r, spectrum_column } => {
                         let viz_state = self.visualizer.viz_state_mut();
@@ -2075,6 +2023,422 @@ impl DisplayManager {
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
                 self.visualizer.render_gray4(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to render visualizer (gray4)".to_string()))?;
+            }
+        }
+
+        // AIO modes: overlay left info panel using layout + existing components
+        if self.visualizer.viz_state().is_aio {
+            self.render_aio_info_panel()?;
+        }
+
+        Ok(())
+    }
+
+    /// Render AIO info panel on the left half of the display.
+    /// Called after the visualizer has drawn the right panel.
+    fn render_aio_info_panel(&mut self) -> Result<(), DisplayError> {
+        use crate::display::layout::LayoutCategory;
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::primitives::{Rectangle, PrimitiveStyle};
+
+        let is_wide = matches!(self.layout.category, LayoutCategory::Large | LayoutCategory::ExtraLarge);
+
+        if is_wide {
+
+            // Wide: full scroller page layout rendered in the left half (width/2)
+            let page = self.layout_manager.create_scrolling_page("aio_wide");
+
+            // Update scroll positions using field widths
+            if let (
+                Some(album_artist_field), 
+                Some(album_field), 
+                Some(title_field), 
+                Some(artist_field)) = (
+                page.get_field("album_artist"),
+                page.get_field("album"),
+                page.get_field("title"),
+                page.get_field("artist"),
+            ) {
+                self.scrolling_text.update_with_fields(
+                    album_artist_field, 
+                    album_field, 
+                    title_field, 
+                    artist_field
+                );
+            }
+
+            match &mut self.framebuffer {
+                crate::display::framebuffer::FrameBuffer::Mono(fb) => {
+                    let half_w = fb.size().width / 2;
+                    Rectangle::new(Point::zero(), Size::new(half_w, fb.size().height))
+                        .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
+                        .draw(fb)
+                        .map_err(|_| DisplayError::DrawingError("aio wide clear".to_string()))?;
+
+                    for field in page.fields() {
+                        match field.name.as_str() {
+                            "status_bar" => {
+                                self.status_bar.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio status_bar".to_string()))?;
+                            }
+                            "album_artist" | "album" | "title" | "artist" | "combination" => {
+                                self.scrolling_text.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError(format!("aio {}", field.name)))?;
+                            }
+                            "progress_bar" => {
+                                if self.track_duration_secs > 0.0 {
+                                    use embedded_graphics::primitives::PrimitiveStyleBuilder;
+                                    let field_pos = field.position();
+                                    let field_width = field.width();
+                                    let field_height = field.height();
+                                    let progress = (self.current_track_time_secs / self.track_duration_secs).clamp(0.0, 1.0);
+                                    Rectangle::new(
+                                        Point::new(field_pos.x + 2, field_pos.y),
+                                        Size::new(field_width - 4, field_height),
+                                    )
+                                    .into_styled(PrimitiveStyleBuilder::new()
+                                        .stroke_color(BinaryColor::On)
+                                        .stroke_width(1)
+                                        .build())
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio progress bar".to_string()))?;
+                                    let fill_width = ((field_width - 6) as f32 * progress as f32) as u32;
+                                    if fill_width > 0 {
+                                        Rectangle::new(
+                                            Point::new(field_pos.x + 3, field_pos.y + 1),
+                                            Size::new(fill_width, field_height.saturating_sub(2)),
+                                        )
+                                        .into_styled(PrimitiveStyleBuilder::new()
+                                            .fill_color(BinaryColor::On)
+                                            .build())
+                                        .draw(fb)
+                                        .map_err(|_| DisplayError::DrawingError("aio progress fill".to_string()))?;
+                                    }
+                                }
+                            }
+                            "info_line" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
+                                use embedded_text::{
+                                    alignment::{HorizontalAlignment, VerticalAlignment},
+                                    style::TextBoxStyleBuilder, TextBox,
+                                };
+                                let font = field.font.unwrap_or(&FONT_5X8);
+                                let style = MonoTextStyle::new(font, field.fg_binary());
+                                let tbs_left = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Left)
+                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .build();
+                                let tbs_center = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Center)
+                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .build();
+                                let tbs_right = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Right)
+                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .build();
+                                let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
+                                TextBox::with_textbox_style(&self.mode_text, field.bounds, style, tbs_center)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio mode text".to_string()))?;
+                                let fix_width = 30u32;
+                                let mut rect = field.bounds;
+                                rect.size.width = fix_width;
+                                TextBox::with_textbox_style(current_time_str, rect, style, tbs_left)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio elapsed".to_string()))?;
+                                let mut rect = field.bounds;
+                                rect.top_left.x = (rect.size.width - fix_width) as i32;
+                                rect.size.width = fix_width;
+                                self.render_buffers.temp_buffer.clear();
+                                let time_secs = if self.show_remaining { self.remaining_time_secs } else { self.track_duration_secs };
+                                let mins = (time_secs as u32) / 60;
+                                let secs = (time_secs as u32) % 60;
+                                let _ = if self.show_remaining {
+                                    write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs)
+                                } else {
+                                    write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs)
+                                };
+                                let time_str = self.render_buffers.temp_buffer.as_str();
+                                TextBox::with_textbox_style(time_str, rect, style, tbs_right)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio duration".to_string()))?;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+
+                    let half_w = fb.size().width / 2;
+                    Rectangle::new(Point::zero(), Size::new(half_w, fb.size().height))
+                        .into_styled(PrimitiveStyle::with_fill(Gray4::BLACK))
+                        .draw(fb)
+                        .map_err(|_| DisplayError::DrawingError("aio wide clear".to_string()))?;
+
+                    for field in page.fields() {
+                        match field.name.as_str() {
+                            "status_bar" => {
+                                self.status_bar.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio status_bar".to_string()))?;
+                            }
+                            "album_artist" | "album" | "title" | "artist" | "combination"=> {
+                                self.scrolling_text.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError(format!("aio {}", field.name)))?;
+                            }
+                            "progress_bar" => {
+                                if self.track_duration_secs > 0.0 {
+                                    use embedded_graphics::primitives::PrimitiveStyleBuilder;
+                                    use crate::display::color_proxy::ConvertColor;
+                                    let field_pos = field.position();
+                                    let field_width = field.width();
+                                    let field_height = field.height();
+                                    let progress = (self.current_track_time_secs / self.track_duration_secs).clamp(0.0, 1.0);
+                                    let outline_color = field.fg_color.to_color();
+                                    Rectangle::new(
+                                        Point::new(field_pos.x + 2, field_pos.y),
+                                        Size::new(field_width - 4, field_height),
+                                    )
+                                    .into_styled(PrimitiveStyleBuilder::new()
+                                        .stroke_color(outline_color)
+                                        .stroke_width(1)
+                                        .build())
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio progress bar".to_string()))?;
+                                    let fill_width = ((field_width - 6) as f32 * progress as f32) as u32;
+                                    if fill_width > 0 {
+                                        Rectangle::new(
+                                            Point::new(field_pos.x + 3, field_pos.y + 1),
+                                            Size::new(fill_width, field_height.saturating_sub(2)),
+                                        )
+                                        .into_styled(PrimitiveStyleBuilder::new()
+                                            .fill_color(outline_color)
+                                            .build())
+                                        .draw(fb)
+                                        .map_err(|_| DisplayError::DrawingError("aio progress fill".to_string()))?;
+                                    }
+                                }
+                            }
+                            "info_line" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
+                                use embedded_text::{
+                                    alignment::{HorizontalAlignment, VerticalAlignment},
+                                    style::TextBoxStyleBuilder, TextBox,
+                                };
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&FONT_5X8);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                let tbs_left = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Left)
+                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .build();
+                                let tbs_center = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Center)
+                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .build();
+                                let tbs_right = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Right)
+                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .build();
+                                let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
+                                TextBox::with_textbox_style(&self.mode_text, field.bounds, style, tbs_center)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio mode text".to_string()))?;
+                                let fix_width = 30u32;
+                                let mut rect = field.bounds;
+                                rect.size.width = fix_width;
+                                TextBox::with_textbox_style(current_time_str, rect, style, tbs_left)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio elapsed".to_string()))?;
+                                let mut rect = field.bounds;
+                                rect.top_left.x = (rect.size.width - fix_width) as i32;
+                                rect.size.width = fix_width;
+                                self.render_buffers.temp_buffer.clear();
+                                let time_secs = if self.show_remaining { self.remaining_time_secs } else { self.track_duration_secs };
+                                let mins = (time_secs as u32) / 60;
+                                let secs = (time_secs as u32) % 60;
+                                let _ = if self.show_remaining {
+                                    write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs)
+                                } else {
+                                    write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs)
+                                };
+                                let time_str = self.render_buffers.temp_buffer.as_str();
+                                TextBox::with_textbox_style(time_str, rect, style, tbs_right)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio duration".to_string()))?;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+        } else {
+
+            // Narrow: compact AIO layout (status_bar_small, current_time, track_time, combination)
+            let page = self.layout_manager.create_aio_scrolling_page();
+
+            // Update combination scroll using field width (not full display width)
+            // note combination was maintained as part of track detail update
+            if let Some(combo_field) = page.get_field("combination") {
+                self.scrolling_text.update_combination_with_field(combo_field);
+            }
+
+            // Pre-compute time strings before borrowing framebuffer
+            let time_str = chrono::Local::now().format("%H:%M").to_string();
+            let track_secs = if self.show_remaining { self.remaining_time_secs } else { self.current_track_time_secs };
+            let track_str = if self.show_remaining {
+                format!("-{}", crate::deutils::seconds_to_hms(track_secs))
+            } else {
+                crate::deutils::seconds_to_hms(track_secs)
+            };
+            let duration_secs = self.track_duration_secs;
+            let duration_str = crate::deutils::seconds_to_hms(duration_secs);
+
+            match &mut self.framebuffer {
+                crate::display::framebuffer::FrameBuffer::Mono(fb) => {
+                    let half_w = fb.size().width / 2;
+                    Rectangle::new(Point::zero(), Size::new(half_w, fb.size().height))
+                        .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
+                        .draw(fb)
+                        .map_err(|_| DisplayError::DrawingError("aio narrow clear".to_string()))?;
+
+                    for field in page.fields() {
+                        match field.name.as_str() {
+                            "status_bar_small" => {
+                                self.status_bar.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio sb_small".to_string()))?;
+                            }
+                            "current_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, BinaryColor::On);
+                                let pos = field.position();
+                                Text::new(&time_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio time".to_string()))?;
+                            }
+                            "duration_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, BinaryColor::On);
+                                let pos = field.position();
+                                Text::new(&duration_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
+                            }
+                            "track_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, BinaryColor::On);
+                                let pos = field.position();
+                                Text::new(&track_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
+                            }
+                            "progress_bar" => {
+                                if duration_secs > 0.0 {
+                                    // Extract data inline to avoid borrow conflicts
+                                    use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
+                                    use embedded_graphics::prelude::*;
+                                    let field_pos = field.position();
+                                    let field_width = field.width();
+                                    let field_height = field.height();
+                                    // re-wire for progress
+                                    let track_secs = self.current_track_time_secs;
+
+                                    // Draw outline (inset by 2 pixels on sides)
+                                    Rectangle::new(
+                                        Point::new(field_pos.x + 2, field_pos.y),
+                                        Size::new(field_width - 4, field_height),
+                                    )
+                                    .into_styled(PrimitiveStyleBuilder::new()
+                                        .stroke_color(BinaryColor::On)
+                                        .stroke_width(1)
+                                        .build())
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar".to_string()))?;
+
+                                    let progress = (track_secs / duration_secs).clamp(0.0, 1.0);
+                                    let fill_width = ((field_width - 6) as f32 * progress) as u32;
+
+                                    if fill_width > 0 {
+                                        Rectangle::new(
+                                            Point::new(field_pos.x + 3, field_pos.y + 1),
+                                            Size::new(fill_width, field_height.saturating_sub(2)),
+                                        )
+                                        .into_styled(PrimitiveStyleBuilder::new()
+                                            .fill_color(BinaryColor::On)
+                                            .build())
+                                        .draw(fb)
+                                        .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
+                                    }
+                                }
+                            }
+                            "combination" => {
+                                self.scrolling_text.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio combo".to_string()))?;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                    let half_w = fb.size().width / 2;
+                    Rectangle::new(Point::zero(), Size::new(half_w, fb.size().height))
+                        .into_styled(PrimitiveStyle::with_fill(Gray4::BLACK))
+                        .draw(fb)
+                        .map_err(|_| DisplayError::DrawingError("aio narrow clear".to_string()))?;
+
+                    for field in page.fields() {
+                        match field.name.as_str() {
+                            "status_bar_small" => {
+                                self.status_bar.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio sb_small".to_string()))?;
+                            }
+                            "current_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                let pos = field.position();
+                                Text::new(&time_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio time".to_string()))?;
+                            }
+                            "duration_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                let pos = field.position();
+                                Text::new(&duration_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
+                            }
+                            "track_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                let pos = field.position();
+                                Text::new(&track_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
+                            }
+                            "combination" => {
+                                self.scrolling_text.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio combo".to_string()))?;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
             }
         }
 

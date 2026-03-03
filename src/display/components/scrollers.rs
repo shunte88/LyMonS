@@ -119,13 +119,15 @@ pub struct ScrollingText {
     album_scroller: Option<TextScroller>,
     title_scroller: Option<TextScroller>,
     artist_scroller: Option<TextScroller>,
-    scroll_mode: ScrollMode,
-    layout: LayoutConfig,
+    combination_scroller: Option<TextScroller>,
     // Simple synchronous scroll states
     album_artist_scroll: ScrollState,
     album_scroll: ScrollState,
     title_scroll: ScrollState,
     artist_scroll: ScrollState,
+    combination_scroll: ScrollState,
+    scroll_mode: ScrollMode,
+    layout: LayoutConfig,
     display_width: u32,
 }
 
@@ -138,13 +140,15 @@ impl ScrollingText {
             album_scroller: None,
             title_scroller: None,
             artist_scroller: None,
-            scroll_mode,
-            display_width,
-            layout,
+            combination_scroller: None,
             album_artist_scroll: ScrollState::new(),
             album_scroll: ScrollState::new(),
             title_scroll: ScrollState::new(),
             artist_scroll: ScrollState::new(),
+            combination_scroll: ScrollState::new(),
+            scroll_mode,
+            layout,
+            display_width,
         }
     }
 
@@ -168,8 +172,14 @@ impl ScrollingText {
         self.artist_scroll.set_text(artist);
     }
 
+    /// Update combination text
+    pub fn set_combination(&mut self, combination: String) {
+        self.combination_scroll.set_text(combination);
+    }
+
     /// Update both artist and title
-    pub fn set_track_info(&mut self, artist: String, title: String) {
+    pub fn set_track_info(&mut self, artist: String, title: String) 
+    {
         self.set_artist(artist);
         self.set_title(title);
     }
@@ -181,11 +191,24 @@ impl ScrollingText {
         album: String, 
         title: String, 
         artist: String, 
-    ) {
-        self.set_album_artist(album_artist);
-        self.set_album(album);
-        self.set_title(title);
-        self.set_artist(artist);
+    ) 
+    {
+        self.set_album_artist(album_artist.clone());
+        self.set_album(album.clone());
+        self.set_title(title.clone());
+        self.set_artist(artist.clone());
+
+        // Set combination text (artist - title or partial)
+        let scroll_text = match (artist.is_empty(), album.is_empty(), title.is_empty()) {
+            (false, false, false) => format!("{} - {} - {}", artist.clone(), album.clone(), title.clone()),
+            (false, false, true)  => format!("{} - {}", artist.clone(), album.clone()),
+            (false, true, true)  => artist.clone(),
+            (true, false, false) => format!("{} - {}", album.clone(), title.clone()),
+            (true, true, false) => title.clone(),
+            _ => String::new(),
+        };
+        self.set_combination(scroll_text);
+
     }
 
     /// Update scroll position (called on each frame)
@@ -194,6 +217,17 @@ impl ScrollingText {
         self.album_scroll.update(self.display_width, self.scroll_mode);
         self.title_scroll.update(self.display_width, self.scroll_mode);
         self.artist_scroll.update(self.display_width, self.scroll_mode);
+        self.combination_scroll.update(self.display_width, self.scroll_mode);
+    }
+
+    /// Update scroll position (called on each frame)
+    pub fn update_combination(&mut self) {
+        self.combination_scroll.update(self.display_width, self.scroll_mode);
+    }
+
+    /// Update combination scroll position using actual field width
+    pub fn update_combination_with_field(&mut self, field: &Field) {
+        self.combination_scroll.update(field.width(), self.scroll_mode);
     }
 
     /// Update scroll position using field widths
@@ -298,6 +332,7 @@ impl ScrollingText {
             "artist" => &self.artist_scroll,
             "album" => &self.album_scroll,
             "title" => &self.title_scroll,
+            "combination" => &self.combination_scroll,
             _ => return Ok(()), // Unknown field, skip
         };
 
@@ -339,6 +374,7 @@ impl ScrollingText {
         self.title_scroller = None;
         self.artist_scroller = None;
         self.album_scroller = None;
+        self.combination_scroller = None;
     }
 
     /// Get scroll mode

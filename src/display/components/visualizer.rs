@@ -24,9 +24,7 @@
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
 use embedded_graphics::primitives::PrimitiveStyle;
-use embedded_graphics::mono_font::iso_8859_13::{FONT_4X6, FONT_5X8};
-use embedded_graphics::mono_font::MonoTextStyle;
-use embedded_graphics::text::Text;
+use embedded_graphics::mono_font::iso_8859_13::FONT_5X8;
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
 use crate::display::color_proxy::{ColorProxy, MonoProxy, Gray4Proxy, Pal16};
 use crate::display::layout::LayoutConfig;
@@ -34,7 +32,6 @@ use crate::visualizer::Visualizer;
 use crate::visualization::{Visualization, Visual, SvgColorDepth};
 use crate::vision::{POLL_ENABLED, PEAK_METER_LEVELS_MAX};
 use crate::vision::ensure_band_state;
-use crate::glyphs;
 use std::time::{Duration, Instant};
 
 /// Visualizer component state
@@ -192,11 +189,27 @@ impl VisualizerComponent {
                 Self::draw_vu_stereo(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, &mut self.viz_state)
             }
             Visualization::VuAio => {
-                let (db_m, db_l, db_r) = (self.viz_state.this.db_m, self.viz_state.this.db_l, self.viz_state.this.db_r);
+                let (
+                    db_m, 
+                    db_l, 
+                    db_r
+                ) = (
+                    self.viz_state.this.db_m, 
+                    self.viz_state.this.db_l, 
+                    self.viz_state.this.db_r
+                );
                 Self::draw_aio_vu::<D, MonoProxy>(target, viz_mut, db_m, db_l, db_r, &mut self.viz_state)
             }
             Visualization::HistAio => {
-                let (bands, bands_l, bands_r) = (self.viz_state.last_bands_m.clone(), self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone());
+                let (
+                    bands, 
+                    bands_l, 
+                    bands_r
+                ) = (
+                    self.viz_state.last_bands_m.clone(), 
+                    self.viz_state.last_bands_l.clone(), 
+                    self.viz_state.last_bands_r.clone()
+                );
                 Self::draw_aio_hist::<D, MonoProxy>(target, viz_mut, bands, bands_l, bands_r, &mut self.viz_state)
             }
             Visualization::WaveformSpectrum => {
@@ -272,7 +285,15 @@ impl VisualizerComponent {
                 )
             }
             Visualization::VuAio => {
-                let (db_m, db_l, db_r) = (self.viz_state.this.db_m, self.viz_state.this.db_l, self.viz_state.this.db_r);
+                let (
+                    db_m, 
+                    db_l, 
+                    db_r
+                ) = (
+                    self.viz_state.this.db_m, 
+                    self.viz_state.this.db_l, 
+                    self.viz_state.this.db_r
+                );
                 Self::draw_aio_vu::<D, Gray4Proxy>(
                     target,
                     viz_mut,
@@ -281,7 +302,11 @@ impl VisualizerComponent {
                 )
             }
             Visualization::HistAio => {
-                let (bands, bands_l, bands_r) = (
+                let (
+                    bands, 
+                    bands_l, 
+                    bands_r
+                ) = (
                     self.viz_state.last_bands_m.clone(),
                     self.viz_state.last_bands_l.clone(),
                     self.viz_state.last_bands_r.clone(),
@@ -505,7 +530,7 @@ impl VisualizerComponent {
         origin: Point,
         panel_size: Size,
         bars: &[u8],
-        caps: &[u8]
+        caps: &[u8],
     ) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = P::Output> + OriginDimensions,
@@ -717,146 +742,7 @@ impl VisualizerComponent {
         Ok(true)
     }
 
-    // AIO layout constants
-    const AIO_BOTTOM_STRIP_H: i32 = 8;
-    const AIO_ROW1_Y: i32 = 0;   // glyphs top
-    const AIO_ROW2_Y: i32 = 10;  // wall clock baseline
-    const AIO_ROW3_Y: i32 = 21;  // track time baseline
-
-    /// Draw 8×8 glyph at pixel position using ColorProxy's on() color
-    fn draw_aio_glyph<D, P>(display: &mut D, glyph: &[u8; 8], x: i32, y: i32) -> Result<(), D::Error>
-    where
-        D: DrawTarget<Color = P::Output>,
-        P: ColorProxy,
-    {
-        for row in 0..8i32 {
-            let byte = glyph[row as usize];
-            for col in 0..8i32 {
-                if (byte & (1 << (7 - col))) != 0 {
-                    embedded_graphics::Pixel(Point::new(x + col, y + row), P::on()).draw(display)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Draw the AIO left info panel: volume, fidelity, clock time, track time
-    fn draw_aio_left_panel<D, P>(
-        display: &mut D,
-        left_x: i32,
-        left_w: i32,
-        h: i32,
-        state: &crate::vision::LastVizState,
-    ) -> Result<(), D::Error>
-    where
-        D: DrawTarget<Color = P::Output>,
-        P: ColorProxy,
-    {
-        use embedded_graphics::primitives::Rectangle;
-
-        // Clear left panel
-        Rectangle::new(Point::new(left_x, 0), Size::new((left_w + 2) as u32, h as u32))
-            .into_styled(PrimitiveStyle::with_fill(P::off()))
-            .draw(display)?;
-
-        // Row 1: volume glyph + text, fidelity glyph right-justified
-        let vol_glyph = if state.aio_is_muted || state.aio_volume == 0 {
-            &glyphs::GLYPH_VOLUME_OFF
-        } else {
-            &glyphs::GLYPH_VOLUME_ON
-        };
-        Self::draw_aio_glyph::<D, P>(display, vol_glyph, left_x, Self::AIO_ROW1_Y)?;
-
-        let vol_text = if state.aio_is_muted || state.aio_volume == 0 {
-            "mute".to_string()
-        } else {
-            format!("{:>3}%", state.aio_volume)
-        };
-        let vol_text_style = MonoTextStyle::new(&FONT_4X6, P::on());
-        Text::new(&vol_text, Point::new(left_x + 9, Self::AIO_ROW1_Y + 6), vol_text_style).draw(display)?;
-
-        let fidelity_glyph = match state.aio_audio_level {
-            3 => &glyphs::GLYPH_AUDIO_DSD,
-            2 => &glyphs::GLYPH_AUDIO_HD,
-            1 => &glyphs::GLYPH_AUDIO_SD,
-            _ => &glyphs::GLYPH_NONE,
-        };
-        Self::draw_aio_glyph::<D, P>(display, fidelity_glyph, left_x + left_w - 8, Self::AIO_ROW1_Y)?;
-
-        // Row 2: wall clock time
-        if !state.aio_time_str.is_empty() {
-            let time_style = MonoTextStyle::new(&FONT_5X8, P::on());
-            Text::new(&state.aio_time_str, Point::new(left_x + 2, Self::AIO_ROW2_Y), time_style).draw(display)?;
-        }
-
-        // Row 3: track elapsed/remaining
-        if !state.aio_track_str.is_empty() {
-            let time_style = MonoTextStyle::new(&FONT_5X8, P::on());
-            Text::new(&state.aio_track_str, Point::new(left_x + 2, Self::AIO_ROW3_Y), time_style).draw(display)?;
-        }
-
-        Ok(())
-    }
-
-    /// Advance and draw the bottom scrolling track info strip (full display width)
-    fn draw_aio_scroller<D, P>(
-        display: &mut D,
-        w: i32,
-        h: i32,
-        state: &mut crate::vision::LastVizState,
-    ) -> Result<(), D::Error>
-    where
-        D: DrawTarget<Color = P::Output>,
-        P: ColorProxy,
-    {
-        use embedded_graphics::primitives::Rectangle;
-
-        // Advance scroll offset
-        let text_px = (state.aio_scroll_text.len() * 5) as i32;
-        if text_px <= w {
-            state.aio_scroll_offset = (w - text_px) / 2;
-        } else if state.aio_scroll_pause > 0 {
-            state.aio_scroll_pause -= 1;
-        } else {
-            state.aio_scroll_offset -= 1;
-            if state.aio_scroll_offset < -(text_px + 12) {
-                state.aio_scroll_offset = 0;
-                state.aio_scroll_pause = 30;
-            }
-        }
-
-        // Clear bottom strip
-        let scroller_y_top = h - Self::AIO_BOTTOM_STRIP_H;
-        Rectangle::new(
-            Point::new(0, scroller_y_top),
-            Size::new(w as u32, Self::AIO_BOTTOM_STRIP_H as u32),
-        )
-        .into_styled(PrimitiveStyle::with_fill(P::off()))
-        .draw(display)?;
-
-        // Draw scroller text
-        if !state.aio_scroll_text.is_empty() {
-            let scroller_baseline = h - 2;
-            let text_style = MonoTextStyle::new(&FONT_4X6, P::on());
-            Text::new(
-                &state.aio_scroll_text,
-                Point::new(state.aio_scroll_offset, scroller_baseline),
-                text_style,
-            ).draw(display)?;
-            // Looped duplicate for continuous scroll
-            if text_px > w {
-                Text::new(
-                    &state.aio_scroll_text,
-                    Point::new(state.aio_scroll_offset + text_px + 12, scroller_baseline),
-                    text_style,
-                ).draw(display)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Draw AIO VU visualization — SVG-based VU needle with info panel and bottom scroller
+    /// Draw AIO VU visualization — SVG-based VU needle on the right half; left panel rendered by manager
     fn draw_aio_vu<D, P>(
         display: &mut D,
         viz: &mut Visual,
@@ -870,12 +756,7 @@ impl VisualizerComponent {
         P: ColorProxy,
         D::Color: SvgColorDepth,
     {
-        use embedded_graphics::primitives::Rectangle;
-
         ensure_band_state(state, 0, 0, 0, viz);
-
-        let Size { width, height } = display.size();
-        let (w, h) = (width as i32, height as i32);
         state.init = false;
 
         if state.wide {
@@ -889,11 +770,6 @@ impl VisualizerComponent {
             state.last.disp_l = disp_l;
             state.last.disp_r = disp_r;
 
-            // Clear left half before drawing SVG on right half
-            Rectangle::new(Point::new(0, 0), Size::new((w / 2) as u32, h as u32))
-                .into_styled(PrimitiveStyle::with_fill(P::off()))
-                .draw(display)?;
-
             let dummy: Vec<bool> = Vec::new();
             viz.render_svg_and_draw(
                 display,
@@ -902,8 +778,8 @@ impl VisualizerComponent {
                 dummy.clone(), dummy.clone(), dummy.clone(), dummy.clone(), dummy.clone(), dummy.clone(),
             )?;
 
-            Self::draw_aio_left_panel::<D, P>(display, 0, w / 2 - 2, h, state)?;
         } else {
+
             // Narrow: mono VU — vuaio.svg covers full 128px, VU face in right portion
             state.vu_m.update(db_m as f64);
             let disp_m = state.vu_m.angle_degrees() as f32;
@@ -913,21 +789,24 @@ impl VisualizerComponent {
             let dummy: Vec<bool> = Vec::new();
             viz.render_svg_and_draw(
                 display,
-                disp_m as f64, state.vu_m.is_overloaded(),
-                0.0, false,
-                dummy.clone(), dummy.clone(), dummy.clone(), dummy.clone(), dummy.clone(), dummy.clone(),
+                disp_m as f64, 
+                state.vu_m.is_overloaded(),
+                0.0, 
+                false,
+                dummy.clone(), 
+                dummy.clone(), 
+                dummy.clone(), 
+                dummy.clone(), 
+                dummy.clone(), 
+                dummy.clone(),
             )?;
 
-            // Draw info panel on top of SVG's black background (left portion)
-            Self::draw_aio_left_panel::<D, P>(display, 0, w / 2 - 2, h, state)?;
         }
-
-        Self::draw_aio_scroller::<D, P>(display, w, h, state)?;
 
         Ok(true)
     }
 
-    /// Draw AIO Histogram visualization — histogram right panel with info panel and bottom scroller
+    /// Draw AIO Histogram visualization — histogram right panel; left panel rendered by manager
     fn draw_aio_hist<D, P>(
         display: &mut D,
         viz: &mut Visual,
@@ -945,7 +824,7 @@ impl VisualizerComponent {
         let Size { width, height } = display.size();
         let (w, h) = (width as i32, height as i32);
 
-        let panel_h = h - Self::AIO_BOTTOM_STRIP_H;
+        let panel_h = h;
         let mx = 3;
         let my = 6;
         let title_base = 10i32;
@@ -990,7 +869,6 @@ impl VisualizerComponent {
                 &state.draw_bands_r, &state.cap_r,
             )?;
 
-            Self::draw_aio_left_panel::<D, P>(display, 0, w / 2 - 2, h, state)?;
         } else {
             // Narrow: mono histogram on right half
             let (_, _, meter_area_start) = aio_text_attributes(w);
@@ -1008,17 +886,14 @@ impl VisualizerComponent {
                 .draw(display)?;
 
             Self::draw_hist_panel::<D, P>(
-                display, "Downmix",
+                display, "", // no label as we have the scroller
                 title_base as u32, panel_h - title_base,
                 Point::new(meter_area_start + meter_mx, meter_my),
                 Size::new(meter_width as u32, meter_h as u32),
                 &state.draw_bands_m, &state.cap_m,
             )?;
 
-            Self::draw_aio_left_panel::<D, P>(display, 0, w / 2 - 2, h, state)?;
         }
-
-        Self::draw_aio_scroller::<D, P>(display, w, h, state)?;
 
         Ok(true)
     }

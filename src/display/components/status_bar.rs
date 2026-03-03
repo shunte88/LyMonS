@@ -230,10 +230,11 @@ impl StatusBar {
         
         use embedded_graphics::geometry::Point;
 
-        // Only render if this is a status_bar field
-        if field.name != "status_bar" {
-            return Ok(());
-        }
+        let compact = match field.name.as_str() {
+            "status_bar"       => false,
+            "status_bar_small" => true,
+            _                  => return Ok(()),
+        };
 
         use crate::display::color_proxy::ConvertColor;
         let text_color = field.fg_color.to_color();
@@ -265,8 +266,8 @@ impl StatusBar {
         };
         Text::new(&vol_text, Point::new(current_x, text_y), text_style).draw(target)?;
 
+        // Compute audio fidelity glyph (shared between compact and full paths)
         let mut audio_glyph = &glyphs::GLYPH_AUDIO_SD;
-        // CENTER: Bitrate text (centered)
         let bitrate_text = if !self.state.samplesize.is_empty() && !self.state.samplerate.is_empty() {
             // Check for DSD/DSF (1-bit formats)
             if self.state.samplesize.as_str() == "1" || self.state.samplesize.as_str().starts_with("DSD") {
@@ -297,37 +298,44 @@ impl StatusBar {
             String::new()
         };
 
-        if !bitrate_text.is_empty() {
-            let text_width = bitrate_text.len() * 5; // Approximate width for FONT_5X8
-            let center_x = field_pos.x + (field_width - text_width as i32) / 2;
-            Text::new(&bitrate_text, Point::new(center_x, text_y), text_style).draw(target)?;
+        if compact {
+            // Compact: vol glyph + vol% on left, fidelity glyph right-justified only
+            let audio_glyph_x = field_pos.x + field_width - 8;
+            self.draw_glyph(target, audio_glyph, audio_glyph_x, glyph_y, text_color)?;
+        } else {
+            // Full: CENTER bitrate text + RIGHT repeat/shuffle/audio glyphs
+            if !bitrate_text.is_empty() {
+                let text_width = bitrate_text.len() * 5; // Approximate width for FONT_5X8
+                let center_x = field_pos.x + (field_width - text_width as i32) / 2;
+                Text::new(&bitrate_text, Point::new(center_x, text_y), text_style).draw(target)?;
+            }
+
+            // RIGHT: Repeat + Shuffle glyphs (right-justified)
+            let glyph_width = 8;
+            let glyph_gap = 2;
+
+            // audio glyph (audio)
+            let audio_glyph_x = field_pos.x + field_width - glyph_width;
+            self.draw_glyph(target, audio_glyph, audio_glyph_x, glyph_y, text_color)?;
+
+            // Shuffle glyph (left of audio)
+            let shuffle_glyph = match self.state.shuffle_mode {
+                ShuffleMode::ByTracks => &glyphs::GLYPH_SHUFFLE_TRACKS,
+                ShuffleMode::ByAlbums => &glyphs::GLYPH_SHUFFLE_ALBUMS,
+                ShuffleMode::Off => &glyphs::GLYPH_NONE,
+            };
+            let shuffle_x = audio_glyph_x - glyph_width - glyph_gap;
+            self.draw_glyph(target, shuffle_glyph, shuffle_x, glyph_y, text_color)?;
+
+            // Repeat glyph (to the left of shuffle)
+            let repeat_glyph = match self.state.repeat_mode {
+                RepeatMode::One => &glyphs::GLYPH_REPEAT_ONE,
+                RepeatMode::All => &glyphs::GLYPH_REPEAT_ALL,
+                RepeatMode::Off => &glyphs::GLYPH_NONE,
+            };
+            let repeat_x = shuffle_x - glyph_width - glyph_gap;
+            self.draw_glyph(target, repeat_glyph, repeat_x, glyph_y, text_color)?;
         }
-
-        // RIGHT: Repeat + Shuffle glyphs (right-justified)
-        let glyph_width = 8;
-        let glyph_gap = 2;
-
-        // audio glyph (audio)
-        let audio_glyph_x = field_pos.x + field_width - glyph_width;
-        self.draw_glyph(target, audio_glyph, audio_glyph_x, glyph_y, text_color)?;
-
-        // Shuffle glyph (left of audio)
-        let shuffle_glyph = match self.state.shuffle_mode {
-            ShuffleMode::ByTracks => &glyphs::GLYPH_SHUFFLE_TRACKS,
-            ShuffleMode::ByAlbums => &glyphs::GLYPH_SHUFFLE_ALBUMS,
-            ShuffleMode::Off => &glyphs::GLYPH_NONE,
-        };
-        let shuffle_x = audio_glyph_x - glyph_width - glyph_gap;
-        self.draw_glyph(target, shuffle_glyph, shuffle_x, glyph_y, text_color)?;
-
-        // Repeat glyph (to the left of shuffle)
-        let repeat_glyph = match self.state.repeat_mode {
-            RepeatMode::One => &glyphs::GLYPH_REPEAT_ONE,
-            RepeatMode::All => &glyphs::GLYPH_REPEAT_ALL,
-            RepeatMode::Off => &glyphs::GLYPH_NONE,
-        };
-        let repeat_x = shuffle_x - glyph_width - glyph_gap;
-        self.draw_glyph(target, repeat_glyph, repeat_x, glyph_y, text_color)?;
 
         Ok(())
     }

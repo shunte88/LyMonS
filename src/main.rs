@@ -231,16 +231,11 @@ async fn unified_display_loop(
 
         if is_playing {
 
-            if display_lock.display_mode() == display::DisplayMode::Visualizer {
-                display_lock.render_frame().await.unwrap_or_else(|e|
-                    error!("Failed to render display frame in {} mode (no change): {}", this_mode, e));
-            } else if lms_guard.has_changed() { // DIRTY FLAG CHECK - key difference!
-
-                // --- Update display data when LMS tags have changed ---
+            // Update display data whenever LMS tags change (all modes, including Visualizer)
+            if lms_guard.has_changed() {
                 let current_volume_percent = lms_guard.sliminfo.volume.clone();
                 let current_is_muted = current_volume_percent == 0;
 
-                // Convert u8 repeat/shuffle to enums
                 let repeat_mode = match lms_guard.sliminfo.repeat {
                     0 => crate::glyphs::RepeatMode::Off,
                     1 => crate::glyphs::RepeatMode::RepeatAll,
@@ -279,16 +274,12 @@ async fn unified_display_loop(
                     lms_guard.sliminfo.mode.clone(),
                 );
 
-                // Render the frame
-                display_lock.render_frame().await.unwrap_or_else(|e|
-                    error!("Failed to render display frame in {} mode: {}", this_mode, e));
-
-                lms_guard.reset_changed(); // Reset dirty flag
-            } else {
-                // Not changed but playing - continue animation
-                display_lock.render_frame().await.unwrap_or_else(|e|
-                    error!("Failed to render display frame in {} mode (no change): {}", this_mode, e));
+                lms_guard.reset_changed();
             }
+
+            // Always render when playing (visualizer needs every frame for animation)
+            display_lock.render_frame().await.unwrap_or_else(|e|
+                error!("Failed to render display frame in {} mode: {}", this_mode, e));
         } else {
             // Not playing - mode controller has already set Clock or Weather mode
             display_lock.render_frame().await.unwrap_or_else(|e|
@@ -1330,15 +1321,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
 
                 if is_playing {
-                    if display_manager.current_mode == display::DisplayMode::Visualizer {
-                        display_manager.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in {} mode (no change): {}", this_mode, e));
-                    } else if lms_guard.has_changed() { // Only update display data if LMS tags have changed
 
-                        // --- Line 0: Volume, Repeat/Shuffle, Bitrate/Audio Glyphs ---
+                    // Update display data whenever LMS tags change (all modes, including Visualizer)
+                    if lms_guard.has_changed() {
                         let current_volume_percent = lms_guard.sliminfo.volume.clone();
                         let current_is_muted = current_volume_percent == 0;
 
-                        // Convert u8 repeat/shuffle to enums
                         let repeat_mode = match lms_guard.sliminfo.repeat {
                             0 => crate::glyphs::RepeatMode::Off,
                             1 => crate::glyphs::RepeatMode::RepeatAll,
@@ -1361,16 +1349,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             shuffle_mode,
                         );
 
-                        // Lines 1-4: Track Details with Scrolling
                         display_manager.set_track_details(
-                            lms_guard.sliminfo.albumartist.clone(), 
-                            lms_guard.sliminfo.album.clone(), 
-                            lms_guard.sliminfo.title.clone(), 
+                            lms_guard.sliminfo.albumartist.clone(),
+                            lms_guard.sliminfo.album.clone(),
+                            lms_guard.sliminfo.title.clone(),
                             lms_guard.sliminfo.artist.clone(),
                             scroll_mode
                         ).await;
 
-                        // use raw_data - higher fidelity
                         display_manager.set_track_progress_data(
                             show_remaining,
                             lms_guard.sliminfo.duration.raw.clone() as f32,
@@ -1379,16 +1365,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             lms_guard.sliminfo.mode.clone(),
                         );
 
-                        // Render the frame, which includes updating scroll positions and drawing
-                        display_manager.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in {} mode: {}", this_mode, e));
-
-                        // Request a refresh for the next LMS polling cycle
-                        lms_guard.reset_changed(); // Reset changed flags after display update
-                    } else {
-                        // If not changed, but playing, just render the current animation frame.
-                        // This allows ongoing scrolling animations to continue without new data.
-                        display_manager.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in {} mode (no change): {}", this_mode, e));
+                        lms_guard.reset_changed();
                     }
+
+                    // Always render when playing (visualizer needs every frame for animation)
+                    display_manager.render_frame().await.unwrap_or_else(|e| error!("Failed to render display frame in {} mode: {}", this_mode, e));
                 } else {
 
                     // When not playing - mode controller has already set Clock or Weather mode

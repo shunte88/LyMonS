@@ -283,13 +283,13 @@ impl Visual {
         // overage beacon
         let over = if over_left { "1" } else { "0" };
         data = data
-            .replace("{{overflow}}", over.clone()) // downmix
-            .replace("{{overflow-left}}", over.clone())
-            .replace("{{overflow_left}}", over.clone());
+            .replace("{{overflow}}", over) // downmix
+            .replace("{{overflow-left}}", over)
+            .replace("{{overflow_left}}", over);
         let over = if over_right { "1" } else { "0" };
         data = data
-            .replace("{{overflow-right}}", over.clone())
-            .replace("{{overflow_right}}", over.clone());
+            .replace("{{overflow-right}}", over)
+            .replace("{{overflow_right}}", over);
 
         data = data
             .replace("{{needle}}", metric_left.to_string().as_str())
