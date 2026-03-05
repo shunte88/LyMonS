@@ -1044,7 +1044,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         info!("DisplayManager created - using unified display loop");
 
-        // === INITIALIZATION SEQUENCE WITH SPLASH SCREEN ===
         // Load full config for location settings
         let full_config = if let Ok(config_content) = std::fs::read_to_string(_config_file) {
             serde_yaml::from_str::<config::Config>(&config_content).ok()
@@ -1052,6 +1051,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         };
 
+        // === INITIALIZATION SEQUENCE WITH SPLASH SCREEN ===
         // Show splash screen during initialization (unless user opted out)
         display_manager.splash(
             show_splash,
@@ -1066,6 +1066,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if show_splash {
                 display_manager.update_splash_status("Determining location...")?;
+            } else {
+                info!("Determining location...");
             }
 
             match location::get_location(lat, lng).await {
@@ -1085,6 +1087,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(loc) = location.clone() {
             if show_splash {
                 display_manager.update_splash_status("Calculating astronomical data...")?;
+            }else{
+                info!("Calculating astronomical data...");
             }
 
             let astral = astral::AstralService::new(loc);
@@ -1110,6 +1114,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if show_splash {
             display_manager.update_splash_status("Initialization complete")?;
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        }else{
+            info!("Initialization complete")
         }
 
         // Wrap DisplayManager in Arc<Mutex> for sharing with unified loop
@@ -1212,6 +1218,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if show_splash {
             display_manager.update_splash_status("Determining location...")?;
+        }else{
+            info!("Determining location...");
         }
 
         match location::get_location(lat, lng).await {
@@ -1231,6 +1239,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(loc) = location.clone() {
         if show_splash {
             display_manager.update_splash_status("Calculating astronomical data...")?;
+        }else{
+            info!("Calculating astronomical data...");
         }
 
         let astral = astral::AstralService::new(loc);
@@ -1256,9 +1266,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if show_splash {
         display_manager.update_splash_status("Initialization complete")?;
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    } else{
+        info!("Initialization complete");
     }
 
     if weather_config != "" {
+        if show_splash {
+            display_manager.update_splash_status("Weather setup...")?;
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        } else{
+            info!("Weather setup...");
+        }
         display_manager.setup_weather(weather_config).await?;
     }
 
@@ -1272,6 +1290,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize the LMS server, discover it, fetch players, init tags, and start polling
     // init_server now returns Arc<TokMutex<LMSServer>>
+    if show_splash {
+        display_manager.update_splash_status("LMS communication...")?;
+    } else{
+        info!("LMS communication...");
+    }
     let lms_arc = match LMSServer::init_server(name_filter, mac_addr.as_str()).await {
         Ok(server_arc) => server_arc,
         Err(e) => {
@@ -1288,6 +1311,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // display_manager.setup_visualizer(viz_type, lms.subscribe_playing()).await?;
     drop(lms);
 
+    if show_splash {
+        display_manager.update_splash_status("LyMonS is worth the squeeze")?;
+    } else{
+        info!("LyMonS is worth the squeeze");
+    }
     // Main application loop
     tokio::select! {
         // Handle Unix signals for graceful shutdown
