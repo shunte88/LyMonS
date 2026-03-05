@@ -26,7 +26,11 @@ OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cross build --release --workspace --target="
 # Organize plugins
 echo "Organizing plugin binaries..."
 mkdir -p "target/${TARGET}/release/drivers"
-cp "target/${TARGET}/release/liblymons_driver_*.so" "target/${TARGET}/release/drivers/"
+if ls target/${TARGET}/release/liblymons_driver_*.so 1>/dev/null 2>&1; then
+    cp target/${TARGET}/release/liblymons_driver_*.so "target/${TARGET}/release/drivers/"
+else
+    echo "Warning: No plugin drivers found to organize"
+fi
 
 echo ""
 echo "Cross-compilation complete!"
