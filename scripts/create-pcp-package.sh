@@ -1,44 +1,62 @@
 #!/bin/bash
-# Create PiCorePlayer deployment package (.tgz)
-# For TinyCore Linux deployment on PiCorePlayer
+# Create piCorePlayer deployment package (.tgz)
+# For TinyCore Linux deployment on piCorePlayer
 
 set -e
 
-VERSION="0.2.1"
-PACKAGE_NAME="lymons-${VERSION}-pcp"
+TARGET="${1:-armv7-unknown-linux-gnueabihf}"
+VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+ARCH=$(echo "${TARGET}" | cut -d'-' -f1)
+PACKAGE_NAME="lymons-${VERSION}-pcp-${ARCH}"
 BUILD_DIR="/tmp/${PACKAGE_NAME}"
+# tinycore is a read only OS that does not survive across reboots
+# all deliverables must be written to the mount, and added to the
+# automated backup for inclusion in the persistence mechanism
+RUNTIME_DIR="mnt/mmcblk0p2/tce/lymons"
 
-echo "Creating PiCorePlayer deployment package..."
+echo "Creating piCorePlayer deployment package..."
+echo "Version: ${VERSION}"
+echo "Target: ${TARGET}"
+echo "Architecture: ${ARCH}"
+
+# Verify cross-compiled binary exists
+if [ ! -f "target/${TARGET}/release/LyMonS" ]; then
+    echo "Error: Cross-compiled binary not found!"
+    echo "Please run: ./scripts/cross-compile-pi.sh ${TARGET} first"
+    exit 1
+fi
 
 # Clean and create build directory
 rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}"/{usr/local/bin,usr/local/lib/lymons/drivers,usr/local/share/lymons,etc/lymons}
-
-# Build LyMonS binary
-echo "Building LyMonS binary..."
-cargo build --release
+mkdir -p "${BUILD_DIR}"/{${RUNTIME_DIR},${RUNTIME_DIR}/data,${RUNTIME_DIR}/assets,${RUNTIME_DIR}/fonts,${RUNTIME_DIR}/drivers,${RUNTIME_DIR}/config}
 
 # Copy main binary
-cp target/release/LyMonS "${BUILD_DIR}/usr/local/bin/"
-strip "${BUILD_DIR}/usr/local/bin/LyMonS"
+echo "Copying binary..."
+cp "target/${TARGET}/release/LyMonS" "${BUILD_DIR}/${RUNTIME_DIR}/"
+strip "${BUILD_DIR}/${RUNTIME_DIR}/LyMonS"
 
-# Build and copy plugins
-echo "Building plugins..."
-make plugins
+# Copy runtime assets and resources
+echo "Copying runtime assets and resources..."
+cp -fr assets/ "${BUILD_DIR}/${RUNTIME_DIR}/"
+cp -fr data/ "${BUILD_DIR}/${RUNTIME_DIR}/"
+cp -fr fonts/ "${BUILD_DIR}/${RUNTIME_DIR}/"
 
-cp target/release/drivers/liblymons_driver_ssd1306.so "${BUILD_DIR}/usr/local/lib/lymons/drivers/"
-cp target/release/drivers/liblymons_driver_ssd1309.so "${BUILD_DIR}/usr/local/lib/lymons/drivers/"
-cp target/release/drivers/liblymons_driver_sh1106.so "${BUILD_DIR}/usr/local/lib/lymons/drivers/"
-cp target/release/drivers/liblymons_driver_ssd1322.so "${BUILD_DIR}/usr/local/lib/lymons/drivers/"
+# Copy plugins
+echo "Copying plugins..."
+if ls target/${TARGET}/release/drivers/liblymons_driver_*.so 1>/dev/null 2>&1; then
+    cp target/${TARGET}/release/drivers/liblymons_driver_*.so "${BUILD_DIR}/${RUNTIME_DIR}/drivers/"
+    strip "${BUILD_DIR}/${RUNTIME_DIR}/drivers/"*.so
+else
+    echo "Warning: No plugin drivers found in target/${TARGET}/release/drivers/"
+fi
 
-strip "${BUILD_DIR}"/usr/local/lib/lymons/drivers/*.so
-
-# Copy configuration templates
-cat > "${BUILD_DIR}/etc/lymons/lymons.yaml.example" <<'EOF'
-# LyMonS Configuration Example for PiCorePlayer
+# Copy configuration template
+cat > "${BUILD_DIR}/${RUNTIME_DIR}/config/lymons.yaml.example" <<'EOF'
+# LyMonS Configuration Example for piCorePlayer
 
 display:
-  driver: ssd1306          # Options: ssd1306, ssd1309, sh1106, ssd1322
+  folder: /mnt/mmcblk0p2/tce/lymons/drivers/
+  driver: ssd1309          # Options: ssd1306, ssd1309, sh1106, ssd1322
   bus:
     type: i2c
     bus: "/dev/i2c-1"
@@ -47,146 +65,155 @@ display:
   rotate_deg: 0            # 0, 90, 180, 270
   invert: false
 
-# Slim Server Connection
-slimserver:
-  host: "localhost"        # Or IP of your LMS server
-  port: 9000
+# location - your latitude/longitude - use https://www.latlong.net/
+latitude: 42.36141    # change to your location
+longitude: -71.10407  # change to your location
+
+# Slim Server Connection (auto-detected if not specified)
+# slimserver:
+#   host: "localhost" # Or IP of your LMS server
+#   port: 9000
 
 # Player MAC Address (auto-detected if not specified)
 # player_mac: "aa:bb:cc:dd:ee:ff"
 EOF
 
+# Create runtime convenience script (lives inside the lymons folder)
+cat > "${BUILD_DIR}/${RUNTIME_DIR}/gomonitor" <<'EOF'
+#!/bin/sh
+# LyMonS for piCorePlayer - it's worth the squeeze
+echo "LyMonS for piCorePlayer - it's worth the squeeze"
+BINDIR="/mnt/mmcblk0p2/tce/lymons"
+PNAME=`cat /usr/local/sbin/config.cfg | grep "^NAME=" | cut -d'"' -f2`
+
+sudo killall LyMonS > /dev/null 2>&1
+sudo killall LyMonS > /dev/null 2>&1
+sudo killall LyMonS > /dev/null 2>&1
+
+# wait for squeeze to come online
+until pids=$(pidof squeezelite squeezelite-dsd)
+do
+  echo "Waiting for squeezelite ..."
+  sleep 1
+done
+echo "Start LyMonS. Player: ${PNAME}"
+
+VIZ=""
+if [ $# -gt 0 ]; then
+  VIZ="-a \"${1:-NA}\" "
+fi
+
+sudo modprobe i2c_dev > /dev/null 2>&1
+sudo modprobe i2c-dev > /dev/null 2>&1
+cd "${BINDIR}"
+CMD="sudo ${BINDIR}/LyMonS --name \"${PNAME}\" --config=${BINDIR}/config/lymons.yaml ${VIZ} $2 $3 $4 $5 $6 $7 $8 $9"
+echo $CMD
+eval $CMD > /dev/null &
+exit
+EOF
+chmod +x "${BUILD_DIR}/${RUNTIME_DIR}/gomonitor"
+
 # Create installation script
+# Package is designed to be extracted directly to /
+# tar xzf lymons-*-pcp-*.tgz -C /
 cat > "${BUILD_DIR}/install.sh" <<'EOF'
 #!/bin/sh
-# LyMonS Installation Script for PiCorePlayer
-# Run as: sudo ./install.sh
+# LyMonS Installation Script for piCorePlayer
+# Extract the package to / first, then run this script:
+#   tar xzf lymons-*-pcp-*.tgz -C /
+#   sudo ./install.sh
 
-echo "Installing LyMonS for PiCorePlayer..."
+echo "Installing LyMonS for piCorePlayer..."
+RUNTIME_DIR="/mnt/mmcblk0p2/tce/lymons"
 
-# Copy files
-cp -v usr/local/bin/LyMonS /usr/local/bin/
-chmod +x /usr/local/bin/LyMonS
+# Load i2c tools
+tce-load -i i2c-tools.tcz
 
-mkdir -p /usr/local/lib/lymons/drivers
-cp -v usr/local/lib/lymons/drivers/*.so /usr/local/lib/lymons/drivers/
+chmod +x "${RUNTIME_DIR}/LyMonS"
+chmod +x "${RUNTIME_DIR}/gomonitor"
 
-mkdir -p /etc/lymons
-if [ ! -f /etc/lymons/lymons.yaml ]; then
-    cp -v etc/lymons/lymons.yaml.example /etc/lymons/lymons.yaml
-    echo "Created default configuration at /etc/lymons/lymons.yaml"
+if [ ! -f "${RUNTIME_DIR}/config/lymons.yaml" ]; then
+    cp "${RUNTIME_DIR}/config/lymons.yaml.example" "${RUNTIME_DIR}/config/lymons.yaml"
+    echo "Created default configuration at ${RUNTIME_DIR}/config/lymons.yaml"
     echo "Please edit this file with your settings"
 fi
 
-# Make persistent on PiCorePlayer
+# Make persistent on piCorePlayer (avoid duplicate entries)
 if [ -f /usr/local/sbin/filetool.sh ]; then
-    echo "/usr/local/bin/LyMonS" >> /opt/.filetool.lst
-    echo "/usr/local/lib/lymons" >> /opt/.filetool.lst
-    echo "/etc/lymons" >> /opt/.filetool.lst
-    echo "Added to PiCorePlayer backup list"
-
-    # Backup
-    filetool.sh -b
+    grep -v "^${RUNTIME_DIR}" /opt/.filetool.lst > /tmp/.filetool.lst.tmp \
+        && mv /tmp/.filetool.lst.tmp /opt/.filetool.lst
+    echo "${RUNTIME_DIR}" >> /opt/.filetool.lst
+    echo "Added ${RUNTIME_DIR} to piCorePlayer backup list"
+    pcp bu
     echo "Backup completed"
 fi
 
+echo ""
 echo "Installation complete!"
 echo ""
 echo "Next steps:"
-echo "1. Edit /etc/lymons/lymons.yaml with your configuration"
-echo "2. Run: LyMonS to test"
-echo "3. Add to autostart if desired"
+echo "1. Edit ${RUNTIME_DIR}/config/lymons.yaml with your settings"
+echo "2. Test: ${RUNTIME_DIR}/gomonitor"
+echo "3. Add to autostart via the piCorePlayer web interface:"
+echo "   ${RUNTIME_DIR}/gomonitor &"
 EOF
-
 chmod +x "${BUILD_DIR}/install.sh"
 
-# Create README
+# Create package README
 cat > "${BUILD_DIR}/README.md" <<EOF
-# LyMonS ${VERSION} for PiCorePlayer
+# LyMonS ${VERSION} for piCorePlayer (${ARCH})
 
-Dynamic plugin-based OLED display driver for Logitech Media Server players.
+Dynamic OLED display driver for Logitech Media Server / piCorePlayer.
+
+**Architecture**: ${TARGET}
+**Install path**: /mnt/mmcblk0p2/tce/lymons/
 
 ## Installation
 
-1. Extract this package:
+1. Extract this package to the root filesystem:
    \`\`\`bash
-   tar xzf ${PACKAGE_NAME}.tgz
-   cd ${PACKAGE_NAME}
+   tar xzf ${PACKAGE_NAME}.tgz -C /
    \`\`\`
 
-2. Run installation script:
+2. Run the installation script:
    \`\`\`bash
    sudo ./install.sh
    \`\`\`
 
 3. Edit configuration:
    \`\`\`bash
-   sudo nano /etc/lymons/lymons.yaml
+   sudo nano /mnt/mmcblk0p2/tce/lymons/config/lymons.yaml
    \`\`\`
 
 4. Test:
    \`\`\`bash
-   LyMonS
+   /mnt/mmcblk0p2/tce/lymons/gomonitor
    \`\`\`
 
 ## Supported Displays
 
 - **SSD1306** - 128x64 I2C (most common)
 - **SSD1309** - 128x64 I2C
-- **SH1106** - 132x64 I2C
+- **SH1106**  - 132x64 I2C
 - **SSD1322** - 256x64 SPI (grayscale)
 
-## Plugin System
+## Autostart on piCorePlayer
 
-Drivers are loaded dynamically from:
-- \`/usr/local/lib/lymons/drivers/\` (system-wide)
-- \`~/.local/lib/lymons/drivers/\` (user-local)
-
-Plugins are automatically discovered and loaded based on your \`driver\` setting in the config.
-
-## Configuration
-
-Example I2C configuration (SSD1306):
-\`\`\`yaml
-display:
-  driver: ssd1306
-  bus:
-    type: i2c
-    bus: "/dev/i2c-1"
-    address: 0x3C
-  brightness: 128
-\`\`\`
-
-Example SPI configuration (SSD1322):
-\`\`\`yaml
-display:
-  driver: ssd1322
-  bus:
-    type: spi
-    bus: "/dev/spidev0.0"
-    dc_pin: 24
-    rst_pin: 25
-\`\`\`
-
-## Autostart on PiCorePlayer
-
-Add to \`/opt/bootlocal.sh\`:
+Configure through the piCorePlayer web interface as a startup command:
 \`\`\`bash
-/usr/local/bin/LyMonS &
+/mnt/mmcblk0p2/tce/lymons/gomonitor &
 \`\`\`
 
-## Files Included
+## Files
 
-- \`usr/local/bin/LyMonS\` - Main binary
-- \`usr/local/lib/lymons/drivers/*.so\` - Plugin drivers (4 total)
-- \`etc/lymons/lymons.yaml.example\` - Configuration template
+- \`/mnt/mmcblk0p2/tce/lymons/LyMonS\` - Main binary
+- \`/mnt/mmcblk0p2/tce/lymons/gomonitor\` - Launch script
+- \`/mnt/mmcblk0p2/tce/lymons/drivers/\` - Plugin drivers
+- \`/mnt/mmcblk0p2/tce/lymons/data/\` - Runtime data
+- \`/mnt/mmcblk0p2/tce/lymons/assets/\` - Runtime assets
+- \`/mnt/mmcblk0p2/tce/lymons/fonts/\` - Fonts
+- \`/mnt/mmcblk0p2/tce/lymons/config/lymons.yaml.example\` - Configuration template
 - \`install.sh\` - Installation script
-
-## Package Size
-
-- Binary: ~8.9 MB (with all features)
-- Plugins: ~1.4 MB (all 4 drivers)
-- Total: ~10.3 MB
 
 ## License
 
@@ -195,20 +222,25 @@ GPL-3.0-or-later
 ## Version
 
 ${VERSION} ($(date +%Y-%m-%d))
+Built for: ${TARGET}
 EOF
 
 # Create package
 cd /tmp
+echo "Creating tarball..."
 tar czf "${PACKAGE_NAME}.tgz" "${PACKAGE_NAME}/"
 
 # Move to project root
-mv "${PACKAGE_NAME}.tgz" "/data2/refactor/LyMonS/"
+mv "${PACKAGE_NAME}.tgz" "${OLDPWD}/"
+
+BINARY_SIZE=$(du -h "${BUILD_DIR}/${RUNTIME_DIR}/LyMonS" | cut -f1)
+PACKAGE_SIZE=$(du -h "${OLDPWD}/${PACKAGE_NAME}.tgz" | cut -f1)
 
 echo ""
-echo "Package created: ${PACKAGE_NAME}.tgz"
-echo "Size: $(du -h /data2/refactor/LyMonS/${PACKAGE_NAME}.tgz | cut -f1)"
+echo "✓ Package created: ${PACKAGE_NAME}.tgz"
+echo "  Binary size: ${BINARY_SIZE}"
+echo "  Package size: ${PACKAGE_SIZE}"
 echo ""
-echo "To test:"
-echo "  tar xzf ${PACKAGE_NAME}.tgz"
-echo "  cd ${PACKAGE_NAME}"
+echo "To deploy:"
+echo "  tar xzf ${PACKAGE_NAME}.tgz -C /"
 echo "  sudo ./install.sh"
