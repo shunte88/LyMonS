@@ -14,6 +14,12 @@ BUILD_DIR="/tmp/${PACKAGE_NAME}"
 # automated backup for inclusion in the persistence mechanism
 RUNTIME_DIR="mnt/mmcblk0p2/tce/lymons"
 
+case "${TARGET}" in
+    armv7-*)   STRIP_TOOL="arm-linux-gnueabihf-strip" ;;
+    aarch64-*) STRIP_TOOL="aarch64-linux-gnu-strip" ;;
+    *)         STRIP_TOOL="strip" ;;
+esac
+
 echo "Creating piCorePlayer deployment package..."
 echo "Version: ${VERSION}"
 echo "Target: ${TARGET}"
@@ -33,7 +39,7 @@ mkdir -p "${BUILD_DIR}"/{${RUNTIME_DIR},${RUNTIME_DIR}/data,${RUNTIME_DIR}/asset
 # Copy main binary
 echo "Copying binary..."
 cp "target/${TARGET}/release/LyMonS" "${BUILD_DIR}/${RUNTIME_DIR}/"
-strip "${BUILD_DIR}/${RUNTIME_DIR}/LyMonS" 2>/dev/null || echo "Strip failed (non-fatal, cross-compiled binary)"
+${STRIP_TOOL} "${BUILD_DIR}/${RUNTIME_DIR}/LyMonS" 2>/dev/null || echo "Strip failed (non-fatal)"
 
 # Copy runtime assets and resources
 echo "Copying runtime assets and resources..."
@@ -45,7 +51,7 @@ cp -fr fonts/ "${BUILD_DIR}/${RUNTIME_DIR}/"
 echo "Copying plugins..."
 if ls target/${TARGET}/release/drivers/liblymons_driver_*.so 1>/dev/null 2>&1; then
     cp target/${TARGET}/release/drivers/liblymons_driver_*.so "${BUILD_DIR}/${RUNTIME_DIR}/drivers/"
-    strip "${BUILD_DIR}/${RUNTIME_DIR}/drivers/"*.so 2>/dev/null || echo "Strip plugins failed (non-fatal, cross-compiled binary)"
+    ${STRIP_TOOL} "${BUILD_DIR}/${RUNTIME_DIR}/drivers/"*.so 2>/dev/null || echo "Strip plugins failed (non-fatal)"
 else
     echo "Warning: No plugin drivers found in target/${TARGET}/release/drivers/"
 fi
