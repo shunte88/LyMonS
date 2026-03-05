@@ -72,7 +72,6 @@ mod visionon;
 mod vuphysics_new;
 mod svgimage;
 mod shm_path;
-mod func_timer;
 mod sun;
 
 use sliminfo::LMSServer;
@@ -345,7 +344,7 @@ async fn emulator_demo_loop(
     driver: std::sync::Arc<tokio::sync::Mutex<display::drivers::emulator::EmulatorDriver>>,
     clock_font: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("++++++++++++++++++++++ emulator_demo_loop ++++++++++++++++++++++");
+    println!(">>>>>>>>>>>>>>>>>>>>>> emulator_demo_loop <<<<<<<<<<<<<<<<<<<<<<");
     use embedded_graphics::prelude::*;
     use embedded_graphics::pixelcolor::BinaryColor;
     use embedded_graphics::mono_font::{MonoTextStyle, ascii::{FONT_5X8, FONT_6X10, FONT_9X18_BOLD}};
@@ -871,7 +870,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .default_value("config.toml")
         .help("monitor config file")
         .required(false)) // false as defaulted
-        // change this to interface/oled_interface
         .arg(Arg::new("i2c-bus")
         .long("i2c-bus")
         .default_value("/dev/i2c-1") // Default I2C bus path for Raspberry Pi
@@ -1301,9 +1299,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Main logic loop
         _ = async {
 
-            // clear the display before we dip into the specific display modes
-            //display_manager.clear_flushable_buffer();
-
             let egg_type = display_manager.get_egg_type(); // static
 
             // Create display mode controller for hardware
@@ -1423,7 +1418,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Main application exiting. Clearing display and stopping polling thread.");
 
     // Clear the display on shutdown
-    // display_manager.clear_flushable_buffer(); // Not needed with DisplayManager
+    display_manager.clear().unwrap();
 
     // When `lms_arc` goes out of scope here (at the end of main),
     // its `Drop` implementation will be called, which will attempt to stop the background polling thread.

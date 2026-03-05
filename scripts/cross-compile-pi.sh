@@ -26,10 +26,7 @@ OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cross build --release --workspace --target="
 # Organize plugins
 echo "Organizing plugin binaries..."
 mkdir -p "target/${TARGET}/release/drivers"
-cp "target/${TARGET}/release/liblymons_driver_ssd1306.so" "target/${TARGET}/release/drivers/"
-cp "target/${TARGET}/release/liblymons_driver_ssd1309.so" "target/${TARGET}/release/drivers/"
-cp "target/${TARGET}/release/liblymons_driver_sh1106.so" "target/${TARGET}/release/drivers/"
-cp "target/${TARGET}/release/liblymons_driver_ssd1322.so" "target/${TARGET}/release/drivers/"
+cp "target/${TARGET}/release/liblymons_driver_*.so" "target/${TARGET}/release/drivers/"
 
 echo ""
 echo "Cross-compilation complete!"

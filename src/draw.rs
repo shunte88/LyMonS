@@ -137,7 +137,7 @@ where
     let character_style = MonoTextStyle::new(font, BinaryColor::On);
     let textbox_style = TextBoxStyleBuilder::new()
         .alignment(align)
-        .vertical_alignment(VerticalAlignment::Middle)
+        .vertical_alignment(VerticalAlignment::Top)
         .build();
     let label_rect = Rectangle::new(top_left, size);
     let label_box = TextBox::with_textbox_style(text, label_rect, character_style, textbox_style);

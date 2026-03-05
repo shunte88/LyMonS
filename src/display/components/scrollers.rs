@@ -257,7 +257,7 @@ impl ScrollingText {
         let char_width = 6;
         let word_gap = 2 * char_width as i32;
         let mut text_y = 15;
-        let text_height = 9;
+        let text_height = 9; // need to get this from bounds and font metrics
 
         // Album Artist at field 1 (below status bar at y=8)
         if !self.album_artist_scroll.text.is_empty() {
@@ -342,7 +342,7 @@ impl ScrollingText {
         }
 
         // Use field's font and colors (convert to appropriate color depth)
-        let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X9);
+        let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8);
         use crate::display::color_proxy::ConvertColor;
         let text_style = MonoTextStyle::new(font, field.fg_color.to_color());
         let char_width = 6;
@@ -350,7 +350,7 @@ impl ScrollingText {
 
         // Get field position (baseline is at bottom of field)
         let field_pos = field.position();
-        let baseline_y = field_pos.y + field.height() as i32;
+        let baseline_y = field_pos.y + field.height() as i32 + 1;
 
         // Calculate scroll offset
         let x = field_pos.x + scroll_state.get_offset();
@@ -386,4 +386,5 @@ impl ScrollingText {
     pub fn set_scroll_mode(&mut self, mode: ScrollMode) {
         self.scroll_mode = mode;
     }
+    
 }

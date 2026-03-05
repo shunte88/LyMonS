@@ -543,7 +543,7 @@ impl VisualizerComponent {
         let clear_rect = Rectangle::new(Point::new(origin.x - 1, origin.y - 1), Size::new(panel_size.width + 2, panel_size.height + 2));
 
         let text_style = MonoTextStyle::new(&FONT_5X8, P::on());
-        let textbox_style = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Center).vertical_alignment(VerticalAlignment::Middle).build();
+        let textbox_style = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Center).vertical_alignment(VerticalAlignment::Top).build();
         let bounds = Rectangle::new(Point::new(origin.x, label_pos + 1), Size::new(panel_size.width, label_height - 2));
 
         if bars.is_empty() || panel_size.width == 0 || panel_size.height == 0 { return Ok(()); }

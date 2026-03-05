@@ -396,7 +396,7 @@ impl LayoutManager {
                         Size::new(width - 4, 14)),
                     &FONT_7X14
                 )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
                 .colors(Color::Yellow, None)
             );
 
@@ -428,7 +428,7 @@ impl LayoutManager {
                             Size::new(astral_field_width, 10)),
                         &FONT_5X8
                     )
-                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
                     .colors(Color::Yellow, None)
                 )
                 .add_field(
@@ -449,7 +449,7 @@ impl LayoutManager {
                             Size::new(astral_field_width, 10)),
                         &FONT_5X8
                     )
-                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
                     .colors(Color::Yellow, None)
                 );
 
@@ -475,7 +475,7 @@ impl LayoutManager {
                             Size::new(astral_field_width, 10)),
                         &FONT_5X8
                     )
-                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
                     .colors(Color::Cyan, None)
                 )
                 // Moonset glyph
@@ -497,7 +497,7 @@ impl LayoutManager {
                             Size::new(astral_field_width, 10)),
                         &FONT_5X8
                     )
-                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
                     .colors(Color::Cyan, None)
                 )
 ;
@@ -524,7 +524,7 @@ impl LayoutManager {
                             Size::new(astral_field_width, 7)),
                         &FONT_4X6
                     )
-                    .styled_alignment(HorizontalAlignment::Right, VerticalAlignment::Middle)
+                    .styled_alignment(HorizontalAlignment::Right, VerticalAlignment::Top)
                     .colors(Color::Yellow, None)
                 );
         }
@@ -567,7 +567,7 @@ impl LayoutManager {
             .add_field(Field::new_glyph("day1_icon",Rectangle::new(Point::new(icon_x1, 1), Size::new(icon_size, icon_size))))
             // day name. Mon, Tue... etc
             .add_field(Field::new_text("day1_name",Rectangle::new(Point::new(col_x1, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
-                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
                 .colors(Color::Cyan, None)
                 .border(1))
             // Bordered box for temp+precip
@@ -579,7 +579,7 @@ impl LayoutManager {
             // Day 2 column (x=44, width=40)
             .add_field(Field::new_glyph("day2_icon",Rectangle::new(Point::new(icon_x2, 1), Size::new(icon_size, icon_size))))
             .add_field(Field::new_text("day2_name",Rectangle::new(Point::new(col_x2, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
-                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
                 .colors(Color::Cyan, None)
                 .border(1))
             // Bordered box for temp+precip
@@ -591,7 +591,7 @@ impl LayoutManager {
             // Day 3 column (x=84, width=40)
             .add_field(Field::new_glyph("day3_icon",Rectangle::new(Point::new(icon_x3, 1), Size::new(icon_size, icon_size))))
             .add_field(Field::new_text("day3_name",Rectangle::new(Point::new(col_x3, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
-                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
                 .colors(Color::Cyan, None)
                 .border(1))
             // Bordered box for temp+precip
@@ -607,7 +607,7 @@ impl LayoutManager {
                 // Day 4 column
                 .add_field(Field::new_glyph("day4_icon", Rectangle::new(Point::new(icon_x4, 1), Size::new(icon_size, icon_size))))
                 .add_field(Field::new_text("day4_name", Rectangle::new(Point::new(col_x4, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
-                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
                     .colors(Color::Cyan, None)
                     .border(1))
                 .add_field(Field::new_custom("day4_data_box", Rectangle::new(Point::new(col_x4, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
@@ -616,7 +616,7 @@ impl LayoutManager {
                 // Day 5 column
                 .add_field(Field::new_glyph("day5_icon", Rectangle::new(Point::new(icon_x5, 1), Size::new(icon_size, icon_size))))
                 .add_field(Field::new_text("day5_name", Rectangle::new(Point::new(col_x5, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
-                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
                     .colors(Color::Cyan, None)
                     .border(1))
                 .add_field(Field::new_custom("day5_data_box", Rectangle::new(Point::new(col_x5, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
@@ -625,7 +625,7 @@ impl LayoutManager {
                 // Day 6 column
                 .add_field(Field::new_glyph("day6_icon", Rectangle::new(Point::new(icon_x6, 1), Size::new(icon_size, icon_size))))
                 .add_field(Field::new_text("day6_name", Rectangle::new(Point::new(col_x6, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
-                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Middle)
+                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
                     .colors(Color::Cyan, None)
                     .border(1))
                 .add_field(Field::new_custom("day6_data_box", Rectangle::new(Point::new(col_x6, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
@@ -642,10 +642,10 @@ impl LayoutManager {
         let width = self.layout_config.width;
         let height = self.layout_config.height;
 
-        // Calculate positions similar to original splash
-        // Version is 17px above bottom, build date at bottom - 10px
-        let version_y = (height as i32) - 10 - 17;  // ~37 for 64px height
-        let build_y = (height as i32) - 10;         // ~54 for 64px height
+        // Calculate text detail positions
+        let version_y = (height as i32) - 27;
+        let status_y = (height as i32) - 17;
+        let build_y = (height as i32) - 9;
 
         PageLayout::new("splash")
             // Logo SVG (full screen background) - custom field for SVG rendering
@@ -655,36 +655,35 @@ impl LayoutManager {
                     Rectangle::new(Point::new(0, 0), Size::new(width, height))
                 )
             )
-            // Version string (e.g., "LyMonS v0.2.3")
+            // Version string (e.g., "LyMonS v0.m.n")
             .add_field(
                 Field::new_text(
                     "version",
                     Rectangle::new(Point::new(0, version_y), Size::new(width, 15)),
                     &FONT_6X13_BOLD
                 )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
                 .colors(Color::White, None)
+            )
+            // Status/task message (optional, for showing initialization progress)
+            .add_field(
+                Field::new_text(
+                    "status",
+                    Rectangle::new(Point::new(0, status_y), Size::new(width, 7)),
+                    &FONT_4X6
+                )
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
+                .colors(Color::Green, None)
             )
             // Build date (e.g., "2026-02-04")
             .add_field(
                 Field::new_text(
                     "build_date",
-                    Rectangle::new(Point::new(0, build_y), Size::new(width, 10)),
-                    &FONT_5X8
+                    Rectangle::new(Point::new(0, build_y), Size::new(width, 7)),
+                    &FONT_4X6
                 )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
                 .colors(Color::Cyan, None)
-            )
-            // Status/task message (optional, for showing initialization progress)
-            // Positioned in middle area, above version
-            .add_field(
-                Field::new_text(
-                    "status",
-                    Rectangle::new(Point::new(0, (height / 2) as i32), Size::new(width, 8)),
-                    &FONT_5X8
-                )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Middle)
-                .colors(Color::Green, None)
             )
     }
 

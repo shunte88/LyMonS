@@ -146,11 +146,11 @@ impl PerformanceMetrics {
             self.avg_frame_time_us = (self.avg_frame_time_us + self.frame_time_us) / 2;
         }
 
-        // Warn if exceeding target by >20%
-        if self.frame_time_us > self.target_frame_time_us * 12 / 10 {
-            warn!("Frame time {}μs exceeds target {}μs (render: {}μs, transfer: {}μs)",
-                  self.frame_time_us, self.target_frame_time_us,
-                  render_time_us, transfer_time_us);
+        // Warn if exceeding target by > 50%
+        if self.frame_time_us > self.target_frame_time_us * 15 / 10 {
+            //warn!("Frame time {}μs exceeds target {}μs (render: {}μs, transfer: {}μs)",
+            //      self.frame_time_us, self.target_frame_time_us,
+            //      render_time_us, transfer_time_us);
         }
     }
 
@@ -473,6 +473,7 @@ impl DisplayManager {
 
     /// Clear the display
     pub fn clear(&mut self) -> Result<(), DisplayError> {
+        self.render_buffers.temp_buffer.clear();
         self.framebuffer.clear();
         self.driver.flush()
     }
@@ -609,15 +610,15 @@ impl DisplayManager {
 
                             let textbox_style_left = TextBoxStyleBuilder::new()
                                 .alignment(HorizontalAlignment::Left)
-                                .vertical_alignment(VerticalAlignment::Middle)
+                                .vertical_alignment(VerticalAlignment::Top)
                                 .build();
                             let textbox_style_center = TextBoxStyleBuilder::new()
                                 .alignment(HorizontalAlignment::Center)
-                                .vertical_alignment(VerticalAlignment::Middle)
+                                .vertical_alignment(VerticalAlignment::Top)
                                 .build();
                             let textbox_style_right = TextBoxStyleBuilder::new()
                                 .alignment(HorizontalAlignment::Right)
-                                .vertical_alignment(VerticalAlignment::Middle)
+                                .vertical_alignment(VerticalAlignment::Top)
                                 .build();
 
                             // Current time (left)
@@ -635,6 +636,7 @@ impl DisplayManager {
                             let fix_width = 30;
                             let mut rect = field.bounds;
                             rect.size.width = fix_width;
+                            rect.size.height += 1;
 
                             TextBox::with_textbox_style(
                                 current_time_str,
@@ -762,32 +764,36 @@ impl DisplayManager {
 
                             let textbox_style_left = TextBoxStyleBuilder::new()
                                 .alignment(HorizontalAlignment::Left)
-                                .vertical_alignment(VerticalAlignment::Middle)
+                                .vertical_alignment(VerticalAlignment::Top)
                                 .build();
                             let textbox_style_center = TextBoxStyleBuilder::new()
                                 .alignment(HorizontalAlignment::Center)
-                                .vertical_alignment(VerticalAlignment::Middle)
+                                .vertical_alignment(VerticalAlignment::Top)
                                 .build();
                             let textbox_style_right = TextBoxStyleBuilder::new()
                                 .alignment(HorizontalAlignment::Right)
-                                .vertical_alignment(VerticalAlignment::Middle)
+                                .vertical_alignment(VerticalAlignment::Top)
                                 .build();
 
                             // Current time (left)
                             let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
 
+                            let fix_width = 30;
+                            let mut rect = field.bounds;
+                            rect.size.height += 1;
+
                             TextBox::with_textbox_style(
                                 &self.mode_text,
-                                field.bounds,
+                                rect,
                                 style,
                                 textbox_style_center,
                             )
                             .draw(fb)
                             .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
 
-                            let fix_width = 30;
                             let mut rect = field.bounds;
                             rect.size.width = fix_width;
+                            rect.size.height += 1;
 
                             TextBox::with_textbox_style(
                                 current_time_str,
@@ -801,6 +807,7 @@ impl DisplayManager {
                             let mut rect = field.bounds;
                             rect.top_left.x = (rect.size.width - fix_width) as i32;
                             rect.size.width = fix_width;
+                            rect.size.height += 1;
 
                             // Remaining/total time (right)
                             self.render_buffers.temp_buffer.clear();
@@ -2197,15 +2204,15 @@ impl DisplayManager {
                                 let style = MonoTextStyle::new(font, field.fg_binary());
                                 let tbs_left = TextBoxStyleBuilder::new()
                                     .alignment(HorizontalAlignment::Left)
-                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .vertical_alignment(VerticalAlignment::Top)
                                     .build();
                                 let tbs_center = TextBoxStyleBuilder::new()
                                     .alignment(HorizontalAlignment::Center)
-                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .vertical_alignment(VerticalAlignment::Top)
                                     .build();
                                 let tbs_right = TextBoxStyleBuilder::new()
                                     .alignment(HorizontalAlignment::Right)
-                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .vertical_alignment(VerticalAlignment::Top)
                                     .build();
                                 let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
                                 TextBox::with_textbox_style(&self.mode_text, field.bounds, style, tbs_center)
@@ -2300,15 +2307,15 @@ impl DisplayManager {
                                 let style = MonoTextStyle::new(font, field.fg_color.to_color());
                                 let tbs_left = TextBoxStyleBuilder::new()
                                     .alignment(HorizontalAlignment::Left)
-                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .vertical_alignment(VerticalAlignment::Top)
                                     .build();
                                 let tbs_center = TextBoxStyleBuilder::new()
                                     .alignment(HorizontalAlignment::Center)
-                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .vertical_alignment(VerticalAlignment::Top)
                                     .build();
                                 let tbs_right = TextBoxStyleBuilder::new()
                                     .alignment(HorizontalAlignment::Right)
-                                    .vertical_alignment(VerticalAlignment::Middle)
+                                    .vertical_alignment(VerticalAlignment::Top)
                                     .build();
                                 let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
                                 TextBox::with_textbox_style(&self.mode_text, field.bounds, style, tbs_center)
@@ -2653,7 +2660,7 @@ impl DisplayManager {
         } else {
             TextBoxStyleBuilder::new()
                 .alignment(HorizontalAlignment::Center)
-                .vertical_alignment(VerticalAlignment::Middle)
+                .vertical_alignment(VerticalAlignment::Top)
                 .build()
         };
 
@@ -2693,7 +2700,7 @@ impl DisplayManager {
 
         let textbox_style = TextBoxStyleBuilder::new()
             .alignment(HorizontalAlignment::Center)
-            .vertical_alignment(VerticalAlignment::Middle)
+            .vertical_alignment(VerticalAlignment::Top)
             .build();
 
         TextBox::with_textbox_style(title_text, *rect, character_style, textbox_style)
@@ -2734,7 +2741,7 @@ impl DisplayManager {
 
         let textbox_style = TextBoxStyleBuilder::new()
             .alignment(HorizontalAlignment::Right)
-            .vertical_alignment(VerticalAlignment::Middle)
+            .vertical_alignment(VerticalAlignment::Top)
             .build();
 
         TextBox::with_textbox_style(&time_str, *rect, character_style, textbox_style)
