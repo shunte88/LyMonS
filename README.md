@@ -3,14 +3,9 @@
 [![Build Status](https://github.com/shunte88/LyMonS/actions/workflows/release-pi.yml/badge.svg)](https://github.com/shunte88/LyMonS/actions/workflows/release-pi.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red.svg)](https://www.raspberrypi.org/)
+![version](version.svg)
 
 **An LMS Monitor For The Future**
-
-<<<<<<< HEAD
-![version](version.svg)
-=======
-> LyMonS version 0.3.4 | Built: 2026-03-05
->>>>>>> origin/main
 
 OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
 
