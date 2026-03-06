@@ -475,6 +475,8 @@ impl DisplayManager {
     pub fn clear(&mut self) -> Result<(), DisplayError> {
         self.render_buffers.temp_buffer.clear();
         self.framebuffer.clear();
+        let buffer_data = self.framebuffer.to_packed_bytes();
+        self.driver.write_buffer(&buffer_data)?;
         self.driver.flush()
     }
 
@@ -1220,13 +1222,20 @@ impl DisplayManager {
                         "date" => {
                             // Render date text using field color (e.g., cyan)
                             use embedded_graphics::mono_font::MonoTextStyle;
+                            use embedded_text::{
+                                alignment::{HorizontalAlignment, VerticalAlignment},
+                                style::TextBoxStyleBuilder, TextBox,
+                            };
+                            let tbstyle_center = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Center)
+                                .vertical_alignment(VerticalAlignment::Bottom)
+                                .build();
                             let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
                             let style = MonoTextStyle::new(font, field.fg_binary());
                             let date_str = chrono::Local::now().format("%a %b %d").to_string();
-
-                            // Use DRY helper for text rendering
-                            Self::draw_field_text(fb, field, &date_str, style)
-                                .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
+                            TextBox::with_textbox_style(&date_str, field.bounds, style, tbstyle_center)
+                                .draw(fb)
+                                .map_err(|_| DisplayError::DrawingError("Failed to write date text".to_string()))?;
                         }
                         _ => {}
                     }
@@ -1458,6 +1467,19 @@ impl DisplayManager {
         use crate::visualization::SvgColorDepth;
         use crate::display::color_proxy::ConvertColor;
 
+        use embedded_text::{
+            alignment::{HorizontalAlignment, VerticalAlignment},
+            style::TextBoxStyleBuilder, TextBox,
+        };
+        let tbstyle_center = TextBoxStyleBuilder::new()
+            .alignment(HorizontalAlignment::Center)
+            .vertical_alignment(VerticalAlignment::Bottom)
+            .build();
+        let tbstyle_left = TextBoxStyleBuilder::new()
+            .alignment(HorizontalAlignment::Left)
+            .vertical_alignment(VerticalAlignment::Bottom)
+            .build();
+
         for field in page.fields() {
             let pos = field.position();
 
@@ -1501,17 +1523,15 @@ impl DisplayManager {
                 }
                 "temperature" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), field.fg_color.to_color());
-                    Text::with_baseline(temp_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    TextBox::with_textbox_style(temp_text, field.bounds, style, tbstyle_left)
                         .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw temperature".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write temperature text".to_string()))?;
                 }
                 "humidity" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
-                    Text::with_baseline(humidity_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    TextBox::with_textbox_style(humidity_text, field.bounds, style, tbstyle_left)
                         .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw humidity".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write humidity text".to_string()))?;
                 }
                 "wind" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
@@ -1522,16 +1542,15 @@ impl DisplayManager {
                 }
                 "precipitation" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
-                    Text::with_baseline(precip_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    TextBox::with_textbox_style(precip_text, field.bounds, style, tbstyle_left)
                         .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw precipitation".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write precipitation text".to_string()))?;
                 }
                 "conditions" => {
-                    let font = field.font.unwrap_or(&FONT_7X14);
-                    let style = MonoTextStyle::new(font, D::Color::on());
-                    Self::draw_field_text(target, field, conditions_text, style)
-                        .map_err(|_| DisplayError::DrawingError("Failed to write conditions text".to_string()))?;
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_7X14), field.fg_color.to_color());
+                    TextBox::with_textbox_style(conditions_text, field.bounds, style, tbstyle_center)
+                        .draw(target)
+                        .map_err(|_| DisplayError::DrawingError("Failed to write conditions".to_string()))?;
                 }
                 "sunrise_glyph" => {
                     use crate::weather_glyph::GLYPH_SUNRISE;
@@ -1540,9 +1559,8 @@ impl DisplayManager {
                 }
                 "sunrise_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
-                    Text::with_baseline(sunrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    TextBox::with_textbox_style(sunrise_text, field.bounds, style, tbstyle_left)
                         .draw(target)
-                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to write sunrise text".to_string()))?;
                 }
                 "sunset_glyph" => {
@@ -1552,9 +1570,8 @@ impl DisplayManager {
                 }
                 "sunset_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
-                    Text::with_baseline(sunset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    TextBox::with_textbox_style(sunset_text, field.bounds, style, tbstyle_left)
                         .draw(target)
-                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to write sunset text".to_string()))?;
                 }
                 "moonrise_glyph" => {
@@ -1564,10 +1581,9 @@ impl DisplayManager {
                 }
                 "moonrise_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
-                    Text::with_baseline(moonrise_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    TextBox::with_textbox_style(moonrise_text, field.bounds, style, tbstyle_left)
                         .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to write moonset text".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write moonrise text".to_string()))?;
                 }
                 "moonset_glyph" => {
                     use crate::weather_glyph::GLYPH_MOONSET;
@@ -1576,10 +1592,9 @@ impl DisplayManager {
                 }
                 "moonset_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
-                    Text::with_baseline(moonset_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    TextBox::with_textbox_style(moonset_text, field.bounds, style, tbstyle_left)
                         .draw(target)
-                        .map(|_| ())
-                        .map_err(|_| DisplayError::DrawingError("Failed to write moonset time".to_string()))?;
+                        .map_err(|_| DisplayError::DrawingError("Failed to write moonset text".to_string()))?;
                 }
                 "moonphase_svg" => {
                     Self::draw_moon_phase_glyph(target, moon_phase_index, pos.x, pos.y, D::Color::on())
@@ -3018,10 +3033,7 @@ impl DisplayManager {
         // Get splash page layout
         let splash_page = self.layout_manager.create_splash_page();
 
-        // Clear display
-        let _ = self.clear();
-
-        // Render with status message
+        // Render with status message (text routine clears its own rect — no full clear needed)
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
                 Self::render_splash(fb, &splash_page, &self.splash_version, &self.splash_build_date, Some(status))?;

@@ -30,9 +30,8 @@ tar xzf lymons-latest-pcp-armv7.tgz
 # Install
 cd lymons-*-pcp-armv7
 sudo ./install.sh
+# and follow the directions...
 
-# Configure
-sudo nano /etc/lymons/lymons.yaml
 ```
 
 **Building from source?** See [CROSS_COMPILE.md](CROSS_COMPILE.md) for cross-compilation instructions.
@@ -49,7 +48,7 @@ sudo nano /etc/lymons/lymons.yaml
 - Player attributes — shuffle, repeat, and fidelity glyphs — are shown
 - A retro clock is displayed when the audio is paused or stopped
 - Display regions handle alignment, text wrapping, and layout
-- Current weather and time display. Requires a free API key
+- Current weather and time display. Requires a free API key from [tommorow.io](https://www.tomorrow.io/a/faq/weather-api/how-to-get-a-weather-api-key/)
 - Weather descriptions can be translated to any language, though Japanese, Korean, Chinese, and Cyrillic scripts are not yet fully supported
 - Automatically sets display brightness at dawn and dusk
 - Multiple audio visualization modes, see below

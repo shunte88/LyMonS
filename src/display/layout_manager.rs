@@ -140,6 +140,7 @@ impl LayoutManager {
         let width_adj = width-4;
         let border_adj = 2;
         let y_height: i32 = 9;
+        let y_height_adj: i32 = y_height - 1;
 
         PageLayout::new(page_name)
             // Status bar at top (y=0)
@@ -158,7 +159,7 @@ impl LayoutManager {
                 Field::new_text(
                     "album_artist",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+y_height), 
+                        Point::new(border_adj, border_adj+y_height_adj), 
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
@@ -169,7 +170,7 @@ impl LayoutManager {
                 Field::new_text(
                     "album",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+2*y_height), 
+                        Point::new(border_adj, border_adj+2*y_height_adj), 
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
@@ -180,7 +181,7 @@ impl LayoutManager {
                 Field::new_text(
                     "title",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+3*y_height), 
+                        Point::new(border_adj, border_adj+3*y_height_adj), 
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
@@ -190,7 +191,7 @@ impl LayoutManager {
                 Field::new_text(
                     "artist",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+4*y_height), 
+                        Point::new(border_adj, border_adj+4*y_height_adj), 
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
@@ -202,7 +203,7 @@ impl LayoutManager {
                     "progress_bar",
                     Rectangle::new(
                         Point::new(border_adj, height.saturating_sub(6 + y_height as u32) as i32), 
-                        Size::new(width_adj, 4))
+                        Size::new(width_adj, 3))
                 )
             )
             // Info line (times) at bottom (y=62 for 128x64 displays)
@@ -643,9 +644,9 @@ impl LayoutManager {
         let height = self.layout_config.height;
 
         // Calculate text detail positions
-        let version_y = (height as i32) - 27;
-        let status_y = (height as i32) - 17;
-        let build_y = (height as i32) - 9;
+        let version_y = (height as i32) - 7 - 9 - 15;
+        let build_y = (height as i32) - 7 - 9;
+        let status_y = (height as i32) - 7;
 
         PageLayout::new("splash")
             // Logo SVG (full screen background) - custom field for SVG rendering
@@ -666,15 +667,6 @@ impl LayoutManager {
                 .colors(Color::White, None)
             )
             // Status/task message (optional, for showing initialization progress)
-            .add_field(
-                Field::new_text(
-                    "status",
-                    Rectangle::new(Point::new(0, status_y), Size::new(width, 7)),
-                    &FONT_4X6
-                )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
-                .colors(Color::Green, None)
-            )
             // Build date (e.g., "2026-02-04")
             .add_field(
                 Field::new_text(
@@ -684,6 +676,15 @@ impl LayoutManager {
                 )
                 .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
                 .colors(Color::Cyan, None)
+            )
+            .add_field(
+                Field::new_text(
+                    "status",
+                    Rectangle::new(Point::new(0, status_y), Size::new(width, 7)),
+                    &FONT_4X6
+                )
+                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
+                .colors(Color::Green, None)
             )
     }
 

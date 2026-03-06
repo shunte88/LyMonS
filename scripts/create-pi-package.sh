@@ -60,7 +60,7 @@ cat > "${BUILD_DIR}/${RUNTIME_DIR}/config/lymons.yaml.example" <<'EOF'
 
 display:
   folder: /usr/local/share/lymons/drivers/
-  driver: ssd1309          # Options: ssd1306, ssd1309, sh1106, ssd1322
+  driver: ssd1306          # Options: ssd1306, ssd1309, sh1106, ssd1322
   bus:
     type: i2c
     bus: "/dev/i2c-1"
@@ -85,14 +85,32 @@ EOF
 # Create runtime convenience script
 cat > "${BUILD_DIR}/${RUNTIME_DIR}/gomonitor" <<'EOF'
 #!/bin/sh
-# LyMonS for Raspberry Pi - it's worth the squeeze
+# LyMonS for Raspberry Pi
+# This LyMonS worth the squeeze
 BINDIR="/usr/local/share/lymons"
+PNAME=""
+if [ -f "/usr/local/sbin/config.cfg" ]; then
+  PNAME=`cat /usr/local/sbin/config.cfg | grep "^NAME=" | cut -d'"' -f2`
+fi
 
 sudo killall LyMonS > /dev/null 2>&1
 sudo killall LyMonS > /dev/null 2>&1
+sudo killall LyMonS > /dev/null 2>&1
 
-sudo modprobe i2c_dev > /dev/null 2>&1
-sudo modprobe i2c-dev > /dev/null 2>&1
+if [ "${PNAME}_" ne "_"]; then
+  # wait for squeeze to come online
+  until pids=$(pidof squeezelite squeezelite-dsd)
+  do
+    echo "Waiting for squeezelite ..."
+    sleep 1
+  done
+fi
+echo "Start LyMonS. Player: ${PNAME}"
+
+if [ "$PNAME_" ne "_"]; then
+  sudo modprobe i2c_dev > /dev/null 2>&1
+  sudo modprobe i2c-dev > /dev/null 2>&1
+fi
 
 cd "${BINDIR}"
 CMD="sudo LyMonS --config=${BINDIR}/config/lymons.yaml $@"
@@ -100,12 +118,13 @@ echo $CMD
 eval $CMD > /dev/null &
 exit
 EOF
-chmod +x "${BUILD_DIR}/${RUNTIME_DIR}/gomonitor"
+chmod +xX "${BUILD_DIR}/${RUNTIME_DIR}/gomonitor"
 
 # Create installation script
 cat > "${BUILD_DIR}/install.sh" <<'EOF'
 #!/bin/sh
 # LyMonS Installation Script for Raspberry Pi
+# This LyMonS worth the squeeze
 # Run as: sudo ./install.sh
 
 echo "Installing LyMonS for Raspberry Pi..."
@@ -113,17 +132,17 @@ RUNTIME_DIR="/usr/local/share/lymons"
 
 # Copy binary
 cp -v usr/local/bin/LyMonS /usr/local/bin/
-chmod +x /usr/local/bin/LyMonS
+chmod +xX /usr/local/bin/LyMonS
 
 # Copy runtime folder (data, assets, fonts, drivers, gomonitor, config)
 mkdir -p "${RUNTIME_DIR}"
-cp -vfr ${RUNTIME_DIR}/. "${RUNTIME_DIR}/"
-chmod +x "${RUNTIME_DIR}/gomonitor"
+cp -vfr ${RUNTIME_DIR}/. "/${RUNTIME_DIR}/"
+chmod +xX "${RUNTIME_DIR}/gomonitor"
 
 # Create config from example if not already present
-if [ ! -f "${RUNTIME_DIR}/config/lymons.yaml" ]; then
-    cp "${RUNTIME_DIR}/config/lymons.yaml.example" "${RUNTIME_DIR}/config/lymons.yaml"
-    echo "Created default configuration at ${RUNTIME_DIR}/config/lymons.yaml"
+if [ ! -f "/${RUNTIME_DIR}/config/lymons.yaml" ]; then
+    cp "${RUNTIME_DIR}/config/lymons.yaml.example" "/${RUNTIME_DIR}/config/lymons.yaml"
+    echo "Created default configuration at /${RUNTIME_DIR}/config/lymons.yaml"
     echo "Please edit this file with your settings"
 fi
 
@@ -141,17 +160,17 @@ echo ""
 echo "Installation complete!"
 echo ""
 echo "Next steps:"
-echo "1. Edit ${RUNTIME_DIR}/config/lymons.yaml with your settings"
-echo "2. Test: ${RUNTIME_DIR}/gomonitor"
+echo "1. Edit /${RUNTIME_DIR}/config/lymons.yaml with your settings"
+echo "2. Test: /${RUNTIME_DIR}/gomonitor"
 echo "3. Add to autostart if desired"
 EOF
-chmod +x "${BUILD_DIR}/install.sh"
+chmod +xX "${BUILD_DIR}/install.sh"
 
 # Create package README
 cat > "${BUILD_DIR}/README.md" <<EOF
 # LyMonS ${VERSION} for Raspberry Pi (${ARCH})
 
-Dynamic OLED display driver for Logitech Media Server.
+Dynamic OLED display driver for Lyrion Media Server.
 
 **Architecture**: ${TARGET}
 
