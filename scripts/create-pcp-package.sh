@@ -84,29 +84,45 @@ longitude: -71.10407
 EOF
 
 # Smart install.sh — detects environment, deploys to correct locations,
-# generates gomonitor with correct paths for the deployment
+# generates gomonitor with correct paths baked in for this deployment
 cat > "${BUILD_DIR}/install.sh" <<'INSTALLEOF'
 #!/bin/sh
 # LyMonS Universal Installer
-# Detects piCorePlayer (TinyCore Linux) vs standard Raspberry Pi Linux
-# and deploys accordingly.
+# Detects piCorePlayer (TinyCore Linux) vs Debian/Raspberry Pi OS
+# and deploys to the correct locations automatically.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "LyMonS Installer"
 echo "================"
 
-# Detect environment
-if grep -qi "tinycore" /etc/issue 2>/dev/null; then
+# Detect environment — check for pCP/TinyCore first, fall back to Debian/standard
+detect_os() {
+    # pCP: has pcp command, or /etc/issue mentions TinyCore/piCore
+    if command -v pcp > /dev/null 2>&1 || \
+       grep -qi "tinycore\|picore" /etc/issue 2>/dev/null; then
+        echo "pcp"
+        return
+    fi
+    # Debian / Raspberry Pi OS
+    if grep -qi "debian\|raspbian\|ubuntu" /etc/os-release 2>/dev/null; then
+        echo "linux"
+        return
+    fi
+    # Unknown — default to standard Linux behaviour
+    echo "linux"
+}
+
+DEPLOY_MODE=$(detect_os)
+
+if [ "${DEPLOY_MODE}" = "pcp" ]; then
     echo "Detected: piCorePlayer (TinyCore Linux)"
-    DEPLOY_MODE="pcp"
     RUNTIME_DIR="/mnt/mmcblk0p2/tce/lymons"
     BIN_DIR="${RUNTIME_DIR}"
     DRIVER_DIR="${RUNTIME_DIR}/drivers"
     CONFIG_DIR="${RUNTIME_DIR}/config"
 else
-    echo "Detected: Standard Linux (Raspberry Pi OS)"
-    DEPLOY_MODE="linux"
+    echo "Detected: Debian / Raspberry Pi OS"
     RUNTIME_DIR="${HOME}/lymons"
     BIN_DIR="/usr/local/bin"
     DRIVER_DIR="/usr/local/lib/lymons/drivers"
@@ -120,114 +136,126 @@ echo "  Drivers : ${DRIVER_DIR}"
 echo "  Config  : ${CONFIG_DIR}/lymons.yaml"
 echo ""
 
-# Create directories
+# Create directory structure
 mkdir -p "${RUNTIME_DIR}/data" "${RUNTIME_DIR}/assets" "${RUNTIME_DIR}/fonts" \
          "${CONFIG_DIR}" "${DRIVER_DIR}"
 [ "${DEPLOY_MODE}" = "linux" ] && mkdir -p "${BIN_DIR}"
 
-# Copy binary
-cp -v "${SCRIPT_DIR}/bin/LyMonS" "${BIN_DIR}/"
+# Deploy binary
+cp "${SCRIPT_DIR}/bin/LyMonS" "${BIN_DIR}/LyMonS"
 chmod +x "${BIN_DIR}/LyMonS"
+echo "Installed binary: ${BIN_DIR}/LyMonS"
 
-# Copy drivers
+# Deploy drivers
 if ls "${SCRIPT_DIR}/drivers/"*.so 1>/dev/null 2>&1; then
-    cp -v "${SCRIPT_DIR}/drivers/"*.so "${DRIVER_DIR}/"
+    cp "${SCRIPT_DIR}/drivers/"*.so "${DRIVER_DIR}/"
+    echo "Installed drivers to ${DRIVER_DIR}/"
 else
     echo "Warning: No driver plugins found in package"
 fi
 
-# Copy runtime resources
-cp -rfv "${SCRIPT_DIR}/data/."   "${RUNTIME_DIR}/data/"
-cp -rfv "${SCRIPT_DIR}/assets/." "${RUNTIME_DIR}/assets/"
-cp -rfv "${SCRIPT_DIR}/fonts/."  "${RUNTIME_DIR}/fonts/"
+# Deploy runtime resources
+cp -rf "${SCRIPT_DIR}/data/."   "${RUNTIME_DIR}/data/"
+cp -rf "${SCRIPT_DIR}/assets/." "${RUNTIME_DIR}/assets/"
+cp -rf "${SCRIPT_DIR}/fonts/."  "${RUNTIME_DIR}/fonts/"
+echo "Installed runtime resources to ${RUNTIME_DIR}/"
 
-# Config — create from example if not already present, patch driver path
+# Deploy config — create from example if not already present, patch driver path
 if [ ! -f "${CONFIG_DIR}/lymons.yaml" ]; then
     sed "s|folder: /DRIVER_DIR/|folder: ${DRIVER_DIR}/|" \
         "${SCRIPT_DIR}/config/lymons.yaml.example" > "${CONFIG_DIR}/lymons.yaml"
-    echo "Created ${CONFIG_DIR}/lymons.yaml"
-    echo "Please review and edit with your display driver and location settings"
+    echo "Created ${CONFIG_DIR}/lymons.yaml — please set your display driver and location"
+else
+    echo "Config exists, leaving ${CONFIG_DIR}/lymons.yaml unchanged"
 fi
 
-# Generate gomonitor with paths baked in for this deployment
+# Generate gomonitor with all paths resolved for this deployment
 if [ "${DEPLOY_MODE}" = "pcp" ]; then
-    cat > "${RUNTIME_DIR}/gomonitor" <<EOF
+    cat > "${RUNTIME_DIR}/gomonitor" <<GOEOF
 #!/bin/sh
 # LyMonS for piCorePlayer - it's worth the squeeze
-echo "LyMonS for piCorePlayer - it's worth the squeeze"
 BINDIR="${RUNTIME_DIR}"
-PNAME=\$(grep "^NAME=" /usr/local/sbin/config.cfg | cut -d'"' -f2)
 
-sudo killall LyMonS > /dev/null 2>&1
-sudo killall LyMonS > /dev/null 2>&1
-sudo killall LyMonS > /dev/null 2>&1
+# Resolve player name from pCP config
+PNAME=\$(grep "^NAME=" /usr/local/sbin/config.cfg 2>/dev/null | cut -d'"' -f2)
 
-until pids=\$(pidof squeezelite squeezelite-dsd); do
-  echo "Waiting for squeezelite ..."
-  sleep 1
+# Stop any running instance
+killall LyMonS > /dev/null 2>&1; sleep 1
+killall -9 LyMonS > /dev/null 2>&1
+
+# Wait for squeezelite to be running before starting
+echo "Waiting for squeezelite..."
+until pidof squeezelite squeezelite-dsd > /dev/null 2>&1; do
+    sleep 1
 done
-echo "Starting LyMonS. Player: \${PNAME}"
+echo "Squeezelite running. Starting LyMonS${PNAME:+ for \${PNAME}}..."
 
-VIZ=""
-if [ \$# -gt 0 ]; then
-  VIZ="-a \"\${1:-NA}\" "
-fi
+# Ensure i2c is available
+modprobe i2c_dev > /dev/null 2>&1
+modprobe i2c-dev > /dev/null 2>&1
 
-sudo modprobe i2c_dev > /dev/null 2>&1
-sudo modprobe i2c-dev > /dev/null 2>&1
 cd "\${BINDIR}"
-CMD="sudo \${BINDIR}/LyMonS --name \"\${PNAME}\" --config=${CONFIG_DIR}/lymons.yaml \${VIZ} \$2 \$3 \$4 \$5 \$6 \$7 \$8 \$9"
-echo \$CMD
-eval \$CMD > /dev/null &
-exit
-EOF
+exec sudo "\${BINDIR}/LyMonS" \
+    \${PNAME:+--name "\${PNAME}"} \
+    --config="${CONFIG_DIR}/lymons.yaml" \
+    "\$@" > /dev/null 2>&1 &
+GOEOF
+
 else
-    cat > "${RUNTIME_DIR}/gomonitor" <<EOF
+    cat > "${RUNTIME_DIR}/gomonitor" <<GOEOF
 #!/bin/sh
 # LyMonS for Raspberry Pi - it's worth the squeeze
 RUNTIME_DIR="${RUNTIME_DIR}"
 
-sudo killall LyMonS > /dev/null 2>&1
-sudo killall LyMonS > /dev/null 2>&1
+# Stop any running instance
+killall LyMonS > /dev/null 2>&1; sleep 1
+killall -9 LyMonS > /dev/null 2>&1
 
-sudo modprobe i2c_dev > /dev/null 2>&1
-sudo modprobe i2c-dev > /dev/null 2>&1
+# Wait for squeezelite (up to 30s) — skip if not found
+WAIT=0
+while [ \$WAIT -lt 30 ]; do
+    pidof squeezelite squeezelite-dsd > /dev/null 2>&1 && break
+    sleep 1
+    WAIT=\$((WAIT + 1))
+done
+
 cd "\${RUNTIME_DIR}"
-CMD="sudo LyMonS --config=${CONFIG_DIR}/lymons.yaml \$@"
-echo \$CMD
-eval \$CMD > /dev/null &
-exit
-EOF
+exec sudo LyMonS \
+    --config="${CONFIG_DIR}/lymons.yaml" \
+    "\$@" > /dev/null 2>&1 &
+GOEOF
+
 fi
 chmod +x "${RUNTIME_DIR}/gomonitor"
+echo "Generated ${RUNTIME_DIR}/gomonitor"
 
-# Platform-specific post-install steps
+# Platform-specific post-install
 if [ "${DEPLOY_MODE}" = "pcp" ]; then
+    # Load i2c tools extension
     tce-load -i i2c-tools.tcz 2>/dev/null || true
+    # Register with pCP backup so it survives reboots
     if [ -f /usr/local/sbin/filetool.sh ]; then
         grep -v "^${RUNTIME_DIR}" /opt/.filetool.lst > /tmp/.filetool.lst.tmp \
             && mv /tmp/.filetool.lst.tmp /opt/.filetool.lst
         echo "${RUNTIME_DIR}" >> /opt/.filetool.lst
-        echo "Added ${RUNTIME_DIR} to piCorePlayer backup list"
         pcp bu
-        echo "Backup completed"
+        echo "Registered with piCorePlayer backup"
     fi
     echo ""
     echo "Installation complete!"
     echo ""
-    echo "Next steps:"
-    echo "  1. Edit ${CONFIG_DIR}/lymons.yaml — set your display driver and location"
-    echo "  2. Test:      ${RUNTIME_DIR}/gomonitor"
-    echo "  3. Autostart: add the following via the piCorePlayer web interface:"
+    echo "  Edit config : ${CONFIG_DIR}/lymons.yaml"
+    echo "  Test        : ${RUNTIME_DIR}/gomonitor"
+    echo "  Autostart   : add via piCorePlayer web interface > Tweaks > User Commands:"
     echo "                ${RUNTIME_DIR}/gomonitor &"
 else
     echo ""
     echo "Installation complete!"
     echo ""
-    echo "Next steps:"
-    echo "  1. Edit ${CONFIG_DIR}/lymons.yaml — set your display driver and location"
-    echo "  2. Test:      ${RUNTIME_DIR}/gomonitor"
-    echo "  3. Autostart: add '${RUNTIME_DIR}/gomonitor &' to /etc/rc.local"
+    echo "  Edit config : ${CONFIG_DIR}/lymons.yaml"
+    echo "  Test        : ${RUNTIME_DIR}/gomonitor"
+    echo "  Autostart   : add to /etc/rc.local before 'exit 0':"
+    echo "                ${RUNTIME_DIR}/gomonitor &"
 fi
 INSTALLEOF
 chmod +x "${BUILD_DIR}/install.sh"
