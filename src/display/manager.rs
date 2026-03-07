@@ -147,11 +147,12 @@ impl PerformanceMetrics {
         }
 
         // Warn if exceeding target by > 50%
-        if self.frame_time_us > self.target_frame_time_us * 15 / 10 {
-            //warn!("Frame time {}μs exceeds target {}μs (render: {}μs, transfer: {}μs)",
-            //      self.frame_time_us, self.target_frame_time_us,
-            //      render_time_us, transfer_time_us);
-        }
+        // this needs to be capability aware
+        //if self.frame_time_us > self.target_frame_time_us * 15 / 10 {
+        //    warn!("Frame time {}μs exceeds target {}μs (render: {}μs, transfer: {}μs)",
+        //          self.frame_time_us, self.target_frame_time_us,
+        //          render_time_us, transfer_time_us);
+        //}
     }
 
     pub fn fps(&self) -> f32 {
