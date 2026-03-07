@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // status bar component; some imports reserved
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
 use crate::display::layout::LayoutConfig;
@@ -336,6 +338,16 @@ impl StatusBar {
             let repeat_x = shuffle_x - glyph_width - glyph_gap;
             self.draw_glyph(target, repeat_glyph, repeat_x, glyph_y, text_color)?;
         }
+
+        // Draw horizontal line 1 pixel below status bar
+        use embedded_graphics::primitives::{Line, PrimitiveStyle};
+        let line_y = text_y + 1;
+        Line::new(
+            Point::new(2, line_y),
+            Point::new(field_width as i32 - 4, line_y),
+        )
+            .into_styled(PrimitiveStyle::with_stroke(text_color, 1))
+            .draw(target)?;
 
         Ok(())
     }

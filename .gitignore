@@ -22,6 +22,7 @@ PLUGIN*.md
 tio.txt
 test*
 test_*
+fetch*
 assets/ssd1309/peak_level*
 assets/ssd1309/*Copy*.svg
 assets/ssd1322/*Copy*.svg

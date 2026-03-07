@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // location/coordinate helpers; some methods reserved
+
 use log::{info, warn};
 use std::fmt;
 

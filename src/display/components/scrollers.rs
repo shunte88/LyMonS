@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // scroller component helpers; some methods reserved
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
 use crate::display::layout::LayoutConfig;

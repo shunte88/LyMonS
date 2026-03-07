@@ -20,6 +20,9 @@
  *	Public License.
  *
  */
+
+#![allow(dead_code)] // astronomical calculation helpers; some trig fns written for moon calc
+
 //! Sunrise/Sunset for a given lat/lon and date (NOAA algorithm, zenith 90.833°).
 //! Returns UTC times; helper provided to shift to a fixed offset.
 

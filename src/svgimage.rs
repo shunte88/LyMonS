@@ -20,6 +20,9 @@
  *	Public License.
  *
  */
+
+#![allow(dead_code)] // SVG image loading helpers; some methods reserved
+
 //! Module for rendering simple SVG images to a monochrome pixel buffer.
 //!
 //! This module uses `usvg` for SVG parsing and `resvg` for rendering.

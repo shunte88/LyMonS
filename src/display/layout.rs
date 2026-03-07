@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // adaptive layout config; written for multi-resolution support; may be extended
+
 use crate::display::traits::{DisplayCapabilities, ColorDepth, BusInterface, I2cInfo};
 
 /// Layout configuration for different display resolutions

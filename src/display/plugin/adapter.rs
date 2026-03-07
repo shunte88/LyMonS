@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // plugin adapter; written for dynamic driver ABI; may be extended
+
 use std::panic::{self, AssertUnwindSafe};
 use log::{error, debug};
 

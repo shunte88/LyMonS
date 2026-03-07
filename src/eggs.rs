@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // easter egg animation helpers; some methods reserved
+
 //! Module for Easter Egg Support.
 //!
 use chrono::{Timelike, Local};

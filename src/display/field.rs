@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // display field types; some field kinds reserved for future layouts
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::primitives::Rectangle;

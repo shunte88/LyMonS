@@ -38,6 +38,8 @@
  *
  */
 
+#![allow(dead_code)] // SSD1322 driver helpers; some methods reserved for future display modes
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::Gray4;
 use embedded_graphics::primitives::Rectangle;

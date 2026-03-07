@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // display driver trait abstractions; written for multi-driver support; may be extended
+
 use embedded_graphics::prelude::*;
 use crate::display::error::DisplayError;
 
@@ -173,7 +175,7 @@ pub trait DisplayDriver: Send + Sync {
     /// Set display inversion (if supported)
     ///
     /// When inverted, light pixels become dark and vice versa.
-    fn set_invert(&mut self, inverted: bool) -> Result<(), DisplayError> {
+    fn set_invert(&mut self, _inverted: bool) -> Result<(), DisplayError> {
         if !self.capabilities().supports_invert {
             return Err(DisplayError::UnsupportedOperation);
         }

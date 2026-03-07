@@ -35,6 +35,8 @@
  *
  */
 
+#![allow(dead_code)] // SH1106 driver helpers; some methods reserved for future display modes
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::primitives::Rectangle;

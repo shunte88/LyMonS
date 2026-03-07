@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // virtual framebuffer; written for off-screen rendering; may be activated
+
 use core::convert::Infallible;
 use embedded_graphics::geometry::{OriginDimensions, Size};
 use embedded_graphics::pixelcolor::PixelColor;

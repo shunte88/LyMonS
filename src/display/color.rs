@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // color system types; variants reserved for future display color depth support
+
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
 use super::traits::ColorDepth;
 

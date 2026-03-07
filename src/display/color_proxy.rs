@@ -22,6 +22,8 @@
  *
  */
 
+#![allow(dead_code)] // color proxy helpers; some conversion methods reserved
+
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4, GrayColor};
 use embedded_graphics::prelude::PixelColor;
 

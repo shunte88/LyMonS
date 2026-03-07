@@ -21,6 +21,7 @@
  *
  */
 #![allow(clippy::excessive_precision)]
+#![allow(dead_code)] // pure-Rust trig; written for no_std VU physics; may be activated later
 //! Pure-Rust f32 sine/cosine (no libm). Suitable for no_std.
 //! Accuracy: ~< 1 ulp over typical ranges; range reduction is simple (good
 //! for |x| not astronomically large).

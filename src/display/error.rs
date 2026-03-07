@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // display error types; some error variants reserved
+
 use std::fmt;
 use std::error::Error;
 
@@ -94,6 +96,13 @@ impl Error for DisplayError {
     // display_interface::DisplayError doesn't implement std::error::Error
     // so we can't provide it as a source
 }
+
+// Conversion from DrawTarget::Error
+//impl From <DrawTarget::Error> for DisplayError {
+//    fn from(err: DrawTarget::Error) -> Self {
+//        DisplayError::DrawingError(err)
+//    }
+//}
 
 // Conversion from display_interface::DisplayError
 impl From<display_interface::DisplayError> for DisplayError {

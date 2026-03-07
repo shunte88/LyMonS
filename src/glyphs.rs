@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // icon glyph data; some glyphs reserved for future use
+
 /// Represents the audio bitrate mode for displaying the correct glyph.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AudioBitrate {

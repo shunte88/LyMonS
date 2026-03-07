@@ -21,8 +21,9 @@
  *
  */
 
-/// scans /dev/shm for "squeezelite-*" and maps to it
+#![allow(dead_code)] // shared memory / VU state structures; may be extended
 
+/// scans /dev/shm for "squeezelite-*" and maps to it
 use libc::{pthread_rwlock_t, pthread_rwlock_tryrdlock, pthread_rwlock_unlock, time_t, EBUSY};
 use memmap2::{MmapMut, MmapOptions};
 use std::fs::OpenOptions;

@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // framebuffer helpers; some methods reserved
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
 use crate::vframebuf::VarFrameBuf;

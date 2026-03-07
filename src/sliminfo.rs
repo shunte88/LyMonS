@@ -20,6 +20,9 @@
  *	Public License.
  *
  */
+
+#![allow(dead_code)] // Slim/LMS player info types; some fields reserved for future display
+
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::net::{UdpSocket, SocketAddrV4, Ipv4Addr, IpAddr};
@@ -259,7 +262,7 @@ impl SlimInfo {
                 .and_then(|v| v.parse::<i32>().ok())
                 .unwrap_or(0)
         };
-        let parse_f64 = |s: &Option<String>| {
+        let _parse_f64 = |s: &Option<String>| {
             s.as_deref()
                 .and_then(|v| v.replace('"', "").parse::<f64>().ok())
                 .unwrap_or(0.0)

@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // SSD1306 driver helpers; some methods reserved
+
 use linux_embedded_hal::I2cdev;
 use ssd1306::{
     mode::BufferedGraphicsMode,

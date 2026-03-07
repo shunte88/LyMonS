@@ -20,6 +20,9 @@
  *	Public License.
  *
  */
+
+#![allow(dead_code)] // display utility functions; some helpers written for future layout features
+
 // src/deutils.rs
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;

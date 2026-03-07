@@ -21,7 +21,9 @@
  *
  */
 
-use log::{info, warn};
+#![allow(dead_code)] // display manager helpers; some utility methods reserved
+
+use log::info;
 use std::time::Instant;
 use arrayvec::ArrayString;
 use core::fmt::Write;
@@ -29,7 +31,7 @@ use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
 use embedded_graphics::prelude::*;
 
 use crate::config::DisplayConfig;
-use crate::display::layout_manager::{SCROLLING_AIO_PAGE, SCROLLING_AIO_WIDE_PAGE, SCROLLING_PAGE};
+use crate::display::layout_manager::{SCROLLING_AIO_WIDE_PAGE, SCROLLING_PAGE};
 use crate::display::{
     BoxedDriver,
     DisplayCapabilities,
@@ -689,19 +691,6 @@ impl DisplayManager {
                         "status_bar" => {
                             self.status_bar.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
-
-                            // Draw horizontal line 1 pixel below status bar
-                            use embedded_graphics::primitives::{Line, PrimitiveStyle};
-                            use embedded_graphics::prelude::*;
-                            let line_y = field.position().y + field.height() as i32;
-                            let width = fb.size().width;
-                            Line::new(
-                                Point::new(2, line_y),
-                                Point::new(width as i32 - 4, line_y),
-                            )
-                            .into_styled(PrimitiveStyle::with_stroke(Gray4::WHITE, 1))
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw status line".to_string()))?;
                         }
                         "album_artist" | "album" | "title" | "artist" => {
                             self.scrolling_text.render_field(field, fb)
@@ -2553,7 +2542,7 @@ impl DisplayManager {
         let can_widen = self.easter_egg.can_widen();
 
         // Get position and rectangles
-        let position = self.easter_egg.get_top_left();
+        let _position = self.easter_egg.get_top_left();
         let mut artist_rect = self.easter_egg.get_artist_rect();
         let mut title_rect = self.easter_egg.get_title_rect();
         let mut time_rect = self.easter_egg.get_time_rect();
@@ -2780,7 +2769,7 @@ impl DisplayManager {
     /// Apply auto-brightness based on local sunrise/sunset.
     /// Rate-limited to at most one hardware write every 5 minutes.
     fn update_auto_brightness(&mut self) {
-        use std::time::{Duration, Instant};
+        use std::time::Instant;
         const CHECK_INTERVAL_SECS: u64 = 300; // 5 minutes
         const BRIGHTNESS_DAY:   u8 = 255;
         const BRIGHTNESS_NIGHT: u8 = 32;
@@ -3087,7 +3076,7 @@ impl DisplayManager {
         self.weather_display.update(weather_vec);
 
         // Start polling with watch channel (lock-free!)
-        let (poll_handle, weather_rx) = weather.start_polling_with_watch().await
+        let (_poll_handle, weather_rx) = weather.start_polling_with_watch().await
             .map_err(|e| DisplayError::InitializationFailed(format!("Failed to start weather polling: {}", e)))?;
 
         // Store the receiver for updates

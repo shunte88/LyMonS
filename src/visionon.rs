@@ -31,6 +31,8 @@
  *
  */
 
+#![allow(dead_code)] // SSE VU/SA JSON parser; wired to hardware path pending visualizer type fix
+
 use serde::Deserialize;
 
 use crate::dbfs;

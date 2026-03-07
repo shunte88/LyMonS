@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // clock component helpers; some constants reserved
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
 use crate::display::layout::LayoutConfig;

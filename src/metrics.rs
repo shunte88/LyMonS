@@ -20,6 +20,9 @@
  *	Public License.
  *
  */
+
+#![allow(dead_code)] // system metrics helpers; some metric types reserved
+
 //! A Rust library for gathering system metrics from /proc and /sys files.
 
 use std::fs;

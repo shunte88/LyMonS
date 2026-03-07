@@ -21,7 +21,8 @@
  *
  */
 
- //! This module contains global constants used across the display and other modules.
+//! This module contains global constants used across the display and other modules.
+#![allow(dead_code)] // constants written for future use; may be activated later
 
 // tags for track playing detail placement
 // should move these into display - use same paradigm as status bar 

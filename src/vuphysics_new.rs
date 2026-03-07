@@ -67,6 +67,7 @@
 //!     .with_spring(2.0e-7)
 //!     .with_damping(4.0e-9);
 //! ```
+#![allow(dead_code)] // D'Arsonval VU needle physics; used by vision.rs LastVizState; may be extended
 
 use std::time::Instant;
 

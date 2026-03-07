@@ -22,6 +22,8 @@
  *
  */
 
+#![allow(dead_code)] // SVG visualization infrastructure; traits and helpers for future viz types
+
 use crate::display::layout::LayoutConfig;
 use embedded_graphics::{
     image::{Image, ImageRaw},

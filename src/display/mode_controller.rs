@@ -22,6 +22,8 @@
  *
  */
 
+#![allow(dead_code)] // display mode controller; some modes reserved for future use
+
 use super::DisplayMode;
 use chrono::{Local, Timelike};
 use std::time::Instant;

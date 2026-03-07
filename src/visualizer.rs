@@ -20,6 +20,9 @@
  *	Public License.
  *
  */
+
+#![allow(dead_code)] // visualizer state and helper functions; peak-hold and misc vars pending cleanup
+
 //! audio visualizations - only used if shared memory data are accessible
 //!
 
@@ -193,7 +196,7 @@ impl Drop for Visualizer {
 }
 
 async fn visualizer_worker(
-    mut cmd_rx: Receiver<VizCommand>,
+    cmd_rx: Receiver<VizCommand>,
     out_tx: Sender<VizFrameOut>,
     playing_rx: watch::Receiver<bool>,
     sse_config: Option<SseConfig>,
@@ -232,9 +235,9 @@ async fn visualizer_shm_loop(
     let mut kind = Visualization::VuStereo;
 
     // Peak-hold (for peak meters & center peak). Units: 0..=PEAK_METER_LEVELS_MAX
-    let peak_hold_l: u8 = 0;
-    let peak_hold_r: u8 = 0;
-    let peak_hold_m: u8 = 0;
+    let _peak_hold_l: u8 = 0;
+    let _peak_hold_r: u8 = 0;
+    let _peak_hold_m: u8 = 0;
 
     info!("visualizer worker started (idle)");
 

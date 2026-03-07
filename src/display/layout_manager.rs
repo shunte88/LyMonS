@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // layout manager helpers; some page-builder fns reserved
+
 use super::field::Field;
 use super::page::PageLayout;
 use super::layout::{LayoutConfig, LayoutCategory};

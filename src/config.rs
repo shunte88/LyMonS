@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // config loading and validation helpers; written for future config-file support
+
  use clap::{ArgAction, Parser, ValueHint};
 use dirs_next::home_dir;
 use std::{fs, path::{Path, PathBuf}};

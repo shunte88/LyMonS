@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // weather component helpers; some parsing fns reserved
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
 use crate::display::layout::LayoutConfig;
@@ -96,7 +98,7 @@ impl WeatherDisplay {
     }
 
     /// Render the weather display
-    pub fn render<D>(&self, target: &mut D) -> Result<(), D::Error>
+    pub fn render<D>(&self, _target: &mut D) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = BinaryColor>,
     {

@@ -20,6 +20,9 @@
  *	Public License.
  *
  */
+
+#![allow(dead_code)] // weather API types and helpers; some fields reserved for future display
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, Error as JsonError};
 use reqwest::{Client, header};

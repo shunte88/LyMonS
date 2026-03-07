@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // page layout infrastructure; some methods reserved
+
 use super::field::Field;
 
 /// Page layout - collection of fields defining a display mode

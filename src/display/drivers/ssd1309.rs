@@ -43,6 +43,8 @@
  *
  */
 
+#![allow(dead_code)] // SSD1309 driver helpers; some methods reserved for future display modes
+
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::primitives::Rectangle;

@@ -20,6 +20,9 @@
  *	Public License.
  *
  */
+
+#![allow(dead_code)] // SVG drawing helpers; some error variants reserved
+
 use log::{warn};
 use std::fmt;
 use std::fs as fs_std;

@@ -39,7 +39,7 @@ use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
 // move these to mod.rs
 //mod singles;
 mod config;
-mod trig;
+//mod trig; // pure-Rust trig utilities; zero external refs currently; may re-activate for no_std VU physics
 //mod pacer;
 mod dbfs;
 mod draw;
@@ -86,6 +86,7 @@ include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
 /// the event and returns, allowing for graceful shutdown.
 /// Unified display loop that works with DisplayManager
 /// Uses same has_changed() logic as hardware path
+#[cfg(feature = "emulator")]
 async fn unified_display_loop(
     display: std::sync::Arc<tokio::sync::Mutex<display::DisplayManager>>,
     player_name: &str,
@@ -922,7 +923,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let show_remaining = matches.get_flag("remain");
     let debug_enabled = matches.get_flag("debug");
     let mut emulated = matches.get_flag("emulated");
-    let driver_override = matches.get_one::<String>("driver").cloned();
+    let _driver_override = matches.get_one::<String>("driver").cloned();
     let _config_file = matches.get_one::<String>("config").unwrap();
 
     // Also check config file for emulated setting
@@ -941,7 +942,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let weather_config = matches.get_one::<String>("weather").unwrap();
     let name_filter = matches.get_one::<String>("name").unwrap();
     let clock_font = matches.get_one::<String>("font").unwrap();
-    let i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
+    let _i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
     let easter_egg = matches.get_one::<String>("eggs").unwrap();
     let viz_type = matches.get_one::<String>("viz").unwrap();
     
@@ -978,7 +979,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Allow --driver CLI arg to override config
-        if let Some(ref d) = driver_override {
+        if let Some(ref d) = _driver_override {
             display_config.driver = Some(match d.as_str() {
                 "ssd1306"     => crate::config::DriverKind::Ssd1306,
                 "ssd1309"     => crate::config::DriverKind::Ssd1309,

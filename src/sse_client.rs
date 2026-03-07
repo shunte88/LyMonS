@@ -22,6 +22,8 @@
  *
  */
 
+#![allow(dead_code)] // SSE client for visionon audio data; wired to hardware path pending type fix
+
 use log::{error, info};
 use reqwest::Client;
 use std::time::Duration;

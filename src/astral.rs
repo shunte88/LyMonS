@@ -22,6 +22,8 @@
  *
  */
 
+#![allow(dead_code)] // astronomical service; some methods reserved for future moon display
+
 use chrono::{DateTime, Local, NaiveDate};
 use log::info;
 use std::sync::{Arc, RwLock};

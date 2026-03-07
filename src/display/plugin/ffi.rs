@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // plugin FFI; written for dynamic driver ABI; may be extended
+
 //! FFI types for the LyMonS plugin system
 //!
 //! This module defines C-compatible types that form the stable ABI

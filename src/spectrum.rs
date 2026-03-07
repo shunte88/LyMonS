@@ -20,6 +20,8 @@
  *	Public License.
  *
  */
+#![allow(dead_code)] // spectrum analysis pipeline; written for future FFT visualizations
+
 // For histogram display (different from peak meter mapping)
 const HIST_FLOOR_DB: f32 = -80.0;
 const HIST_CEIL_DB:  f32 = -12.0;

@@ -21,7 +21,8 @@
  *
  */
 // textable.rs
-#[allow(dead_code)]
+#![allow(dead_code)] // text layout utility; written for field-based text rendering; may be revived
+
 use embedded_graphics::{
     mono_font::{
         ascii::{

@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // plugin loader; written for dynamic driver loading; may be extended
+
 use std::path::{Path, PathBuf};
 use log::{debug, info, warn};
 use libloading::{Library, Symbol};

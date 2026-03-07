@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // display driver factory; some factory methods reserved
+
 use crate::config::{DisplayConfig, DriverKind, BusConfig};
 use crate::display::error::DisplayFactoryError;
 use crate::display::traits::DisplayDriver;

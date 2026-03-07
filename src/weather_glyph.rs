@@ -21,6 +21,8 @@
  *
  */
 
+#![allow(dead_code)] // weather icon bitmaps and helper fns; some glyphs reserved for future use
+
  #[allow(dead_code)]
 pub enum MoonPhase {
     New = 0,
@@ -109,6 +111,5 @@ pub fn get_moon_phase_description(phase: MoonPhase) -> &'static str {
         MoonPhase::WaningGibbous => "Waning Gibbous",
         MoonPhase::ThirdQuarter => "Third Quarter",
         MoonPhase::WaningCrescent => "Waning Crescent",
-        _ => ""
     }
 }
