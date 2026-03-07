@@ -357,14 +357,18 @@ impl ScrollingText {
         // Calculate scroll offset
         let x = field_pos.x + scroll_state.get_offset();
 
+        // Clip all drawing to the field bounds so scrolling text never bleeds
+        // into adjacent fields on any page layout.
+        let mut clipped = target.clipped(&field.bounds);
+
         // Draw main text
-        Text::new(&scroll_state.text, Point::new(x, baseline_y), text_style).draw(target)?;
+        Text::new(&scroll_state.text, Point::new(x, baseline_y), text_style).draw(&mut clipped)?;
 
         // For continuous loop mode, draw the text again after a gap
         if field.scrollable && self.scroll_mode == ScrollMode::ScrollLeft {
             let text_width = (scroll_state.text.len() * char_width) as i32;
             let loop_x = x + text_width + word_gap;  // 2 character gap
-            Text::new(&scroll_state.text, Point::new(loop_x, baseline_y), text_style).draw(target)?;
+            Text::new(&scroll_state.text, Point::new(loop_x, baseline_y), text_style).draw(&mut clipped)?;
         }
 
         Ok(())
