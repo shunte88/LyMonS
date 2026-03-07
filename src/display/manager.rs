@@ -3095,11 +3095,19 @@ impl DisplayManager {
         &mut self,
         viz_type: &str,
         playing_rx: tokio::sync::watch::Receiver<bool>,
+        player_ip: &str,
         sse_config: Option<crate::visualizer::SseConfig>,
     ) -> Result<(), DisplayError> {
         use crate::visualization::transpose_kind;
 
         if viz_type == "no_viz" {
+            return Ok(());
+        }
+
+        // Probe data source before committing to setup — avoids a visualizer
+        // that is configured but will never receive audio data.
+        if !crate::visualizer::Visualizer::data_source_available(player_ip, sse_config.as_ref()) {
+            info!("Visualizer '{}' requested but no data source available (player: {}, no SSE, not local or no SHM) — skipping", viz_type, player_ip);
             return Ok(());
         }
 

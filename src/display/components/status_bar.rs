@@ -341,7 +341,7 @@ impl StatusBar {
 
         // Draw horizontal line 1 pixel below status bar
         use embedded_graphics::primitives::{Line, PrimitiveStyle};
-        let line_y = text_y + 1;
+        let line_y = text_y + 2;
         Line::new(
             Point::new(2, line_y),
             Point::new(field_width as i32 - 4, line_y),

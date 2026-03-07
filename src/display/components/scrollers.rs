@@ -347,28 +347,38 @@ impl ScrollingText {
         let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8);
         use crate::display::color_proxy::ConvertColor;
         let text_style = MonoTextStyle::new(font, field.fg_color.to_color());
-        let char_width = 6;
+        let char_width = 5;
         let word_gap = 2 * char_width as i32;
 
-        // Get field position (baseline is at bottom of field)
+        // Position baseline using the font's own metric so the character cell
+        // starts exactly at field_pos.y and all pixels fall within field.bounds.
+        // (The old formula used field.height()+1 which placed the baseline below
+        // the field bottom, causing the clip rect to cut through the glyphs.)
         let field_pos = field.position();
-        let baseline_y = field_pos.y + field.height() as i32 + 1;
+        let baseline_y = field_pos.y + font.baseline as i32;
 
         // Calculate scroll offset
         let x = field_pos.x + scroll_state.get_offset();
 
-        // Clip all drawing to the field bounds so scrolling text never bleeds
-        // into adjacent fields on any page layout.
+        // Clip to field bounds so scrolling text never bleeds into adjacent fields.
         let mut clipped = target.clipped(&field.bounds);
 
         // Draw main text
-        Text::new(&scroll_state.text, Point::new(x, baseline_y), text_style).draw(&mut clipped)?;
+        Text::new(
+            &scroll_state.text,
+            Point::new(x, baseline_y),
+            text_style)
+            .draw(&mut clipped)?;
 
         // For continuous loop mode, draw the text again after a gap
         if field.scrollable && self.scroll_mode == ScrollMode::ScrollLeft {
             let text_width = (scroll_state.text.len() * char_width) as i32;
-            let loop_x = x + text_width + word_gap;  // 2 character gap
-            Text::new(&scroll_state.text, Point::new(loop_x, baseline_y), text_style).draw(&mut clipped)?;
+            let loop_x = x + text_width + word_gap;
+            Text::new(
+                &scroll_state.text,
+                Point::new(loop_x, baseline_y),
+                text_style)
+                .draw(&mut clipped)?;
         }
 
         Ok(())

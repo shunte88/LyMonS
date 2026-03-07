@@ -129,19 +129,19 @@ async fn unified_display_loop(
         // Build SSE fallback config from the active player's IP.
         // When shared memory is unavailable (remote player), the visualizer
         // worker will fall back to the visionon SSE daemon on the player device.
-        let sse_config = if lms.active_player < lms.players.len() {
-            let player_ip = lms.players[lms.active_player].player_ip.clone();
-            if !player_ip.is_empty() {
-                Some(crate::visualizer::SseConfig { host: player_ip, port: 8022 })
-            } else {
-                None
-            }
+        let player_ip = if lms.active_player < lms.players.len() {
+            lms.players[lms.active_player].player_ip.clone()
+        } else {
+            String::new()
+        };
+        let sse_config = if !player_ip.is_empty() {
+            Some(crate::visualizer::SseConfig { host: player_ip.clone(), port: 8022 })
         } else {
             None
         };
 
         let mut display_lock = display.lock().await;
-        display_lock.setup_visualizer(viz_type, lms.subscribe_playing(), sse_config).await?;
+        display_lock.setup_visualizer(viz_type, lms.subscribe_playing(), &player_ip, sse_config).await?;
         drop(lms);
         drop(display_lock);
     }

@@ -139,7 +139,34 @@ pub struct Visualizer {
     pub rx: Receiver<VizFrameOut>,
 }
 
+/// Returns true if `ip` belongs to a local network interface.
+/// Uses `TcpListener::bind` as a zero-cost locality probe — bind only
+/// succeeds when the address is assigned to this host.
+fn is_local_ip(ip: &str) -> bool {
+    if ip.is_empty() { return false; }
+    std::net::TcpListener::bind(format!("{}:0", ip)).is_ok()
+}
+
 impl Visualizer {
+    /// Probe whether any audio data source is reachable for `player_ip`.
+    ///
+    /// Three-step check (short-circuit):
+    ///   1. SSE config provided → always valid (handles both local and remote players)
+    ///   2. `player_ip` resolves to a local interface → check shared memory
+    ///   3. Remote player, no SSE → no data source
+    ///
+    /// Use this before `spawn()` to avoid setting up a visualizer that will
+    /// never receive data.
+    pub fn data_source_available(player_ip: &str, sse_config: Option<&SseConfig>) -> bool {
+        if sse_config.is_some() {
+            return true;
+        }
+        if is_local_ip(player_ip) {
+            return VisReader::new().is_ok();
+        }
+        false
+    }
+
     /// Spawn the background worker. It initializes at startup but does no
     /// heavy work until you `Enable(true)` *and* a track is playing.
     ///

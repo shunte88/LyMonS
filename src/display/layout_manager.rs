@@ -142,48 +142,45 @@ impl LayoutManager {
         let width_adj = width-4;
         let border_adj = 2;
         let y_height: i32 = 9;
-        let y_height_adj: i32 = y_height - 1;
+        let y_start: i32 = border_adj + y_height + 1; // line 1 start: 1px gap below status bar
 
         PageLayout::new(page_name)
-            // Status bar at top (y=0)
+            // Status bar at top
             .add_field(
                 Field::new_text(
                     "status_bar",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj), 
+                        Point::new(border_adj, border_adj),
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
             )
-            // didn't we have album_artist too ??? so for v/a we would have performer etc?
-            // Album Artist (y=10)
+            // Album Artist (1px gap below status bar, lines packed tightly below)
             .add_field(
                 Field::new_text(
                     "album_artist",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+y_height_adj), 
+                        Point::new(border_adj, y_start),
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
                 .scrollable(true)
             )
-            // Album (y=20)
             .add_field(
                 Field::new_text(
                     "album",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+2*y_height_adj), 
+                        Point::new(border_adj, y_start + y_height),
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
                 .scrollable(true)
             )
-            // Title (y=30)
             .add_field(
                 Field::new_text(
                     "title",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+3*y_height_adj), 
+                        Point::new(border_adj, y_start + 2*y_height),
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
@@ -193,7 +190,7 @@ impl LayoutManager {
                 Field::new_text(
                     "artist",
                     Rectangle::new(
-                        Point::new(border_adj, border_adj+4*y_height_adj), 
+                        Point::new(border_adj, y_start + 3*y_height),
                         Size::new(width_adj, y_height as u32)),
                     &FONT_6X9
                 )
