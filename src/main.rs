@@ -73,6 +73,7 @@ mod vuphysics_new;
 mod svgimage;
 mod shm_path;
 mod sun;
+mod coverart;
 
 use sliminfo::LMSServer;
 use mac_addr::{get_mac_addr,get_mac_addr_for};
@@ -885,8 +886,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg(Arg::new("driver")
         .short('d')
         .long("driver")
-        .help("Display driver type for emulator, overrides config (ssd1306, ssd1309, ssd1322, sh1106, sharpmemory)")
-        .value_parser(["ssd1306", "ssd1309", "ssd1322", "sh1106", "sharpmemory"])
+        .help("Display driver type for emulator, overrides config (ssd1306, ssd1309, ssd1322, sh1106, sharpmemory, st7789)")
+        .value_parser(["ssd1306", "ssd1309", "ssd1322", "sh1106", "sharpmemory", "st7789"])
         .required(false))
         .arg(Arg::new("viz")
         .short('a')
@@ -986,6 +987,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "ssd1322"     => crate::config::DriverKind::Ssd1322,
                 "sh1106"      => crate::config::DriverKind::Sh1106,
                 "sharpmemory" => crate::config::DriverKind::SharpMemory,
+                "st7789"      => crate::config::DriverKind::St7789,
                 _ => unreachable!(), // value_parser enforces valid values
             });
             info!("Driver overridden by CLI: {}", d);
@@ -1001,6 +1003,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(crate::config::DriverKind::Sh1106) => (132, 64, false, "SH1106"),
             Some(crate::config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"), // Grayscale (Gray4)
             Some(crate::config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
+            Some(crate::config::DriverKind::St7789) => (320, 170, true, "ST7789"), // Full-colour; use Gray4 emulation
             None => (256, 64, true, "SSD1322"), // default when no driver in config
         };
 

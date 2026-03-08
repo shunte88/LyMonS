@@ -27,7 +27,7 @@ use log::info;
 use std::time::Instant;
 use arrayvec::ArrayString;
 use core::fmt::Write;
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565, RgbColor};
 use embedded_graphics::prelude::*;
 
 use crate::config::DisplayConfig;
@@ -830,6 +830,145 @@ impl DisplayManager {
                     }
                 }
             }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                for field in page.fields() {
+                    match field.name.as_str() {
+                        "status_bar" => {
+                            self.status_bar.render_field(field, fb)
+                                .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
+                        }
+                        "album_artist" | "album" | "title" | "artist" => {
+                            self.scrolling_text.render_field(field, fb)
+                                .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
+                        }
+                        "progress_bar" => {
+                            if self.track_duration_secs > 0.0 {
+                                use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
+                                use embedded_graphics::prelude::*;
+                                let field_pos = field.position();
+                                let field_width = field.width();
+                                let field_height = field.height();
+                                let track_duration = self.track_duration_secs;
+                                let current_time = self.current_track_time_secs;
+
+                                use crate::display::color_proxy::ConvertColor;
+                                let outline_color = field.fg_color.to_color();
+                                Rectangle::new(
+                                    Point::new(field_pos.x + 2, field_pos.y),
+                                    Size::new(field_width - 4, field_height),
+                                )
+                                .into_styled(PrimitiveStyleBuilder::new()
+                                    .stroke_color(outline_color)
+                                    .stroke_width(1)
+                                    .build())
+                                .draw(fb)
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar".to_string()))?;
+
+                                let progress = (current_time / track_duration).clamp(0.0, 1.0);
+                                let fill_width = ((field_width - 6) as f32 * progress) as u32;
+
+                                if fill_width > 0 {
+                                    Rectangle::new(
+                                        Point::new(field_pos.x + 3, field_pos.y + 1),
+                                        Size::new(fill_width, field_height.saturating_sub(2)),
+                                    )
+                                    .into_styled(PrimitiveStyleBuilder::new()
+                                        .fill_color(outline_color)
+                                        .build())
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
+                                }
+                            }
+                        }
+                        "info_line" => {
+                            use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
+                            use embedded_graphics::prelude::*;
+                            use crate::display::color_proxy::ConvertColor;
+
+                            use embedded_text::{
+                                alignment::{HorizontalAlignment, VerticalAlignment},
+                                style::TextBoxStyleBuilder,
+                                TextBox,
+                            };
+
+                            let font = field.font.unwrap_or(&FONT_5X8);
+                            let text_color = field.fg_color.to_color();
+                            let style = MonoTextStyle::new(font, text_color);
+
+                            let textbox_style_left = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Left)
+                                .vertical_alignment(VerticalAlignment::Top)
+                                .build();
+                            let textbox_style_center = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Center)
+                                .vertical_alignment(VerticalAlignment::Top)
+                                .build();
+                            let textbox_style_right = TextBoxStyleBuilder::new()
+                                .alignment(HorizontalAlignment::Right)
+                                .vertical_alignment(VerticalAlignment::Top)
+                                .build();
+
+                            let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
+
+                            let fix_width = 30;
+                            let mut rect = field.bounds;
+                            rect.size.height += 1;
+
+                            TextBox::with_textbox_style(
+                                &self.mode_text,
+                                rect,
+                                style,
+                                textbox_style_center,
+                            )
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
+
+                            let mut rect = field.bounds;
+                            rect.size.width = fix_width;
+                            rect.size.height += 1;
+
+                            TextBox::with_textbox_style(
+                                current_time_str,
+                                rect,
+                                style,
+                                textbox_style_left,
+                            )
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
+
+                            let mut rect = field.bounds;
+                            rect.top_left.x = (rect.size.width - fix_width) as i32;
+                            rect.size.width = fix_width;
+                            rect.size.height += 1;
+
+                            self.render_buffers.temp_buffer.clear();
+                            let time_secs = if self.show_remaining {
+                                self.remaining_time_secs
+                            } else {
+                                self.track_duration_secs
+                            };
+                            let mins = (time_secs as u32) / 60;
+                            let secs = (time_secs as u32) % 60;
+                            if self.show_remaining {
+                                let _ = write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs);
+                            } else {
+                                let _ = write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs);
+                            }
+                            let time_str = self.render_buffers.temp_buffer.as_str();
+
+                            TextBox::with_textbox_style(
+                                time_str,
+                                rect,
+                                style,
+                                textbox_style_right,
+                            )
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -1139,11 +1278,22 @@ impl DisplayManager {
                     .draw(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw metrics".to_string()))?;
                 }
+                crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                    let style = MonoTextStyle::new(&FONT_5X8, Rgb565::WHITE);
+                    Text::with_baseline(
+                        metrics_str,
+                        Point::new(x, metrics_y as i32),
+                        style,
+                        Baseline::Top,
+                    )
+                    .draw(fb)
+                    .map_err(|_| DisplayError::DrawingError("Failed to draw metrics".to_string()))?;
+                }
             }
         }
         Ok(())
     }
-    
+
     /// Render clock mode
     fn render_clock(&mut self) -> Result<(), DisplayError> {
         // Get the clock page layout
@@ -1295,6 +1445,63 @@ impl DisplayManager {
                     }
                 }
             }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                for field in page.fields() {
+                    match field.name.as_str() {
+                        "metrics" => {
+                            // Already rendered above
+                        }
+                        "clock_digits" => {
+                            // TODO: add render_rgb565 to ClockDisplay; skipping digits for now
+                        }
+                        "seconds_progress" => {
+                            use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
+                            use embedded_graphics::prelude::*;
+
+                            let field_pos = field.position();
+                            let field_width = field.width();
+                            let field_height = field.height();
+
+                            EgRectangle::new(
+                                Point::new(field_pos.x, field_pos.y),
+                                Size::new(field_width, field_height),
+                            )
+                            .into_styled(PrimitiveStyleBuilder::new()
+                                .stroke_color(Rgb565::WHITE)
+                                .stroke_width(1)
+                                .build())
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar outline".to_string()))?;
+
+                            let progress = (current_second as f32) / 60.0;
+                            let fill_width = (((field_width - 2) as f32) * progress) as u32;
+
+                            if fill_width > 0 {
+                                EgRectangle::new(
+                                    Point::new(field_pos.x + 1, field_pos.y + 1),
+                                    Size::new(fill_width, field_height - 2),
+                                )
+                                .into_styled(PrimitiveStyleBuilder::new()
+                                    .fill_color(Rgb565::WHITE)
+                                    .build())
+                                .draw(fb)
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
+                            }
+                        }
+                        "date" => {
+                            use embedded_graphics::mono_font::MonoTextStyle;
+                            use crate::display::color_proxy::ConvertColor;
+                            let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
+                            let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                            let date_str = chrono::Local::now().format("%a %b %d").to_string();
+
+                            Self::draw_field_text(fb, field, &date_str, style)
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -1325,6 +1532,12 @@ impl DisplayManager {
                 }
                 crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
                     let style = MonoTextStyle::new(&FONT_6X10, Gray4::WHITE);
+                    Text::with_baseline(msg, Point::new(10, 20), style, Baseline::Top)
+                        .draw(fb)
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw message".to_string()))?;
+                }
+                crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                    let style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
                     Text::with_baseline(msg, Point::new(10, 20), style, Baseline::Top)
                         .draw(fb)
                         .map_err(|_| DisplayError::DrawingError("Failed to draw message".to_string()))?;
@@ -1405,6 +1618,24 @@ impl DisplayManager {
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                Self::render_weather_fields(
+                    fb,
+                    &page,
+                    &svg_path,
+                    &conditions_text,
+                    &temp_text,
+                    &humidity_text,
+                    &wind_text,
+                    &precip_text,
+                    &sunrise_text,
+                    &sunset_text,
+                    &moonrise_text,
+                    &moonset_text,
+                    moon_phase_index,
+                    &moonphase_text
+                )?;
+            }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
                 Self::render_weather_fields(
                     fb,
                     &page,
@@ -1675,8 +1906,7 @@ impl DisplayManager {
         use embedded_graphics::mono_font::MonoTextStyle;
         use embedded_graphics::text::{Text, Baseline};
         use embedded_graphics::mono_font::iso_8859_13::FONT_6X10;
-        use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
-        
+
 
         // Get the weather forecast page layout
         let page = self.layout_manager.create_weather_forecast_page();
@@ -1696,6 +1926,12 @@ impl DisplayManager {
                 }
                 crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
                     let style = MonoTextStyle::new(&FONT_6X10, Gray4::WHITE);
+                    Text::with_baseline(msg, Point::new(10, 20), style, Baseline::Top)
+                        .draw(fb)
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw message".to_string()))?;
+                }
+                crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                    let style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
                     Text::with_baseline(msg, Point::new(10, 20), style, Baseline::Top)
                         .draw(fb)
                         .map_err(|_| DisplayError::DrawingError("Failed to draw message".to_string()))?;
@@ -1770,6 +2006,17 @@ impl DisplayManager {
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                Self::render_forecast_fields(
+                    fb, &page,
+                    &day1_name, &day1_temp, &day1_precip, &day1_svg,
+                    &day2_name, &day2_temp, &day2_precip, &day2_svg,
+                    &day3_name, &day3_temp, &day3_precip, &day3_svg,
+                    &day4_name, &day4_temp, &day4_precip, &day4_svg,
+                    &day5_name, &day5_temp, &day5_precip, &day5_svg,
+                    &day6_name, &day6_temp, &day6_precip, &day6_svg,
+                )?;
+            }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
                 Self::render_forecast_fields(
                     fb, &page,
                     &day1_name, &day1_temp, &day1_precip, &day1_svg,
@@ -2107,6 +2354,9 @@ impl DisplayManager {
                 self.visualizer.render_gray4(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to render visualizer (gray4)".to_string()))?;
             }
+            crate::display::framebuffer::FrameBuffer::Rgb565(_fb) => {
+                // TODO: add render_rgb565 to VisualizerComponent; skipping for now
+            }
         }
 
         // AIO modes: overlay left info panel using layout + existing components
@@ -2353,6 +2603,109 @@ impl DisplayManager {
                         }
                     }
                 }
+                crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+
+                    let half_w = fb.size().width / 2;
+                    Rectangle::new(Point::zero(), Size::new(half_w, fb.size().height))
+                        .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK))
+                        .draw(fb)
+                        .map_err(|_| DisplayError::DrawingError("aio wide clear".to_string()))?;
+
+                    for field in page.fields() {
+                        match field.name.as_str() {
+                            "status_bar" => {
+                                self.status_bar.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio status_bar".to_string()))?;
+                            }
+                            "album_artist" | "album" | "title" | "artist" | "combination"=> {
+                                self.scrolling_text.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError(format!("aio {}", field.name)))?;
+                            }
+                            "progress_bar" => {
+                                if self.track_duration_secs > 0.0 {
+                                    use embedded_graphics::primitives::PrimitiveStyleBuilder;
+                                    use crate::display::color_proxy::ConvertColor;
+                                    let field_pos = field.position();
+                                    let field_width = field.width();
+                                    let field_height = field.height();
+                                    let progress = (self.current_track_time_secs / self.track_duration_secs).clamp(0.0, 1.0);
+                                    let outline_color: Rgb565 = field.fg_color.to_color();
+                                    Rectangle::new(
+                                        Point::new(field_pos.x + 2, field_pos.y),
+                                        Size::new(field_width - 4, field_height),
+                                    )
+                                    .into_styled(PrimitiveStyleBuilder::new()
+                                        .stroke_color(outline_color)
+                                        .stroke_width(1)
+                                        .build())
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio progress bar".to_string()))?;
+                                    let fill_width = ((field_width - 6) as f32 * progress as f32) as u32;
+                                    if fill_width > 0 {
+                                        Rectangle::new(
+                                            Point::new(field_pos.x + 3, field_pos.y + 1),
+                                            Size::new(fill_width, field_height.saturating_sub(2)),
+                                        )
+                                        .into_styled(PrimitiveStyleBuilder::new()
+                                            .fill_color(outline_color)
+                                            .build())
+                                        .draw(fb)
+                                        .map_err(|_| DisplayError::DrawingError("aio progress fill".to_string()))?;
+                                    }
+                                }
+                            }
+                            "info_line" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
+                                use embedded_text::{
+                                    alignment::{HorizontalAlignment, VerticalAlignment},
+                                    style::TextBoxStyleBuilder, TextBox,
+                                };
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&FONT_5X8);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                let tbs_left = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Left)
+                                    .vertical_alignment(VerticalAlignment::Top)
+                                    .build();
+                                let tbs_center = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Center)
+                                    .vertical_alignment(VerticalAlignment::Top)
+                                    .build();
+                                let tbs_right = TextBoxStyleBuilder::new()
+                                    .alignment(HorizontalAlignment::Right)
+                                    .vertical_alignment(VerticalAlignment::Top)
+                                    .build();
+                                let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
+                                TextBox::with_textbox_style(&self.mode_text, field.bounds, style, tbs_center)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio mode text".to_string()))?;
+                                let fix_width = 30u32;
+                                let mut rect = field.bounds;
+                                rect.size.width = fix_width;
+                                TextBox::with_textbox_style(current_time_str, rect, style, tbs_left)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio elapsed".to_string()))?;
+                                let mut rect = field.bounds;
+                                rect.top_left.x = (rect.size.width - fix_width) as i32;
+                                rect.size.width = fix_width;
+                                self.render_buffers.temp_buffer.clear();
+                                let time_secs = if self.show_remaining { self.remaining_time_secs } else { self.track_duration_secs };
+                                let mins = (time_secs as u32) / 60;
+                                let secs = (time_secs as u32) % 60;
+                                let _ = if self.show_remaining {
+                                    write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs)
+                                } else {
+                                    write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs)
+                                };
+                                let time_str = self.render_buffers.temp_buffer.as_str();
+                                TextBox::with_textbox_style(time_str, rect, style, tbs_right)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio duration".to_string()))?;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
             }
 
         } else {
@@ -2522,6 +2875,60 @@ impl DisplayManager {
                         }
                     }
                 }
+                crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                    let half_w = fb.size().width / 2;
+                    Rectangle::new(Point::zero(), Size::new(half_w, fb.size().height))
+                        .into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK))
+                        .draw(fb)
+                        .map_err(|_| DisplayError::DrawingError("aio narrow clear".to_string()))?;
+
+                    for field in page.fields() {
+                        match field.name.as_str() {
+                            "status_bar_small" => {
+                                self.status_bar.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio sb_small".to_string()))?;
+                            }
+                            "current_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                let pos = field.position();
+                                Text::new(&time_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio time".to_string()))?;
+                            }
+                            "duration_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                let pos = field.position();
+                                Text::new(&duration_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
+                            }
+                            "track_time" => {
+                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+                                use embedded_graphics::text::Text;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&FONT_7X13);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                let pos = field.position();
+                                Text::new(&track_str, Point::new(pos.x, pos.y + field.height() as i32), style)
+                                    .draw(fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
+                            }
+                            "combination" => {
+                                self.scrolling_text.render_field(field, fb)
+                                    .map_err(|_| DisplayError::DrawingError("aio combo".to_string()))?;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
             }
         }
 
@@ -2587,6 +2994,12 @@ impl DisplayManager {
                         self.audio_level, track_percent, self.current_track_time_secs)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
             }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                self.easter_egg
+                    .render_and_draw(fb, &self.artist, &self.title,
+                        self.audio_level, track_percent, self.current_track_time_secs)
+                    .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
+            }
         }
 
         // Now draw text overlays (borrow of self.easter_egg is free)
@@ -2613,6 +3026,17 @@ impl DisplayManager {
                 }
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                if !artist_rect.is_zero_sized() {
+                    Self::draw_egg_artist_text(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen, combined_h_align)?;
+                }
+                if !is_combined && !title_rect.is_zero_sized() {
+                    Self::draw_egg_title_text(fb, &title_rect, &title_text, is_wide, can_widen)?;
+                }
+                if !time_rect.is_zero_sized() {
+                    Self::draw_egg_time_text(fb, &time_rect, track_time, show_remaining, remaining_time)?;
+                }
+            }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
                 if !artist_rect.is_zero_sized() {
                     Self::draw_egg_artist_text(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen, combined_h_align)?;
                 }
@@ -3001,6 +3425,9 @@ impl DisplayManager {
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
                 Self::render_splash(fb, &splash_page, version, build_date, None)?;
             }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                Self::render_splash(fb, &splash_page, version, build_date, None)?;
+            }
         }
 
         // Transfer framebuffer to driver, then flush to hardware/window
@@ -3029,6 +3456,9 @@ impl DisplayManager {
                 Self::render_splash(fb, &splash_page, &self.splash_version, &self.splash_build_date, Some(status))?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                Self::render_splash(fb, &splash_page, &self.splash_version, &self.splash_build_date, Some(status))?;
+            }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
                 Self::render_splash(fb, &splash_page, &self.splash_version, &self.splash_build_date, Some(status))?;
             }
         }

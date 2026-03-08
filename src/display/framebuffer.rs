@@ -24,13 +24,13 @@
 #![allow(dead_code)] // framebuffer helpers; some methods reserved
 
 use embedded_graphics::prelude::*;
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565, RgbColor};
 use crate::vframebuf::VarFrameBuf;
 use crate::display::traits::{DisplayCapabilities, ColorDepth};
 
 /// Enum dispatch for zero-cost color abstraction
 ///
-/// This enum allows us to support different color types (monochrome, grayscale)
+/// This enum allows us to support different color types (monochrome, grayscale, colour)
 /// without runtime overhead. The correct variant is selected at initialization
 /// time based on the display capabilities.
 pub enum FrameBuffer {
@@ -39,6 +39,9 @@ pub enum FrameBuffer {
 
     /// 4-bit grayscale framebuffer (16 levels)
     Gray4(VarFrameBuf<Gray4>),
+
+    /// 16-bit full-colour framebuffer (Rgb565)
+    Rgb565(VarFrameBuf<Rgb565>),
 }
 
 impl FrameBuffer {
@@ -59,6 +62,13 @@ impl FrameBuffer {
                     Gray4::new(0),
                 ))
             }
+            ColorDepth::Rgb565 => {
+                FrameBuffer::Rgb565(VarFrameBuf::new(
+                    capabilities.width,
+                    capabilities.height,
+                    Rgb565::BLACK,
+                ))
+            }
         }
     }
 
@@ -67,6 +77,7 @@ impl FrameBuffer {
         match self {
             FrameBuffer::Mono(fb) => (fb.width() as u32, fb.height() as u32),
             FrameBuffer::Gray4(fb) => (fb.width() as u32, fb.height() as u32),
+            FrameBuffer::Rgb565(fb) => (fb.width() as u32, fb.height() as u32),
         }
     }
 
@@ -75,6 +86,7 @@ impl FrameBuffer {
         match self {
             FrameBuffer::Mono(fb) => fb.clear(BinaryColor::Off).ok(),
             FrameBuffer::Gray4(fb) => fb.clear(Gray4::new(0)).ok(),
+            FrameBuffer::Rgb565(fb) => fb.clear(Rgb565::BLACK).ok(),
         };
     }
 
@@ -93,6 +105,22 @@ impl FrameBuffer {
     pub fn as_mono(&self) -> Option<&VarFrameBuf<BinaryColor>> {
         match self {
             FrameBuffer::Mono(fb) => Some(fb),
+            _ => None,
+        }
+    }
+
+    /// Get mutable reference to Rgb565 framebuffer
+    pub fn as_rgb565_mut(&mut self) -> &mut VarFrameBuf<Rgb565> {
+        match self {
+            FrameBuffer::Rgb565(fb) => fb,
+            _ => panic!("Framebuffer is not Rgb565"),
+        }
+    }
+
+    /// Get immutable reference to Rgb565 framebuffer
+    pub fn as_rgb565(&self) -> Option<&VarFrameBuf<Rgb565>> {
+        match self {
+            FrameBuffer::Rgb565(fb) => Some(fb),
             _ => None,
         }
     }
@@ -136,6 +164,19 @@ impl FrameBuffer {
                     }
                 }
 
+                bytes
+            }
+            FrameBuffer::Rgb565(fb) => {
+                let pixels = fb.as_slice();
+                let mut bytes = vec![0u8; pixels.len() * 2];
+                for (i, &pixel) in pixels.iter().enumerate() {
+                    // Pack as big-endian Rgb565
+                    let word: u16 = ((pixel.r() as u16) << 11)
+                        | ((pixel.g() as u16) << 5)
+                        | (pixel.b() as u16);
+                    bytes[i * 2]     = (word >> 8) as u8;
+                    bytes[i * 2 + 1] = word as u8;
+                }
                 bytes
             }
         }
@@ -199,6 +240,7 @@ impl FrameBuffer {
                 }
                 bytes
             }
+            FrameBuffer::Rgb565(_) => self.to_packed_bytes(),
         }
     }
 

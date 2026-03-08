@@ -34,6 +34,9 @@ pub mod ssd1322;
 #[cfg(feature = "driver-sh1106")]
 pub mod sh1106;
 
+#[cfg(feature = "driver-st7789")]
+pub mod st7789;
+
 // Mock driver for testing
 #[cfg(test)]
 pub mod mock;

@@ -439,6 +439,7 @@ impl LayoutConfig {
                 match self.color_depth {
                     ColorDepth::Monochrome => "./assets/mono/".to_string(),
                     ColorDepth::Gray4 => "./assets/basic/".to_string(),
+                    ColorDepth::Rgb565 => "./assets/color/".to_string(),
                 }
             }
             AssetType::Visualizer => {

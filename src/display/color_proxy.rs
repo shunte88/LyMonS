@@ -24,7 +24,7 @@
 
 #![allow(dead_code)] // color proxy helpers; some conversion methods reserved
 
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4, GrayColor};
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4, GrayColor, Rgb565, RgbColor};
 use embedded_graphics::prelude::PixelColor;
 
 /// Convert BinaryColor to any PixelColor type via ColorProxy
@@ -161,6 +161,79 @@ impl ColorProxy for Gray4Proxy {
 
     fn spectrum_pixel(intensity: u8) -> Gray4 {
         Gray4::new((intensity as u32 * 15 / 255) as u8)
+    }
+}
+
+/// Color proxy for 16-bit full-colour (Rgb565) displays
+pub struct Rgb565Proxy;
+
+impl ColorProxy for Rgb565Proxy {
+    type Output = Rgb565;
+
+    fn proxy(color: Pal16) -> Rgb565 {
+        color.to_rgb565()
+    }
+
+    fn on() -> Rgb565 {
+        Rgb565::WHITE
+    }
+
+    fn off() -> Rgb565 {
+        Rgb565::BLACK
+    }
+
+    fn spectrum_pixel(intensity: u8) -> Rgb565 {
+        // Map 0-255 intensity to a blue→cyan→green→yellow→red gradient
+        let i = intensity as u16;
+        let (r, g, b) = if i < 64 {
+            (0u8, 0u8, ((i * 255) / 63) as u8)
+        } else if i < 128 {
+            (0u8, (((i - 64) * 255) / 63) as u8, 255u8)
+        } else if i < 192 {
+            (0u8, 255u8, (255 - ((i - 128) * 255) / 63) as u8)
+        } else {
+            ((((i - 192) * 255) / 63) as u8, 255u8, 0u8)
+        };
+        Rgb565::new(r >> 3, g >> 2, b >> 3)
+    }
+}
+
+impl Pal16 {
+    /// Convert palette colour to Rgb565
+    pub fn to_rgb565(self) -> Rgb565 {
+        match self {
+            Pal16::Black       => Rgb565::new(0,   0,  0),
+            Pal16::Blue        => Rgb565::new(0,   0,  31),
+            Pal16::Green       => Rgb565::new(0,   63, 0),
+            Pal16::Cyan        => Rgb565::new(0,   63, 31),
+            Pal16::Red         => Rgb565::new(31,  0,  0),
+            Pal16::Magenta     => Rgb565::new(31,  0,  31),
+            Pal16::Brown       => Rgb565::new(16,  20, 0),
+            Pal16::Gray        => Rgb565::new(15,  31, 15),
+            Pal16::DarkGray    => Rgb565::new(8,   16, 8),
+            Pal16::LightBlue   => Rgb565::new(8,   24, 31),
+            Pal16::LightGreen  => Rgb565::new(8,   63, 8),
+            Pal16::LightCyan   => Rgb565::new(8,   63, 31),
+            Pal16::LightRed    => Rgb565::new(31,  16, 8),
+            Pal16::LightMagenta=> Rgb565::new(31,  16, 31),
+            Pal16::Yellow      => Rgb565::new(31,  63, 0),
+            Pal16::White       => Rgb565::new(31,  63, 31),
+        }
+    }
+}
+
+impl ConvertColor<Rgb565> for BinaryColor {
+    fn to_color(self) -> Rgb565 {
+        match self {
+            BinaryColor::Off => Rgb565::BLACK,
+            BinaryColor::On  => Rgb565::WHITE,
+        }
+    }
+}
+
+impl ConvertColor<Rgb565> for crate::display::color::Color {
+    fn to_color(self) -> Rgb565 {
+        self.to_rgb565()
     }
 }
 

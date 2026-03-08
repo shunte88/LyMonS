@@ -101,6 +101,21 @@ impl SvgImageRenderer {
         })
     }
 
+    /// Render the SVG to a fresh Pixmap at the target dimensions.
+    ///
+    /// Shared by all `render_to_buffer_*` methods to avoid boilerplate.
+    fn render_to_pixmap(&self) -> Result<tiny_skia::Pixmap, SvgImageError> {
+        let mut pixmap = Pixmap::new(self.target_width, self.target_height)
+            .ok_or_else(|| SvgImageError::PixmapCreationError("Failed to create pixmap".to_string()))?;
+        let svg_size = self.tree.size();
+        let transform = Transform::from_scale(
+            self.target_width as f32 / svg_size.width(),
+            self.target_height as f32 / svg_size.height(),
+        );
+        render(&self.tree, transform, &mut pixmap.as_mut());
+        Ok(pixmap)
+    }
+
     /// Renders the SVG to a mutable byte slice, converting it to a 1-bit monochrome format.
     /// The `buffer` must be large enough to hold `(target_width * target_height / 8)` bytes.
     /// Each bit in the buffer represents a pixel (1 for BinaryColor::On, 0 for BinaryColor::Off).
@@ -118,24 +133,9 @@ impl SvgImageRenderer {
             return Err(SvgImageError::BufferTooSmall);
         }
 
-        // Clear the buffer to ensure all bits are initially off
         buffer.fill(0);
-
-        // Create a Pixmap for rendering the SVG (RGBA format)
-        let mut pixmap = Pixmap::new(self.target_width, self.target_height)
-            .ok_or_else(|| SvgImageError::PixmapCreationError("Failed to create pixmap".to_string()))?;
-
-        // scaling transform
-        // For simple scaling from (0,0), a direct scale transform is sufficient.
-        // If the SVG has a viewBox with a non-zero origin, more complex translation might be needed.
-        let svg_size = self.tree.size();
-        let scale_x = self.target_width as f32 / svg_size.width();
-        let scale_y = self.target_height as f32 / svg_size.height();        
-        let transform = Transform::from_scale(scale_x, scale_y);
-
-        // Render the SVG to the pixmap - majorly hit and miss!!!
+        let pixmap = self.render_to_pixmap()?;
         let threshold = 128;
-        render(&self.tree, transform, &mut pixmap.as_mut());
 
         pixmap
             .pixels()
@@ -175,24 +175,8 @@ impl SvgImageRenderer {
             return Err(SvgImageError::BufferTooSmall);
         }
 
-        // Clear the buffer to ensure all bits are initially off
         buffer.fill(0);
-
-        // Create a Pixmap for rendering the SVG (RGBA format)
-        let mut pixmap = Pixmap::new(self.target_width, self.target_height)
-            .ok_or_else(|| SvgImageError::PixmapCreationError("Failed to create pixmap".to_string()))?;
-
-        // Calculate scaling transformation using the SVG's intrinsic size
-        let svg_size = self.tree.size();
-        let scale_x = self.target_width as f32 / svg_size.width();
-        let scale_y = self.target_height as f32 / svg_size.height();
-        
-        // For simple scaling from (0,0), a direct scale transform is sufficient.
-        // If the SVG has a viewBox with a non-zero origin, more complex translation might be needed.
-        let transform = Transform::from_scale(scale_x, scale_y);
-
-        // Render the SVG to the pixmap
-        render(&self.tree, transform, &mut pixmap.as_mut());
+        let mut pixmap = self.render_to_pixmap()?;
 
         // --- Apply Floyd-Steinberg Dithering ---
         let width = self.target_width as usize;
@@ -313,21 +297,8 @@ impl SvgImageRenderer {
             return Err(SvgImageError::BufferTooSmall);
         }
 
-        // Clear the buffer
         buffer.fill(0);
-
-        // Create a Pixmap for rendering the SVG (RGBA format)
-        let mut pixmap = Pixmap::new(self.target_width, self.target_height)
-            .ok_or_else(|| SvgImageError::PixmapCreationError("Failed to create pixmap".to_string()))?;
-
-        // Scaling transform
-        let svg_size = self.tree.size();
-        let scale_x = self.target_width as f32 / svg_size.width();
-        let scale_y = self.target_height as f32 / svg_size.height();
-        let transform = Transform::from_scale(scale_x, scale_y);
-
-        // Render the SVG to the pixmap
-        render(&self.tree, transform, &mut pixmap.as_mut());
+        let pixmap = self.render_to_pixmap()?;
 
         // Convert RGBA to 4-bit grayscale (0-15)
         pixmap
@@ -381,22 +352,8 @@ impl SvgImageRenderer {
             return Err(SvgImageError::BufferTooSmall);
         }
 
-        // Clear the buffer
         buffer.fill(0);
-
-        // Create a Pixmap for rendering the SVG (RGBA format)
-        let mut pixmap = Pixmap::new(self.target_width, self.target_height)
-            .ok_or_else(|| SvgImageError::PixmapCreationError("Failed to create pixmap".to_string()))?;
-
-        // Scaling transform
-        let svg_size = self.tree.size();
-        let scale_x = self.target_width as f32 / svg_size.width();
-        let scale_y = self.target_height as f32 / svg_size.height();
-        let transform = Transform::from_scale(scale_x, scale_y);
-
-        // Render the SVG to the pixmap
-        render(&self.tree, transform, &mut pixmap.as_mut());
-
+        let pixmap = self.render_to_pixmap()?;
         let threshold = 128;
 
         // Pixel walk with binary threshold
@@ -431,6 +388,47 @@ impl SvgImageRenderer {
             });
 
         debug!("SVG rendered to Gray4 buffer (binary threshold) successfully.");
+        Ok(())
+    }
+
+    /// Renders the SVG to a mutable byte slice in Rgb565 big-endian format.
+    ///
+    /// Buffer must be at least `target_width * target_height * 2` bytes.
+    /// Each pixel is stored as two bytes: high byte first (R5G6B5, big-endian).
+    /// Alpha is composited against a black background.
+    pub fn render_to_buffer_rgb565(&self, buffer: &mut [u8]) -> Result<(), SvgImageError> {
+        let buffer_len_needed = self.target_width as usize * self.target_height as usize * 2;
+        if buffer.len() < buffer_len_needed {
+            error!(
+                "Buffer too small for Rgb565. Needed: {} bytes, Got: {} bytes",
+                buffer_len_needed,
+                buffer.len()
+            );
+            return Err(SvgImageError::BufferTooSmall);
+        }
+
+        buffer.fill(0);
+        let pixmap = self.render_to_pixmap()?;
+
+        pixmap
+            .pixels()
+            .iter()
+            .enumerate()
+            .for_each(|(i, p)| {
+                // Alpha-blend against black background
+                let alpha = p.alpha() as u32;
+                let r = (p.red() as u32 * alpha / 255) as u8;
+                let g = (p.green() as u32 * alpha / 255) as u8;
+                let b = (p.blue() as u32 * alpha / 255) as u8;
+                // Pack into big-endian Rgb565: RRRRRGGG GGGBBBBB
+                let pixel: u16 = ((r as u16 >> 3) << 11)
+                    | ((g as u16 >> 2) << 5)
+                    | (b as u16 >> 3);
+                buffer[i * 2]     = (pixel >> 8) as u8;
+                buffer[i * 2 + 1] = pixel as u8;
+            });
+
+        debug!("SVG rendered to Rgb565 buffer successfully.");
         Ok(())
     }
 

@@ -244,6 +244,7 @@ pub struct LyMonsBusConfig {
 pub enum LyMonsColorDepth {
     Monochrome = 0,
     Gray4 = 1,
+    Rgb565 = 2,
 }
 
 impl From<ColorDepth> for LyMonsColorDepth {
@@ -251,6 +252,7 @@ impl From<ColorDepth> for LyMonsColorDepth {
         match depth {
             ColorDepth::Monochrome => LyMonsColorDepth::Monochrome,
             ColorDepth::Gray4 => LyMonsColorDepth::Gray4,
+            ColorDepth::Rgb565 => LyMonsColorDepth::Rgb565,
         }
     }
 }
@@ -260,6 +262,7 @@ impl From<LyMonsColorDepth> for ColorDepth {
         match depth {
             LyMonsColorDepth::Monochrome => ColorDepth::Monochrome,
             LyMonsColorDepth::Gray4 => ColorDepth::Gray4,
+            LyMonsColorDepth::Rgb565 => ColorDepth::Rgb565,
         }
     }
 }

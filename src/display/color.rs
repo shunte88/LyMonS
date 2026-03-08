@@ -23,7 +23,7 @@
 
 #![allow(dead_code)] // color system types; variants reserved for future display color depth support
 
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565, RgbColor};
 use super::traits::ColorDepth;
 
 /// Universal color value that adapts to display capabilities
@@ -98,11 +98,31 @@ impl Color {
         }
     }
 
+    /// Convert to Rgb565 for full-colour displays
+    pub fn to_rgb565(&self) -> Rgb565 {
+        match self {
+            Color::Black          => Rgb565::new(0,   0,  0),
+            Color::DarkGray       => Rgb565::new(10,  21, 10),
+            Color::Gray           => Rgb565::new(15,  31, 15),
+            Color::LightGray      => Rgb565::new(22,  44, 22),
+            Color::White          => Rgb565::new(31,  63, 31),
+            Color::Cyan           => Rgb565::new(0,   63, 31),
+            Color::Green          => Rgb565::new(0,   63, 0),
+            Color::Yellow         => Rgb565::new(31,  63, 0),
+            Color::Grayscale(val) => {
+                let v5 = (*val >> 3) as u8;
+                let v6 = (*val >> 2) as u8;
+                Rgb565::new(v5, v6, v5)
+            }
+        }
+    }
+
     /// Convert to appropriate color based on display color depth
     pub fn to_color_depth(&self, depth: ColorDepth) -> ColorValue {
         match depth {
             ColorDepth::Monochrome => ColorValue::Binary(self.to_binary()),
             ColorDepth::Gray4 => ColorValue::Gray4(self.to_gray4()),
+            ColorDepth::Rgb565 => ColorValue::Rgb565(self.to_rgb565()),
         }
     }
 
@@ -127,6 +147,7 @@ impl Color {
 pub enum ColorValue {
     Binary(BinaryColor),
     Gray4(Gray4),
+    Rgb565(Rgb565),
 }
 
 impl ColorValue {
@@ -143,6 +164,11 @@ impl ColorValue {
                     BinaryColor::Off
                 }
             }
+            ColorValue::Rgb565(c) => {
+                // Scale R(0-31)×8, G(0-63)×4, B(0-31)×8 → sum 0-748, /3 → 0-249
+                let lum = (c.r() as u16 * 8 + c.g() as u16 * 4 + c.b() as u16 * 8) / 3;
+                if lum >= 128 { BinaryColor::On } else { BinaryColor::Off }
+            }
         }
     }
 
@@ -150,13 +176,28 @@ impl ColorValue {
     pub fn as_gray4(&self) -> Gray4 {
         match self {
             ColorValue::Binary(c) => {
-                if c.is_on() {
-                    Gray4::new(15)
-                } else {
-                    Gray4::new(0)
-                }
+                if c.is_on() { Gray4::new(15) } else { Gray4::new(0) }
             }
             ColorValue::Gray4(c) => *c,
+            ColorValue::Rgb565(c) => {
+                // Scale to 0-249 then map to 0-15
+                let lum = (c.r() as u16 * 8 + c.g() as u16 * 4 + c.b() as u16 * 8) / 3;
+                Gray4::new(((lum as u32 * 15) / 249) as u8)
+            }
+        }
+    }
+
+    /// Get as Rgb565 (converts if needed)
+    pub fn as_rgb565(&self) -> Rgb565 {
+        match self {
+            ColorValue::Binary(c) => if c.is_on() { Rgb565::WHITE } else { Rgb565::BLACK },
+            ColorValue::Gray4(c) => {
+                let val = unsafe { std::mem::transmute::<Gray4, u8>(*c) };
+                let v5 = (val * 2 + 1).min(31);
+                let v6 = (val * 4 + 2).min(63);
+                Rgb565::new(v5, v6, v5)
+            }
+            ColorValue::Rgb565(c) => *c,
         }
     }
 }

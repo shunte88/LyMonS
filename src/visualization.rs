@@ -27,7 +27,7 @@
 use crate::display::layout::LayoutConfig;
 use embedded_graphics::{
     image::{Image, ImageRaw},
-    pixelcolor::{BinaryColor, Gray4},
+    pixelcolor::{BinaryColor, Gray4, Rgb565},
     prelude::*,
     primitives::Rectangle,
 };
@@ -101,6 +101,25 @@ impl SvgColorDepth for Gray4 {
     }
     fn weather_asset_folder() -> &'static str { "./assets/color" }
     fn on() -> Self { Gray4::WHITE }
+}
+
+impl SvgColorDepth for Rgb565 {
+    fn required_buffer_size(width: u32, height: u32) -> usize {
+        (width * height * 2) as usize
+    }
+    fn render_to_buffer(renderer: &SvgImageRenderer, buffer: &mut Vec<u8>) -> Result<(), VizError> {
+        renderer.render_to_buffer_rgb565(buffer)
+            .map_err(|e| VizError::VizBufferError(e.to_string()))
+    }
+    fn draw_buffer_to_display<D>(buffer: &[u8], width: u32, position: Point, display: &mut D) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Rgb565>,
+    {
+        let raw = ImageRaw::<Rgb565>::new(buffer, width);
+        Image::new(&raw, position).draw(display)
+    }
+    fn weather_asset_folder() -> &'static str { "./assets/color" }
+    fn on() -> Self { Rgb565::WHITE }
 }
 
 /// Which visualization to produce.

@@ -40,6 +40,9 @@ use crate::display::drivers::ssd1322::Ssd1322Driver;
 #[cfg(feature = "driver-sh1106")]
 use crate::display::drivers::sh1106::Sh1106Driver;
 
+#[cfg(feature = "driver-st7789")]
+use crate::display::drivers::st7789::St7789Driver;
+
 #[cfg(feature = "plugin-system")]
 use crate::display::plugin::{PluginLoader, PluginDriverAdapter};
 
@@ -139,6 +142,18 @@ impl DisplayDriverFactory {
                 Ok(Box::new(Sh1106Driver::new_i2c(bus, *address, config)?))
             }
 
+            #[cfg(feature = "driver-st7789")]
+            (DriverKind::St7789, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
+                Ok(Box::new(St7789Driver::new_spi(
+                    bus,
+                    *dc_pin,
+                    rst_pin.ok_or_else(|| DisplayFactoryError::ConfigError(
+                        "ST7789 requires rst_pin".to_string()
+                    ))?,
+                    config
+                )?))
+            }
+
             // Catch-all for unsupported combinations or disabled features
             _ => {
                 #[cfg(not(feature = "driver-ssd1306"))]
@@ -169,6 +184,13 @@ impl DisplayDriverFactory {
                     ));
                 }
 
+                #[cfg(not(feature = "driver-st7789"))]
+                if matches!(driver_kind, DriverKind::St7789) {
+                    return Err(DisplayFactoryError::ConfigError(
+                        "ST7789 driver not enabled. Enable with --features driver-st7789".to_string()
+                    ));
+                }
+
                 Err(DisplayFactoryError::UnsupportedCombination)
             }
         }
@@ -190,6 +212,7 @@ impl DisplayDriverFactory {
             DriverKind::Ssd1322 => "ssd1322",
             DriverKind::Sh1106 => "sh1106",
             DriverKind::SharpMemory => "sharpmemory",
+            DriverKind::St7789 => "st7789",
         };
 
         debug!("Searching for plugin: {}", plugin_name);
@@ -238,6 +261,7 @@ impl DisplayDriverFactory {
             DriverKind::Sh1106 => (132, 64, false, "SH1106"),
             DriverKind::Ssd1322 => (256, 64, true, "SSD1322"),
             DriverKind::SharpMemory => (400, 240, false, "SharpMemory"),
+            DriverKind::St7789 => (320, 170, true, "ST7789"),  // Gray4 emulation (Rgb565 not yet supported by emulator)
         };
 
         // Override with config if specified
@@ -302,6 +326,11 @@ impl DisplayDriverFactory {
                     rotate_deg: Some(0),
                     emulated: Some(false),
                 }
+            }
+            #[cfg(feature = "driver-st7789")]
+            DriverKind::St7789 => {
+                use crate::display::drivers::st7789::St7789Driver;
+                St7789Driver::default_config()
             }
             #[allow(unreachable_patterns)]
             _ => DisplayConfig::default(),

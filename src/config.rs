@@ -242,4 +242,5 @@ pub enum DriverKind {
     Ssd1322,
     Sh1106,
     SharpMemory, // Future implementation - 400x240 memory LCD
+    St7789,      // Full-colour 320x170 (Rgb565)
 }

@@ -36,6 +36,10 @@ pub enum ColorDepth {
     /// 4-bit grayscale (16 levels)
     /// Used by: SSD1322
     Gray4,
+
+    /// 16-bit full colour (Rgb565)
+    /// Used by: ST7789
+    Rgb565,
 }
 
 /// I2C interface parameters
