@@ -27,7 +27,7 @@ use log::info;
 use std::time::Instant;
 use arrayvec::ArrayString;
 use core::fmt::Write;
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565, RgbColor};
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565};
 use embedded_graphics::prelude::*;
 
 use crate::config::DisplayConfig;
