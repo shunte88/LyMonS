@@ -477,108 +477,115 @@ impl Eggs {
             self.track_time_secs = track_time;
         }
 
-        // level - supports switch and on-off (cumulative) modes
-        if data.contains("{{level") {
-            if level == 3 {
-                data = data
-                    .replace("{{level-switch-03}}", "1.0")
-                    .replace("{{level-onoff-02}}", "1.0")
-                    .replace("{{level-onoff-03}}", "1.0");
-            } else {
-                data = data
-                    .replace("{{level-switch-03}}", "0.0")
-                    .replace("{{level-onoff-02}}", "0.0")
-                    .replace("{{level-onoff-03}}", "0.0");
+        if data.contains("{{") {
+            // level - supports switch and on-off (cumulative) modes
+            if data.contains("{{level") {
+                if level == 3 {
+                    data = data
+                        .replace("{{level-switch-03}}", "1.0")
+                        .replace("{{level-onoff-02}}", "1.0")
+                        .replace("{{level-onoff-03}}", "1.0");
+                } else {
+                    data = data
+                        .replace("{{level-switch-03}}", "0.0")
+                        .replace("{{level-onoff-02}}", "0.0")
+                        .replace("{{level-onoff-03}}", "0.0");
+                }
+                if level == 2 {
+                    data = data
+                        .replace("{{level-switch-02}}", "1.0")
+                        .replace("{{level-onoff-02}}", "1.0");
+                } else {
+                    data = data
+                        .replace("{{level-switch-02}}", "0.0")
+                        .replace("{{level-onoff-02}}", "0.0");
+                }
+                if level == 1 {
+                    data = data.replace("{{level-switch-01}}", "1.0");
+                } else {
+                    data = data.replace("{{level-switch-01}}", "0.0");
+                }
             }
-            if level == 2 {
-                data = data
-                    .replace("{{level-switch-02}}", "1.0")
-                    .replace("{{level-onoff-02}}", "1.0");
-            } else {
-                data = data
-                    .replace("{{level-switch-02}}", "0.0")
-                    .replace("{{level-onoff-02}}", "0.0");
-            }
-            if level == 1 {
-                data = data.replace("{{level1-switch-0}}", "1.0");
-            } else {
-                data = data.replace("{{level-switch-01}}", "0.0");
-            }
-        }
 
-        // artist
-        data = data.replace("{{artist}}", self.artist.clone().as_str());
-        // title
-        if !self.combine {
-            data = data.replace("{{title}}", self.title.clone().as_str());
-        }
+            // artist
+            data = data.replace("{{artist}}", self.artist.clone().as_str());
+            // title
+            if !self.combine {
+                data = data.replace("{{title}}", self.title.clone().as_str());
+            }
+                
+            // time based rotation animation
+            let now = Local::now();
+            let seconds = now.second() as f64;
+            let seconds_angle =  (
+                now.second() as f64 + now.timestamp_subsec_nanos() as f64 / 1_000_000_000.0) * 12.0;
+            if data.contains("-angle}}") {
+                data = data
+                    .replace("{{seconds-angle}}", seconds_angle.to_string().as_str())
+                    .replace("{{anticlockwise-seconds-angle}}", format!("-{seconds_angle}").as_str());
+            }
+            if seconds%2.0 == 0.0 {
+                data = data
+                    .replace("{{flip}}", "1")
+                    .replace("{{flip-odd}}", "-1")
+                    .replace("{{bubble-odd}}", "-10")
+                    .replace("{{bubble-even}}", "10")
+                    .replace("{{flip-even}}", "1")
+                    .replace("{{blink-even}}", "1.0")
+                    .replace("{{blink-odd}}", "0.0")
+                    .replace("{{ripple-even}}", "1.0")
+                    .replace("{{ripple-odd}}", "0.0");
+            } else {
+                data = data
+                    .replace("{{flip}}", "-1")
+                    .replace("{{flip-odd}}", "1")
+                    .replace("{{flip-even}}", "-1")
+                    .replace("{{bubble-odd}}", "10")
+                    .replace("{{bubble-even}}", "-10")
+                    .replace("{{blink-even}}", "0.0")
+                    .replace("{{blink-odd}}", "1.0")
+                    .replace("{{ripple-even}}", "0.0")
+                    .replace("{{ripple-odd}}", "1.0");
+            }
+
+            data = data.replace("{{track-percent}}", track_percent.to_string().as_str());
+            let track_percent_whole = (track_percent * 100.0).floor() as u8;
+            data = data.replace("{{track-percent-whole}}", track_percent_whole.to_string().as_str());
+
+            // scaler (drink me) logic - grow and shrink SVG objects
+            let grow = 1.0 + track_percent;
+            data = data.replace("{{scale-grow-progress}}", grow.to_string().as_str());
+            let shrink = 1.0 - track_percent;
+            data = data.replace("{{scale-shrink-progress}}", shrink.to_string().as_str());
             
-        // time based rotation animation
-        let now = Local::now();
-        let seconds = now.second() as f64;
-        let seconds_angle =  (
-            now.second() as f64 + now.timestamp_subsec_nanos() as f64 / 1_000_000_000.0) * 12.0;
-        if data.contains("-angle}}") {
-            data = data
-                .replace("{{seconds-angle}}", seconds_angle.to_string().as_str())
-                .replace("{{anticlockwise-seconds-angle}}", format!("-{seconds_angle}").as_str());
-        }
-        if seconds%2.0 == 0.0 {
-            data = data
-                .replace("{{flip}}", "1")
-                .replace("{{flip-odd}}", "-1")
-            	.replace("{{flip-even}}", "1")
-            	.replace("{{blink-even}}", "1.0")
-            	.replace("{{blink-odd}}", "0.0")
-            	.replace("{{ripple-even}}", "1.0")
-            	.replace("{{ripple-odd}}", "0.0");
-        } else {
-            data = data
-                .replace("{{flip}}", "-1")
-            	.replace("{{flip-odd}}", "1")
-            	.replace("{{flip-even}}", "-1")
-            	.replace("{{blink-even}}", "0.0")
-            	.replace("{{blink-odd}}", "1.0")
-            	.replace("{{ripple-even}}", "0.0")
-            	.replace("{{ripple-odd}}", "1.0");
-        }
+            // note that right->left (-ve) and left->right (+ve) is defined via -ve , -{{progress}}, in the SVG
+            let linear_pct = self.calc_progress_angle_linear(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
+            data = data.replace("{{track-progress}}", linear_pct.to_string().as_str());
 
-        data = data.replace("{{track-percent}}", track_percent.to_string().as_str());
-        let track_percent_whole = (track_percent * 100.0).floor() as u8;
-        data = data.replace("{{track-percent-whole}}", track_percent_whole.to_string().as_str());
+            // progress-arc - note using _pct flavor as we're called with precalculated percentile
+            let arc_angle = self.calc_progress_angle_pct(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
+            data = data.replace("{{progress-arc}}", arc_angle.to_string().as_str());
 
-        // scaler (drink me) logic - grow and shrink SVG objects
-        let grow = 1.0 + track_percent;
-        data = data.replace("{{scale-grow-progress}}", grow.to_string().as_str());
-        let shrink = 1.0 - track_percent;
-        data = data.replace("{{scale-shrink-progress}}", shrink.to_string().as_str());
-        
-        // note that right->left (-ve) and left->right (+ve) is defined via -ve , -{{progress}}, in the SVG
-        let linear_pct = self.calc_progress_angle_linear(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
-        data = data.replace("{{track-progress}}", linear_pct.to_string().as_str());
+            if data.contains("{{worm-") {
+                /*
+                <g transform="translate({{worm-x}}, 0) scale({{worm-stretch}}, 1)">
+                <!-- character paths -->
+                </g>
+                */
+                self.groovy.advance();
+                let inchworm_offset = self.groovy.bounce_offset();
+                // simple 2-frame stretch animation for fun
+                let inchworm_stretch = if self.groovy.tick < self.groovy.frames_per_cycle / 2 {
+                    1.0 + 0.3 * (self.groovy.tick as f64 / (self.groovy.frames_per_cycle as f64 / 2.0))
+                } else {
+                    1.3 - 0.3 * ((self.groovy.tick - self.groovy.frames_per_cycle / 2) as f64 / (self.groovy.frames_per_cycle as f64 / 2.0))
+                };
+                data = data
+                    .replace("{{worm-stretch}}", inchworm_stretch.to_string().as_str())
+                    .replace("{{worm-x}}", inchworm_offset.to_string().as_str());
+            }
 
-        // progress-arc - note using _pct flavor as we're called with precalculated percentile
-        let arc_angle = self.calc_progress_angle_pct(self.low_limit as f32, self.high_limit as f32, track_percent as f32);
-        data = data.replace("{{progress-arc}}", arc_angle.to_string().as_str());
-
-        if data.contains("{{worm-") {
-            /*
-            <g transform="translate({{worm-x}}, 0) scale({{worm-stretch}}, 1)">
-            <!-- character paths -->
-            </g>
-            */
-            self.groovy.advance();
-            let inchworm_offset = self.groovy.bounce_offset();
-             // simple 2-frame stretch animation for fun
-            let inchworm_stretch = if self.groovy.tick < self.groovy.frames_per_cycle / 2 {
-                1.0 + 0.3 * (self.groovy.tick as f64 / (self.groovy.frames_per_cycle as f64 / 2.0))
-            } else {
-                1.3 - 0.3 * ((self.groovy.tick - self.groovy.frames_per_cycle / 2) as f64 / (self.groovy.frames_per_cycle as f64 / 2.0))
-            };
-            data = data
-                .replace("{{worm-stretch}}", inchworm_stretch.to_string().as_str())
-                .replace("{{worm-x}}", inchworm_offset.to_string().as_str());
-        }
+        } // has subs vars
 
         // patch any missed replacement tags
         let re = Regex::new(self.re.as_str()).unwrap();

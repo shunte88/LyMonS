@@ -55,25 +55,29 @@ const SVG_HEIGHT: u32 = 44;
 const SIZE_NORMAL: (u32, u32) = (25, 44);   // height ≤ 70
 const SIZE_LARGE:  (u32, u32) = (60, 105);  // height > 70 (ST7789)
 
-/// Clock font with SVG-rendered alpha-channel character masks.
+/// Clock font with SVG-rendered RGBA character data.
 ///
-/// Each character is stored as `digit_width * digit_height` bytes,
-/// one alpha value (0–255) per pixel, row-major.  This preserves the
-/// anti-aliasing produced by the SVG renderer so that gray4 and Rgb565
-/// displays get smooth edges, while BinaryColor displays threshold at 127.
+/// Each character is stored as `digit_width * digit_height * 4` bytes,
+/// in RGBA order (pre-multiplied by tiny-skia), row-major.  This preserves
+/// the SVG's own colours and anti-aliasing.
+///
+/// Draw helpers interpret RGBA per colour depth:
+///   BinaryColor → alpha >= 128 → On
+///   Gray4       → BT.601 luma * alpha/255 → 0-15
+///   Rgb565      → R>>3, G>>2, B>>3, premultiplied by alpha
 ///
 /// Owns all pixel data — no lifetime parameter.
 pub struct ClockFontData {
     pub digit_width:  u32,
     pub digit_height: u32,
-    /// Alpha-per-pixel: `digit_width * digit_height` bytes per character.
+    /// RGBA per pixel: `digit_width * digit_height * 4` bytes per character.
     /// [0..9] = digits, [10] = colon, [11] = space, [12] = minus.
     chars: [Vec<u8>; CHAR_COUNT],
 }
 
 impl ClockFontData {
-    /// Return the alpha mask for `c` as a flat slice (`w * h` bytes).
-    pub fn get_char_alpha(&self, c: char) -> Option<&[u8]> {
+    /// Return the RGBA data for `c` as a flat slice (`w * h * 4` bytes).
+    pub fn get_char_rgba(&self, c: char) -> Option<&[u8]> {
         let data = match c {
             '0'..='9' => &self.chars[c as usize - '0' as usize],
             ':'       => &self.chars[IDX_COLON],
@@ -87,17 +91,16 @@ impl ClockFontData {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/// Render `svg_bytes` at `(width, height)` → alpha channel, one byte per pixel, row-major.
+/// Render `svg_bytes` at `(width, height)` → RGBA, four bytes per pixel, row-major.
 ///
-/// Preserves anti-aliasing for smooth rendering on gray4 and Rgb565 displays.
-/// BinaryColor callers threshold at 127.
-fn render_svg_to_alpha(svg_bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
+/// Preserves the SVG's own colours and anti-aliasing.
+fn render_svg_to_rgba(svg_bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
     let opt = usvg::Options::default();
     let tree = match usvg::Tree::from_data(svg_bytes, &opt) {
         Ok(t) => t,
         Err(e) => {
             warn!("SVG parse error: {}", e);
-            return vec![0u8; (width * height) as usize];
+            return vec![0u8; (width * height * 4) as usize];
         }
     };
 
@@ -105,7 +108,7 @@ fn render_svg_to_alpha(svg_bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
         Some(p) => p,
         None => {
             warn!("Failed to create pixmap {}x{}", width, height);
-            return vec![0u8; (width * height) as usize];
+            return vec![0u8; (width * height * 4) as usize];
         }
     };
 
@@ -113,11 +116,8 @@ fn render_svg_to_alpha(svg_bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
     let sy = height as f32 / tree.size().height();
     resvg::render(&tree, tiny_skia::Transform::from_scale(sx, sy), &mut pixmap.as_mut());
 
-    // Extract alpha channel only (index 3 of each RGBA pixel)
-    let rgba = pixmap.data();
-    (0..(width * height) as usize)
-        .map(|i| rgba[i * 4 + 3])
-        .collect()
+    // Return full RGBA data (4 bytes per pixel)
+    pixmap.data().to_vec()
 }
 
 /// Name mapping: character → filename stem suffix used inside the zip.
@@ -152,10 +152,10 @@ fn load_from_zip(font_name: &str, width: u32, height: u32) -> Option<[Vec<u8>; C
             Ok(mut entry) => {
                 let mut svg_bytes = Vec::new();
                 if entry.read_to_end(&mut svg_bytes).is_ok() {
-                    chars[idx] = render_svg_to_alpha(&svg_bytes, width, height);
+                    chars[idx] = render_svg_to_rgba(&svg_bytes, width, height);
                 } else {
                     warn!("Failed to read {} from zip", entry_name);
-                    chars[idx] = vec![0u8; (width * height) as usize];
+                    chars[idx] = vec![0u8; (width * height * 4) as usize];
                 }
             }
             Err(_) => {

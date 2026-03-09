@@ -563,7 +563,7 @@ impl DisplayManager {
                             self.scrolling_text.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
                         }
-                        "progress_bar" => {
+                        "track_progress_bar" => {
                             if self.track_duration_secs > 0.0 {
                                 // Extract data inline to avoid borrow conflicts
                                 use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
@@ -699,7 +699,7 @@ impl DisplayManager {
                             self.scrolling_text.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
                         }
-                        "progress_bar" => {
+                        "track_progress_bar" => {
                             if self.track_duration_secs > 0.0 {
                                 // Progress bar rendering for Gray4 displays
                                 use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
@@ -844,7 +844,7 @@ impl DisplayManager {
                             self.scrolling_text.render_field(field, fb)
                                 .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
                         }
-                        "progress_bar" => {
+                        "track_progress_bar" => {
                             if self.track_duration_secs > 0.0 {
                                 use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
                                 use embedded_graphics::prelude::*;
@@ -1302,8 +1302,8 @@ impl DisplayManager {
         // Get the clock page layout
         let page = self.layout_manager.create_clock_page();
 
-        // Extract current second for progress bar
-        let current_second: u32 = chrono::Local::now().format("%S").to_string().parse().unwrap_or(0);
+        // Extract current second, millisecond fidelity, for progress bar
+        let current_second: f32 = chrono::Local::now().format("%S.%.3f").to_string().parse().unwrap_or(0.0);
 
         // Render metrics first (if present) before borrowing framebuffer
         if page.fields().iter().any(|f| f.name == "metrics") {
@@ -1321,8 +1321,8 @@ impl DisplayManager {
                             // Already rendered above
                         }
                         "clock_digits" => {
-                            // Clock renders digits with field color (e.g., green)
-                            self.clock_display.render(fb, field.position().y, field.fg_binary())
+                            // Clock renders digits color defined in SVG -> transposed to color depth
+                            self.clock_display.render(fb, field.position().y)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1345,7 +1345,8 @@ impl DisplayManager {
                             .draw(fb)
                             .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar outline".to_string()))?;
 
-                            let progress = (current_second as f32) / 60.0;
+                            // milliseconds in play for buttery smooth rendering (rather than the bump every second)
+                            let progress = current_second / 60.0;
                             let fill_width = (((field_width - 2) as f32) * progress) as u32;
 
                             if fill_width > 0 {
@@ -1391,7 +1392,7 @@ impl DisplayManager {
                         }
                         "clock_digits" => {
                             // Clock renders digits with field color (e.g., green → gray4 value 8)
-                            self.clock_display.render_gray4(fb, field.position().y, field.fg_color.to_gray4())
+                            self.clock_display.render_gray4(fb, field.position().y)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1451,8 +1452,7 @@ impl DisplayManager {
                             // Already rendered above
                         }
                         "clock_digits" => {
-                            use crate::display::color_proxy::ConvertColor;
-                            self.clock_display.render_rgb565(fb, field.position().y, field.fg_color.to_color())
+                            self.clock_display.render_rgb565(fb, field.position().y)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -2356,8 +2356,9 @@ impl DisplayManager {
                 self.visualizer.render_gray4(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to render visualizer (gray4)".to_string()))?;
             }
-            crate::display::framebuffer::FrameBuffer::Rgb565(_fb) => {
-                // TODO: add render_rgb565 to VisualizerComponent; skipping for now
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                self.visualizer.render_rgb565(fb)
+                    .map_err(|_| DisplayError::DrawingError("Failed to render visualizer (rgb565)".to_string()))?;
             }
         }
 
@@ -2520,7 +2521,7 @@ impl DisplayManager {
                                 self.scrolling_text.render_field(field, fb)
                                     .map_err(|_| DisplayError::DrawingError(format!("aio {}", field.name)))?;
                             }
-                            "progress_bar" => {
+                            "track_progress_bar" => {
                                 if self.track_duration_secs > 0.0 {
                                     use embedded_graphics::primitives::PrimitiveStyleBuilder;
                                     use crate::display::color_proxy::ConvertColor;
@@ -2623,7 +2624,7 @@ impl DisplayManager {
                                 self.scrolling_text.render_field(field, fb)
                                     .map_err(|_| DisplayError::DrawingError(format!("aio {}", field.name)))?;
                             }
-                            "progress_bar" => {
+                            "track_progress_bar" => {
                                 if self.track_duration_secs > 0.0 {
                                     use embedded_graphics::primitives::PrimitiveStyleBuilder;
                                     use crate::display::color_proxy::ConvertColor;
@@ -2712,6 +2713,10 @@ impl DisplayManager {
 
         } else {
 
+            use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
+            use embedded_graphics::text::Text;
+            use crate::display::color_proxy::ConvertColor;
+
             // Narrow: compact AIO layout (status_bar_small, current_time, track_time, combination)
             let page = self.layout_manager.create_aio_scrolling_page();
 
@@ -2747,8 +2752,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio sb_small".to_string()))?;
                             }
                             "current_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, BinaryColor::On);
                                 let pos = field.position();
@@ -2757,8 +2760,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio time".to_string()))?;
                             }
                             "duration_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, BinaryColor::On);
                                 let pos = field.position();
@@ -2767,8 +2768,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
                             }
                             "track_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, BinaryColor::On);
                                 let pos = field.position();
@@ -2776,7 +2775,7 @@ impl DisplayManager {
                                     .draw(fb)
                                     .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
                             }
-                            "progress_bar" => {
+                            "track_progress_bar" => {
                                 if duration_secs > 0.0 {
                                     // Extract data inline to avoid borrow conflicts
                                     use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
@@ -2837,9 +2836,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio sb_small".to_string()))?;
                             }
                             "current_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
-                                use crate::display::color_proxy::ConvertColor;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, field.fg_color.to_color());
                                 let pos = field.position();
@@ -2848,9 +2844,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio time".to_string()))?;
                             }
                             "duration_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
-                                use crate::display::color_proxy::ConvertColor;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, field.fg_color.to_color());
                                 let pos = field.position();
@@ -2859,9 +2852,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
                             }
                             "track_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
-                                use crate::display::color_proxy::ConvertColor;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, field.fg_color.to_color());
                                 let pos = field.position();
@@ -2891,9 +2881,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio sb_small".to_string()))?;
                             }
                             "current_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
-                                use crate::display::color_proxy::ConvertColor;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, field.fg_color.to_color());
                                 let pos = field.position();
@@ -2902,9 +2889,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio time".to_string()))?;
                             }
                             "duration_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
-                                use crate::display::color_proxy::ConvertColor;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, field.fg_color.to_color());
                                 let pos = field.position();
@@ -2913,9 +2897,6 @@ impl DisplayManager {
                                     .map_err(|_| DisplayError::DrawingError("aio track".to_string()))?;
                             }
                             "track_time" => {
-                                use embedded_graphics::mono_font::{iso_8859_13::FONT_7X13, MonoTextStyle};
-                                use embedded_graphics::text::Text;
-                                use crate::display::color_proxy::ConvertColor;
                                 let font = field.font.unwrap_or(&FONT_7X13);
                                 let style = MonoTextStyle::new(font, field.fg_color.to_color());
                                 let pos = field.position();

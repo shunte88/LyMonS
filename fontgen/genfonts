@@ -1,12 +1,9 @@
-uv run main.py Roboto roboto
-uv run main.py Roboto roboto
-uv run main.py poppins poppins
-uv run main.py DS-Digital 7seg
+uv run main.py "Roboto" roboto
+uv run main.py "Mucha" poppins
+uv run main.py "Seven Segment" 7seg
 uv run main.py "Noto Sans" noto
-uv run main.py "DejaVu Sans" dejavu
 uv run main.py "Dot Matrix" dotty
-uv run main.py "Team" team
-uv run main.py "Grandes" grandes
+uv run main.py "Purisa" team
 uv run main.py "LED Real" ledreal
 uv run main.py "Mavel Poster" marvel
 uv run main.py "Moomycraft" moomy

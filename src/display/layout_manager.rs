@@ -111,10 +111,10 @@ impl LayoutManager {
             // Progress bar
             .add_field(
                 Field::new_custom(
-                    "progress_bar",
+                    "track_progress_bar",
                     Rectangle::new(
                         Point::new(border_adj, height.saturating_sub(5 + y_height as u32) as i32), 
-                        Size::new(width_adj, 4))
+                        Size::new(width_adj, 3))
                 )
                 .scrollable(false)
             )
@@ -125,7 +125,7 @@ impl LayoutManager {
                     Rectangle::new(
                         Point::new(border_adj, height.saturating_sub(3 + y_height as u32) as i32), 
                         Size::new(combination_width_adj, y_height as u32)),
-                    &FONT_6X10
+                    &FONT_5X8
                 )
                 .scrollable(true)
             )
@@ -199,7 +199,7 @@ impl LayoutManager {
             // Progress bar (y=40, height=4)
             .add_field(
                 Field::new_custom(
-                    "progress_bar",
+                    "track_progress_bar",
                     Rectangle::new(
                         Point::new(border_adj, height.saturating_sub(6 + y_height as u32) as i32), 
                         Size::new(width_adj, 3))
@@ -258,7 +258,7 @@ impl LayoutManager {
                         Point::new(border_adj, clock_y_start),
                         Size::new(digit_w as u32, digit_h as u32))
                 )
-                .colors(Color::Orange, None)
+                //.colors(Color::Cyan, None)
             )
             // Seconds progress bar (full width, 2px gap below digits)
             .add_field(

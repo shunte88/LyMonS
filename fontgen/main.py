@@ -18,7 +18,10 @@ Sizing rules:
   - Colon and minus are rendered at natural size within that shared scale
     (i.e. as they would appear alongside digits, not stretched to fill the tile).
   - All glyphs share a common baseline 2px from the bottom of the tile.
-  - Glyphs are horizontally centred within the tile.
+  - Digits (0-9) are right-justified with a 2px right margin.
+  - Colon, minus, and space are horizontally centred.
+  - Character path: fill #00ffff, stroke #ffff00 at 0.5px (stroke-width scaled
+    to font units so it renders at 0.5px in SVG space).
 """
 
 import sys
@@ -30,8 +33,8 @@ from fontTools.ttLib import TTFont
 from fontTools.pens.svgPathPen import SVGPathPen
 
 
-TILE_W   = 24   # tile width  (px)
-TILE_H   = 40   # tile height (px)
+TILE_W   = 25   # tile width  (px)
+TILE_H   = 44   # tile height (px)
 BASELINE = 2    # px from bottom of tile to font baseline
 
 CHARACTERS = [
@@ -41,7 +44,7 @@ CHARACTERS = [
 ]
 
 # Reference character used to establish the shared scale
-REFERENCE_CHAR = '8'  # in the good old days, we'd have used M or W - ah memories...
+REFERENCE_CHAR = '8'
 
 
 def find_font_path(name: str) -> str:
@@ -110,15 +113,28 @@ def compute_scale(tt: TTFont) -> float:
     return avail_h / glyph_h
 
 
-def make_svg(path_d, x_min, y_min, x_max, y_max, scale: float) -> str:
+RIGHT_MARGIN   = 2      # px gap between glyph right ink edge and tile right edge
+FILL_COLOR     = '#00ffff'
+STROKE_COLOR   = '#ffffff'
+STROKE_OPACITY = 0.4
+STROKE_PX      = 0.5   # desired stroke width in SVG px
+
+# Characters that are centred rather than right-justified
+CENTRED_CHARS  = {':', ' ', '-'}
+
+
+def make_svg(path_d, x_min, y_min, x_max, y_max, scale: float, char: str) -> str:
     """
     Build an SVG with the glyph path positioned using a shared scale and baseline.
       - Baseline sits BASELINE px from the bottom of the tile.
-      - Glyph is horizontally centred within the tile.
+      - Digits are right-justified; colon, minus and space are centred.
       - y-axis is flipped (font = y-up, SVG = y-down).
-      - Fill #ffffff on a transparent background.
+      - Path style: fill FILL_COLOR, stroke STROKE_COLOR at STROKE_PX.
+        stroke-width is expressed in font units so it maps to STROKE_PX after scaling.
+      - Transparent tile background, no tile border.
     """
     if path_d is None:
+        # Blank tile (space)
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" '
             f'width="{TILE_W}" height="{TILE_H}" '
@@ -127,19 +143,33 @@ def make_svg(path_d, x_min, y_min, x_max, y_max, scale: float) -> str:
 
     glyph_w = (x_max - x_min) * scale
 
-    # Horizontal: centre the glyph bounding box in the tile
-    tx = (TILE_W - glyph_w) / 2 - x_min * scale
+    if char in CENTRED_CHARS:
+        # Centre the ink bounding box horizontally
+        tx = (TILE_W - glyph_w) / 2 - x_min * scale
+    else:
+        # Right-justify: glyph right ink edge = TILE_W - RIGHT_MARGIN
+        tx = (TILE_W - RIGHT_MARGIN) - x_max * scale
 
-    # Vertical: font baseline (y=0) maps to svg_y = TILE_H - BASELINE; y flipped
+    # Vertical: font baseline (y=0) → svg_y = TILE_H - BASELINE; y-axis flipped
     ty = TILE_H - BASELINE
 
     transform = f"translate({tx:.4f},{ty:.4f}) scale({scale:.6f},{-scale:.6f})"
+
+    # stroke-width in font units so it renders as STROKE_PX after the scale transform
+    sw_font = STROKE_PX / scale
+
+    style = (
+        f'fill="{FILL_COLOR}" '
+        f'stroke="{STROKE_COLOR}" '
+        f'stroke-width="{sw_font:.4f}" '
+        f'stroke-opacity="{STROKE_OPACITY}"'
+    )
 
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{TILE_W}" height="{TILE_H}" '
         f'viewBox="0 0 {TILE_W} {TILE_H}">\n'
-        f'  <path d="{path_d}" fill="#ffffff" transform="{transform}"/>\n'
+        f'  <path d="{path_d}" {style} transform="{transform}"/>\n'
         f'</svg>'
     )
 
@@ -165,7 +195,7 @@ def main():
 
     for char, label in CHARACTERS:
         path_d, x_min, y_min, x_max, y_max = get_glyph_info(tt, char)
-        svg_content = make_svg(path_d, x_min, y_min, x_max, y_max, scale)
+        svg_content = make_svg(path_d, x_min, y_min, x_max, y_max, scale, char)
 
         filename = f"{seed}_{label}.svg"
         filepath = os.path.join(output_dir, filename)

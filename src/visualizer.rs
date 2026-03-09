@@ -420,8 +420,8 @@ async fn visualizer_shm_loop(
                     );
                 }
                 Visualization::WaveformSpectrum => {
-                    // Downsample waveform to display width (assume 256px max)
-                    const TARGET_WIDTH: usize = 256;
+                    // Downsample waveform to display width (assume 320px max)
+                    const TARGET_WIDTH: usize = 320; // should size this based on "consumer" - the display bounds
                     let step = (left.len() / TARGET_WIDTH).max(1);
                     let waveform_l: Vec<i16> = left.iter().step_by(step).take(TARGET_WIDTH).copied().collect();
                     let waveform_r: Vec<i16> = right.iter().step_by(step).take(TARGET_WIDTH).copied().collect();

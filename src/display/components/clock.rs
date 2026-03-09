@@ -94,11 +94,11 @@ impl ClockDisplay {
         }
     }
 
-    /// Render the clock display with specified color.
+    /// Render the clock display using SVG-native colours (BinaryColor: alpha threshold).
     ///
     /// `y_start` is the top-left Y of the `clock_digits` layout field —
     /// determined at layout-creation time so digits never overlap the progress bar.
-    pub fn render<D>(&self, target: &mut D, y_start: i32, color: BinaryColor) -> Result<(), D::Error>
+    pub fn render<D>(&self, target: &mut D, y_start: i32) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = BinaryColor>,
     {
@@ -159,13 +159,13 @@ impl ClockDisplay {
             )
             .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
             .draw(target)?;
-            self.draw_clock_char(target, time_chars[i], x_positions[i], y_start, color)?;
+            self.draw_clock_char(target, time_chars[i], x_positions[i], y_start)?;
         }
         Ok(())
     }
 
-    /// Render the clock display on grayscale displays with specified color.
-    pub fn render_gray4<D>(&self, target: &mut D, y_start: i32, color: Gray4) -> Result<(), D::Error>
+    /// Render the clock display on grayscale displays using SVG-native colours.
+    pub fn render_gray4<D>(&self, target: &mut D, y_start: i32) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Gray4>,
     {
@@ -207,13 +207,13 @@ impl ClockDisplay {
             )
             .into_styled(PrimitiveStyleBuilder::new().fill_color(Gray4::BLACK).build())
             .draw(target)?;
-            self.draw_clock_char_gray4(target, time_chars[i], x_positions[i], y_start, color)?;
+            self.draw_clock_char_gray4(target, time_chars[i], x_positions[i], y_start)?;
         }
         Ok(())
     }
 
-    /// Render the clock display on Rgb565 displays with specified colour.
-    pub fn render_rgb565<D>(&self, target: &mut D, y_start: i32, color: Rgb565) -> Result<(), D::Error>
+    /// Render the clock display on Rgb565 displays using SVG-native colours.
+    pub fn render_rgb565<D>(&self, target: &mut D, y_start: i32) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Rgb565>,
     {
@@ -255,28 +255,28 @@ impl ClockDisplay {
             )
             .into_styled(PrimitiveStyleBuilder::new().fill_color(Rgb565::BLACK).build())
             .draw(target)?;
-            self.draw_clock_char_rgb565(target, time_chars[i], x_positions[i], y_start, color)?;
+            self.draw_clock_char_rgb565(target, time_chars[i], x_positions[i], y_start)?;
         }
         Ok(())
     }
 
-    /// Draw a single clock character on Rgb565 display with specified color
-    fn draw_clock_char_rgb565<D>(&self, target: &mut D, c: char, x: i32, y: i32, color: Rgb565) -> Result<(), D::Error>
+    /// Draw a single clock character on Rgb565 display using SVG-native colours.
+    fn draw_clock_char_rgb565<D>(&self, target: &mut D, c: char, x: i32, y: i32) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        if let Some(alpha) = self.clock_font.get_char_alpha(c) {
+        if let Some(rgba) = self.clock_font.get_char_rgba(c) {
             let width  = self.clock_font.digit_width;
             let height = self.clock_font.digit_height;
-            let (r5, g6, b5) = (color.r(), color.g(), color.b());
             for dy in 0..height {
                 for dx in 0..width {
-                    let a = alpha[(dy * width + dx) as usize];
+                    let base = ((dy * width + dx) * 4) as usize;
+                    let (r8, g8, b8, a) = (rgba[base], rgba[base+1], rgba[base+2], rgba[base+3]);
                     if a > 0 {
-                        let blend = |ch: u8, max: u8| -> u8 { ((ch as u32 * a as u32 / 255) as u8).min(max) };
+                        let pm = |ch: u8| -> u8 { (ch as u32 * a as u32 / 255) as u8 };
                         target.draw_iter(core::iter::once(Pixel(
                             Point::new(x + dx as i32, y + dy as i32),
-                            Rgb565::new(blend(r5, 31), blend(g6, 63), blend(b5, 31)),
+                            Rgb565::new(pm(r8) >> 3, pm(g8) >> 2, pm(b8) >> 3),
                         )))?;
                     }
                 }
@@ -285,17 +285,18 @@ impl ClockDisplay {
         Ok(())
     }
 
-    /// Draw a single clock character at the specified position
-    fn draw_clock_char<D>(&self, target: &mut D, c: char, x: i32, y: i32, _color: BinaryColor) -> Result<(), D::Error>
+    /// Draw a single clock character using SVG-native colours (BinaryColor: threshold on alpha).
+    fn draw_clock_char<D>(&self, target: &mut D, c: char, x: i32, y: i32) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        if let Some(alpha) = self.clock_font.get_char_alpha(c) {
+        if let Some(rgba) = self.clock_font.get_char_rgba(c) {
             let width  = self.clock_font.digit_width;
             let height = self.clock_font.digit_height;
             for dy in 0..height {
                 for dx in 0..width {
-                    if alpha[(dy * width + dx) as usize] >= 128 {
+                    let a = rgba[((dy * width + dx) * 4 + 3) as usize];
+                    if a >= 128 {
                         target.draw_iter(core::iter::once(Pixel(
                             Point::new(x + dx as i32, y + dy as i32),
                             BinaryColor::On,
@@ -307,20 +308,22 @@ impl ClockDisplay {
         Ok(())
     }
 
-    /// Draw a single clock character on grayscale display with specified color
-    fn draw_clock_char_gray4<D>(&self, target: &mut D, c: char, x: i32, y: i32, color: Gray4) -> Result<(), D::Error>
+    /// Draw a single clock character on grayscale display using SVG-native colours.
+    fn draw_clock_char_gray4<D>(&self, target: &mut D, c: char, x: i32, y: i32) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Gray4>,
     {
-        if let Some(alpha) = self.clock_font.get_char_alpha(c) {
+        if let Some(rgba) = self.clock_font.get_char_rgba(c) {
             let width  = self.clock_font.digit_width;
             let height = self.clock_font.digit_height;
-            let luma = color.luma(); // 0–15
             for dy in 0..height {
                 for dx in 0..width {
-                    let a = alpha[(dy * width + dx) as usize];
+                    let base = ((dy * width + dx) * 4) as usize;
+                    let (r8, g8, b8, a) = (rgba[base], rgba[base+1], rgba[base+2], rgba[base+3]);
                     if a > 0 {
-                        let level = (luma as u32 * a as u32 / 255) as u8;
+                        // BT.601 luma → premultiply by alpha → map to 0-15
+                        let luma255 = (77u32*r8 as u32 + 150*g8 as u32 + 29*b8 as u32) >> 8;
+                        let level = (luma255 * a as u32 * 15 / (255 * 255)) as u8;
                         target.draw_iter(core::iter::once(Pixel(
                             Point::new(x + dx as i32, y + dy as i32),
                             Gray4::new(level),

@@ -24,11 +24,11 @@
 #![allow(dead_code)] // visualizer component helpers; some methods reserved
 
 use embedded_graphics::prelude::*;
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565};
 use embedded_graphics::primitives::PrimitiveStyle;
 use embedded_graphics::mono_font::iso_8859_13::FONT_5X8;
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
-use crate::display::color_proxy::{ColorProxy, MonoProxy, Gray4Proxy, Pal16};
+use crate::display::color_proxy::{ColorProxy, MonoProxy, Gray4Proxy, Rgb565Proxy, Pal16};
 use crate::display::layout::LayoutConfig;
 use crate::visualizer::Visualizer;
 use crate::visualization::{Visualization, Visual, SvgColorDepth};
@@ -342,6 +342,49 @@ impl VisualizerComponent {
                 )
             }
             _ => Ok(false) // Other types not yet implemented
+        }
+    }
+
+    /// Render the visualizer (Rgb565 full-color version)
+    pub fn render_rgb565<D>(&mut self, target: &mut D) -> Result<bool, D::Error>
+    where
+        D: DrawTarget<Color = Rgb565> + OriginDimensions + 'static,
+    {
+        let viz_mut = &mut self.viz;
+        match self.visualization_type {
+            Visualization::PeakMono => {
+                Self::draw_peak_mono(target, viz_mut, self.viz_state.this.db_m, self.viz_state.this.hold_m, &mut self.viz_state)
+            }
+            Visualization::PeakStereo => {
+                Self::draw_peak_stereo(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, self.viz_state.this.hold_l, self.viz_state.this.hold_r, &mut self.viz_state)
+            }
+            Visualization::HistMono => {
+                Self::draw_hist_mono::<D, Rgb565Proxy>(target, viz_mut, self.viz_state.last_bands_m.clone(), &mut self.viz_state)
+            }
+            Visualization::HistStereo => {
+                Self::draw_hist_pair::<D, Rgb565Proxy>(target, viz_mut, self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone(), &mut self.viz_state)
+            }
+            Visualization::VuMono => {
+                Self::draw_vu_mono(target, viz_mut, self.viz_state.this.db_m, &mut self.viz_state)
+            }
+            Visualization::VuStereo => {
+                Self::draw_vu_stereo(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, &mut self.viz_state)
+            }
+            Visualization::VuAio => {
+                let (db_m, db_l, db_r) = (self.viz_state.this.db_m, self.viz_state.this.db_l, self.viz_state.this.db_r);
+                Self::draw_aio_vu::<D, Rgb565Proxy>(target, viz_mut, db_m, db_l, db_r, &mut self.viz_state)
+            }
+            Visualization::HistAio => {
+                let (bands, bands_l, bands_r) = (self.viz_state.last_bands_m.clone(), self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone());
+                Self::draw_aio_hist::<D, Rgb565Proxy>(target, viz_mut, bands, bands_l, bands_r, &mut self.viz_state)
+            }
+            Visualization::WaveformSpectrum => {
+                Self::draw_waveform_spectrum::<D, Rgb565Proxy>(target, self.viz_state.last_waveform_l.clone(), self.viz_state.last_waveform_r.clone(), Vec::new(), &mut self.viz_state, &self.layout)
+            }
+            Visualization::VuStereoWithCenterPeak => {
+                Self::draw_vu_combi(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, self.viz_state.this.db_m, self.viz_state.this.hold_m, &mut self.viz_state)
+            }
+            _ => Ok(false)
         }
     }
 
@@ -701,7 +744,6 @@ impl VisualizerComponent {
 
         let l_offset = waveform_height / 4;
         let r_offset = (waveform_height * 3) / 4;
-
         for (x, (&l, &r)) in waveform_l.iter().zip(waveform_r.iter()).enumerate() {
             if x >= display_width { break; }
 
