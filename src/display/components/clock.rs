@@ -94,9 +94,11 @@ impl ClockDisplay {
         }
     }
 
-    // rework so we pass color generic and DRY this up
-    /// Render the clock display with specified color
-    pub fn render<D>(&self, target: &mut D, color: BinaryColor) -> Result<(), D::Error>
+    /// Render the clock display with specified color.
+    ///
+    /// `y_start` is the top-left Y of the `clock_digits` layout field —
+    /// determined at layout-creation time so digits never overlap the progress bar.
+    pub fn render<D>(&self, target: &mut D, y_start: i32, color: BinaryColor) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = BinaryColor>,
     {
@@ -108,7 +110,7 @@ impl ClockDisplay {
 
         // Get display dimensions from layout
         let w = self.layout.width;
-        let h = self.layout.height;
+        let _h = self.layout.height;
 
         // Format time into HH:MM string
         let hours_str = format!("{:02}", current_time.format("%H"));
@@ -127,7 +129,7 @@ impl ClockDisplay {
         ];
 
         let digit_width = self.clock_font.digit_width as i32;
-        let digit_height = self.clock_font.digit_height as i32;
+        let _digit_height = self.clock_font.digit_height as i32;
 
         // Constants for spacing (from original code)
         const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
@@ -139,170 +141,9 @@ impl ClockDisplay {
                                              CLOCK_COLON_MINUTE_GAP +          // Colon-M1 gap
                                              CLOCK_DIGIT_GAP_HORIZONTAL;       // M1-M2 gap
 
-        if total_clock_visual_width > w as i32{
-            total_clock_visual_width = w as i32;
-        }
-                                             // Calculate Y position to center the clock vertically
-        // this should be coming from field definition
-        let clock_y_start = ((h as i32 - (digit_height+2)) / 2).max(0);
-
-        // Calculate X positions for horizontal centering
-        let clock_x_start: i32 = (w as i32 - total_clock_visual_width) / 2;
-
-        let x_positions: [i32; 5] = [
-            clock_x_start, // H1
-            clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL, // H2
-            clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2), // Colon
-            clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP, // M1
-            clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP, // M2
-        ];
-
-        // Draw each digit
-        for i in 0..5 {
-            let current_char = time_chars[i];
-            let x_offset = x_positions[i];
-            let y_offset = clock_y_start;
-
-            // Clear the digit area
-            EgRectangle::new(
-                Point::new(x_offset, y_offset),
-                Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
-            )
-            .into_styled(PrimitiveStyleBuilder::new()
-                .fill_color(BinaryColor::Off)
-                .build())
-            .draw(target)?;
-
-            // Draw the clock character using the font bitmap with specified color
-            self.draw_clock_char(target, current_char, x_offset, y_offset, color)?;
-        }
-
-        Ok(())
-    }
-
-    /// Render the clock display on grayscale displays with specified color
-    pub fn render_gray4<D>(&self, target: &mut D, color: Gray4) -> Result<(), D::Error>
-    where
-        D: DrawTarget<Color = Gray4>,
-    {
-        use embedded_graphics::prelude::*;
-        use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
-        use chrono::Local;
-
-        let current_time = Local::now();
-
-        // Get display dimensions from layout
-        let w = self.layout.width;
-        let h = self.layout.height;
-
-        // Format time into HH:MM string
-        let hours_str = format!("{:02}", current_time.format("%H"));
-        let minutes_str = format!("{:02}", current_time.format("%M"));
-
-        // Determine colon state for blinking
-        let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
-        let colon_on = current_second % 2 == 0;
-
-        let time_chars: [char; 5] = [
-            hours_str.chars().nth(0).unwrap_or('0'),
-            hours_str.chars().nth(1).unwrap_or('0'),
-            if colon_on { ':' } else { ' ' },
-            minutes_str.chars().nth(0).unwrap_or('0'),
-            minutes_str.chars().nth(1).unwrap_or('0'),
-        ];
-
-        let digit_width = self.clock_font.digit_width as i32;
-        let digit_height = self.clock_font.digit_height as i32;
-
-        // Constants for spacing (from original code)
-        const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
-        const CLOCK_COLON_MINUTE_GAP: i32 = 1;
-
-        // Calculate total width of clock digits
-        let mut total_clock_visual_width: i32 = (digit_width * 5) +
-                                             CLOCK_DIGIT_GAP_HORIZONTAL * 2 + // H-H and H-Colon gaps
-                                             CLOCK_COLON_MINUTE_GAP +          // Colon-M1 gap
-                                             CLOCK_DIGIT_GAP_HORIZONTAL;       // M1-M2 gap
-
-        if total_clock_visual_width > w as i32{
-            total_clock_visual_width = w as i32;
-        }
-
-        // Center the clock horizontally and vertically in the layout
-        let clock_x_start = ((w as i32) - total_clock_visual_width) / 2;
-        let clock_y_start = ((h as i32) - digit_height) / 2;
-
-        // Calculate x positions for each digit
-        let x_positions: [i32; 5] = [
-            clock_x_start, // H1
-            clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL, // H2
-            clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2), // Colon
-            clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP, // M1
-            clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP, // M2
-        ];
-
-        // Draw each digit
-        for i in 0..5 {
-            let current_char = time_chars[i];
-            let x_offset = x_positions[i];
-            let y_offset = clock_y_start;
-
-            // Clear the digit area (black background)
-            EgRectangle::new(
-                Point::new(x_offset, y_offset),
-                Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
-            )
-            .into_styled(PrimitiveStyleBuilder::new()
-                .fill_color(Gray4::BLACK)
-                .build())
-            .draw(target)?;
-
-            // Draw the clock character using the font bitmap with specified color
-            self.draw_clock_char_gray4(target, current_char, x_offset, y_offset, color)?;
-        }
-
-        Ok(())
-    }
-
-    /// Render the clock display on Rgb565 displays with specified colour
-    pub fn render_rgb565<D>(&self, target: &mut D, color: Rgb565) -> Result<(), D::Error>
-    where
-        D: DrawTarget<Color = Rgb565>,
-    {
-        use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
-        use chrono::Local;
-
-        let current_time = Local::now();
-        let w = self.layout.width;
-        let h = self.layout.height;
-
-        let hours_str   = format!("{:02}", current_time.format("%H"));
-        let minutes_str = format!("{:02}", current_time.format("%M"));
-        let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
-        let colon_on = current_second % 2 == 0;
-
-        let time_chars: [char; 5] = [
-            hours_str.chars().nth(0).unwrap_or('0'),
-            hours_str.chars().nth(1).unwrap_or('0'),
-            if colon_on { ':' } else { ' ' },
-            minutes_str.chars().nth(0).unwrap_or('0'),
-            minutes_str.chars().nth(1).unwrap_or('0'),
-        ];
-
-        let digit_width  = self.clock_font.digit_width as i32;
-        let digit_height = self.clock_font.digit_height as i32;
-        const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
-        const CLOCK_COLON_MINUTE_GAP: i32 = 1;
-
-        let mut total_clock_visual_width: i32 = (digit_width * 5)
-            + CLOCK_DIGIT_GAP_HORIZONTAL * 2
-            + CLOCK_COLON_MINUTE_GAP
-            + CLOCK_DIGIT_GAP_HORIZONTAL;
         if total_clock_visual_width > w as i32 { total_clock_visual_width = w as i32; }
 
-        let clock_x_start = ((w as i32) - total_clock_visual_width) / 2;
-        let clock_y_start = ((h as i32) - digit_height) / 2;
-
+        let clock_x_start: i32 = (w as i32 - total_clock_visual_width) / 2;
         let x_positions: [i32; 5] = [
             clock_x_start,
             clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
@@ -313,37 +154,130 @@ impl ClockDisplay {
 
         for i in 0..5 {
             EgRectangle::new(
-                Point::new(x_positions[i], clock_y_start),
+                Point::new(x_positions[i], y_start),
+                Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
+            )
+            .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
+            .draw(target)?;
+            self.draw_clock_char(target, time_chars[i], x_positions[i], y_start, color)?;
+        }
+        Ok(())
+    }
+
+    /// Render the clock display on grayscale displays with specified color.
+    pub fn render_gray4<D>(&self, target: &mut D, y_start: i32, color: Gray4) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Gray4>,
+    {
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
+        use chrono::Local;
+
+        let current_time = Local::now();
+        let w = self.layout.width;
+        let hours_str   = format!("{:02}", current_time.format("%H"));
+        let minutes_str = format!("{:02}", current_time.format("%M"));
+        let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
+        let colon_on = current_second % 2 == 0;
+        let time_chars: [char; 5] = [
+            hours_str.chars().nth(0).unwrap_or('0'),
+            hours_str.chars().nth(1).unwrap_or('0'),
+            if colon_on { ':' } else { ' ' },
+            minutes_str.chars().nth(0).unwrap_or('0'),
+            minutes_str.chars().nth(1).unwrap_or('0'),
+        ];
+        let digit_width = self.clock_font.digit_width as i32;
+        const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
+        const CLOCK_COLON_MINUTE_GAP: i32 = 1;
+        let mut total_w = (digit_width * 5) + CLOCK_DIGIT_GAP_HORIZONTAL * 2
+            + CLOCK_COLON_MINUTE_GAP + CLOCK_DIGIT_GAP_HORIZONTAL;
+        if total_w > w as i32 { total_w = w as i32; }
+        let clock_x_start = (w as i32 - total_w) / 2;
+        let x_positions: [i32; 5] = [
+            clock_x_start,
+            clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
+            clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2),
+            clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
+            clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
+        ];
+        for i in 0..5 {
+            EgRectangle::new(
+                Point::new(x_positions[i], y_start),
+                Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
+            )
+            .into_styled(PrimitiveStyleBuilder::new().fill_color(Gray4::BLACK).build())
+            .draw(target)?;
+            self.draw_clock_char_gray4(target, time_chars[i], x_positions[i], y_start, color)?;
+        }
+        Ok(())
+    }
+
+    /// Render the clock display on Rgb565 displays with specified colour.
+    pub fn render_rgb565<D>(&self, target: &mut D, y_start: i32, color: Rgb565) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Rgb565>,
+    {
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
+        use chrono::Local;
+
+        let current_time = Local::now();
+        let w = self.layout.width;
+        let hours_str   = format!("{:02}", current_time.format("%H"));
+        let minutes_str = format!("{:02}", current_time.format("%M"));
+        let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
+        let colon_on = current_second % 2 == 0;
+        let time_chars: [char; 5] = [
+            hours_str.chars().nth(0).unwrap_or('0'),
+            hours_str.chars().nth(1).unwrap_or('0'),
+            if colon_on { ':' } else { ' ' },
+            minutes_str.chars().nth(0).unwrap_or('0'),
+            minutes_str.chars().nth(1).unwrap_or('0'),
+        ];
+        let digit_width = self.clock_font.digit_width as i32;
+        const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
+        const CLOCK_COLON_MINUTE_GAP: i32 = 1;
+        let mut total_w = (digit_width * 5) + CLOCK_DIGIT_GAP_HORIZONTAL * 2
+            + CLOCK_COLON_MINUTE_GAP + CLOCK_DIGIT_GAP_HORIZONTAL;
+        if total_w > w as i32 { total_w = w as i32; }
+        let clock_x_start = (w as i32 - total_w) / 2;
+        let x_positions: [i32; 5] = [
+            clock_x_start,
+            clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
+            clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2),
+            clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
+            clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
+        ];
+        for i in 0..5 {
+            EgRectangle::new(
+                Point::new(x_positions[i], y_start),
                 Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
             )
             .into_styled(PrimitiveStyleBuilder::new().fill_color(Rgb565::BLACK).build())
             .draw(target)?;
-
-            self.draw_clock_char_rgb565(target, time_chars[i], x_positions[i], clock_y_start, color)?;
+            self.draw_clock_char_rgb565(target, time_chars[i], x_positions[i], y_start, color)?;
         }
-
         Ok(())
     }
 
-    /// Draw a single clock character on Rgb565 display with specified colour
+    /// Draw a single clock character on Rgb565 display with specified color
     fn draw_clock_char_rgb565<D>(&self, target: &mut D, c: char, x: i32, y: i32, color: Rgb565) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        use embedded_graphics::image::GetPixel;
-
-        if let Some(image_raw) = self.clock_font.get_char_image_raw(c) {
+        if let Some(alpha) = self.clock_font.get_char_alpha(c) {
             let width  = self.clock_font.digit_width;
             let height = self.clock_font.digit_height;
+            let (r5, g6, b5) = (color.r(), color.g(), color.b());
             for dy in 0..height {
                 for dx in 0..width {
-                    if let Some(pixel_color) = image_raw.pixel(Point::new(dx as i32, dy as i32)) {
-                        if pixel_color == BinaryColor::On {
-                            target.draw_iter(core::iter::once(Pixel(
-                                Point::new(x + dx as i32, y + dy as i32),
-                                color,
-                            )))?;
-                        }
+                    let a = alpha[(dy * width + dx) as usize];
+                    if a > 0 {
+                        let blend = |ch: u8, max: u8| -> u8 { ((ch as u32 * a as u32 / 255) as u8).min(max) };
+                        target.draw_iter(core::iter::once(Pixel(
+                            Point::new(x + dx as i32, y + dy as i32),
+                            Rgb565::new(blend(r5, 31), blend(g6, 63), blend(b5, 31)),
+                        )))?;
                     }
                 }
             }
@@ -352,19 +286,24 @@ impl ClockDisplay {
     }
 
     /// Draw a single clock character at the specified position
-    fn draw_clock_char<D>(&self, target: &mut D, c: char, x: i32, y: i32, color: BinaryColor) -> Result<(), D::Error>
+    fn draw_clock_char<D>(&self, target: &mut D, c: char, x: i32, y: i32, _color: BinaryColor) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = BinaryColor>,
     {
-        use embedded_graphics::prelude::*;
-        use embedded_graphics::image::Image;
-
-        // Get the image for this character from the clock font
-        if let Some(image_raw) = self.clock_font.get_char_image_raw(c) {
-            let _ = color; // BinaryColor has no actual colour — always On
-            Image::new(&image_raw, Point::new(x, y)).draw(target)?;
+        if let Some(alpha) = self.clock_font.get_char_alpha(c) {
+            let width  = self.clock_font.digit_width;
+            let height = self.clock_font.digit_height;
+            for dy in 0..height {
+                for dx in 0..width {
+                    if alpha[(dy * width + dx) as usize] >= 128 {
+                        target.draw_iter(core::iter::once(Pixel(
+                            Point::new(x + dx as i32, y + dy as i32),
+                            BinaryColor::On,
+                        )))?;
+                    }
+                }
+            }
         }
-
         Ok(())
     }
 
@@ -373,33 +312,23 @@ impl ClockDisplay {
     where
         D: DrawTarget<Color = Gray4>,
     {
-        use embedded_graphics::prelude::*;
-        
-        use embedded_graphics::image::GetPixel;
-
-        // Get the image for this character from the clock font
-        if let Some(image_raw) = self.clock_font.get_char_image_raw(c) {
-            // Manually convert BinaryColor pixels to specified Gray4 color
-            // ImageRaw is stored as packed bits, so we need to iterate and convert
-            let width = self.clock_font.digit_width;
+        if let Some(alpha) = self.clock_font.get_char_alpha(c) {
+            let width  = self.clock_font.digit_width;
             let height = self.clock_font.digit_height;
-
+            let luma = color.luma(); // 0–15
             for dy in 0..height {
                 for dx in 0..width {
-                    let px = Point::new(dx as i32, dy as i32);
-                    if let Some(pixel_color) = image_raw.pixel(px) {
-                        if pixel_color == BinaryColor::On {
-                            // Draw pixel with specified color on grayscale display
-                            target.draw_iter(core::iter::once(Pixel(
-                                Point::new(x + dx as i32, y + dy as i32),
-                                color,
-                            )))?;
-                        }
+                    let a = alpha[(dy * width + dx) as usize];
+                    if a > 0 {
+                        let level = (luma as u32 * a as u32 / 255) as u8;
+                        target.draw_iter(core::iter::once(Pixel(
+                            Point::new(x + dx as i32, y + dy as i32),
+                            Gray4::new(level),
+                        )))?;
                     }
                 }
             }
         }
-
         Ok(())
     }
 

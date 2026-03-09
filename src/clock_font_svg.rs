@@ -37,7 +37,6 @@
 
 #![allow(dead_code)]
 
-use embedded_graphics::{image::ImageRaw, pixelcolor::BinaryColor};
 use log::{info, warn};
 use std::io::Read;
 
@@ -56,23 +55,25 @@ const SVG_HEIGHT: u32 = 44;
 const SIZE_NORMAL: (u32, u32) = (25, 44);   // height ≤ 70
 const SIZE_LARGE:  (u32, u32) = (60, 105);  // height > 70 (ST7789)
 
-/// Clock font with SVG-rendered 1bpp character bitmaps.
+/// Clock font with SVG-rendered alpha-channel character masks.
+///
+/// Each character is stored as `digit_width * digit_height` bytes,
+/// one alpha value (0–255) per pixel, row-major.  This preserves the
+/// anti-aliasing produced by the SVG renderer so that gray4 and Rgb565
+/// displays get smooth edges, while BinaryColor displays threshold at 127.
 ///
 /// Owns all pixel data — no lifetime parameter.
-/// Drop-in replacement for the binary ClockFontData.
 pub struct ClockFontData {
     pub digit_width:  u32,
     pub digit_height: u32,
-    /// 1bpp packed pixel data, MSB-first, row-major.
+    /// Alpha-per-pixel: `digit_width * digit_height` bytes per character.
     /// [0..9] = digits, [10] = colon, [11] = space, [12] = minus.
     chars: [Vec<u8>; CHAR_COUNT],
 }
 
 impl ClockFontData {
-    /// Return an `ImageRaw<BinaryColor>` for the given character.
-    ///
-    /// Borrows from self — same interface as the binary implementation.
-    pub fn get_char_image_raw(&self, c: char) -> Option<ImageRaw<'_, BinaryColor>> {
+    /// Return the alpha mask for `c` as a flat slice (`w * h` bytes).
+    pub fn get_char_alpha(&self, c: char) -> Option<&[u8]> {
         let data = match c {
             '0'..='9' => &self.chars[c as usize - '0' as usize],
             ':'       => &self.chars[IDX_COLON],
@@ -80,23 +81,23 @@ impl ClockFontData {
             '-'       => &self.chars[IDX_MINUS],
             _         => return None,
         };
-        Some(ImageRaw::<BinaryColor>::new(data, self.digit_width))
+        Some(data.as_slice())
     }
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/// Render `svg_bytes` at `(width, height)` → packed 1bpp, MSB-first, row-major.
+/// Render `svg_bytes` at `(width, height)` → alpha channel, one byte per pixel, row-major.
 ///
-/// A pixel is "on" when the rendered alpha channel exceeds 127.
-fn render_svg_to_1bpp(svg_bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
+/// Preserves anti-aliasing for smooth rendering on gray4 and Rgb565 displays.
+/// BinaryColor callers threshold at 127.
+fn render_svg_to_alpha(svg_bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
     let opt = usvg::Options::default();
     let tree = match usvg::Tree::from_data(svg_bytes, &opt) {
         Ok(t) => t,
         Err(e) => {
             warn!("SVG parse error: {}", e);
-            let row_bytes = ((width + 7) / 8) as usize;
-            return vec![0u8; row_bytes * height as usize];
+            return vec![0u8; (width * height) as usize];
         }
     };
 
@@ -104,29 +105,19 @@ fn render_svg_to_1bpp(svg_bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
         Some(p) => p,
         None => {
             warn!("Failed to create pixmap {}x{}", width, height);
-            let row_bytes = ((width + 7) / 8) as usize;
-            return vec![0u8; row_bytes * height as usize];
+            return vec![0u8; (width * height) as usize];
         }
     };
 
     let sx = width  as f32 / tree.size().width();
     let sy = height as f32 / tree.size().height();
-    let transform = tiny_skia::Transform::from_scale(sx, sy);
-    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    resvg::render(&tree, tiny_skia::Transform::from_scale(sx, sy), &mut pixmap.as_mut());
 
-    // Convert RGBA8 → packed 1bpp (alpha > 127 → bit set, MSB first)
-    let row_bytes = ((width + 7) / 8) as usize;
-    let mut out = vec![0u8; row_bytes * height as usize];
+    // Extract alpha channel only (index 3 of each RGBA pixel)
     let rgba = pixmap.data();
-    for y in 0..height as usize {
-        for x in 0..width as usize {
-            let alpha = rgba[(y * width as usize + x) * 4 + 3];
-            if alpha > 127 {
-                out[y * row_bytes + x / 8] |= 0x80 >> (x % 8);
-            }
-        }
-    }
-    out
+    (0..(width * height) as usize)
+        .map(|i| rgba[i * 4 + 3])
+        .collect()
 }
 
 /// Name mapping: character → filename stem suffix used inside the zip.
@@ -161,15 +152,15 @@ fn load_from_zip(font_name: &str, width: u32, height: u32) -> Option<[Vec<u8>; C
             Ok(mut entry) => {
                 let mut svg_bytes = Vec::new();
                 if entry.read_to_end(&mut svg_bytes).is_ok() {
-                    chars[idx] = render_svg_to_1bpp(&svg_bytes, width, height);
+                    chars[idx] = render_svg_to_alpha(&svg_bytes, width, height);
                 } else {
                     warn!("Failed to read {} from zip", entry_name);
-                    chars[idx] = vec![0u8; ((width + 7) / 8) as usize * height as usize];
+                    chars[idx] = vec![0u8; (width * height) as usize];
                 }
             }
             Err(_) => {
                 warn!("Entry {} not found in {}", entry_name, path);
-                chars[idx] = vec![0u8; ((width + 7) / 8) as usize * height as usize];
+                chars[idx] = vec![0u8; (width * height) as usize];
             }
         }
     }
@@ -183,7 +174,7 @@ fn load_from_zip(font_name: &str, width: u32, height: u32) -> Option<[Vec<u8>; C
 ///
 /// Supported fonts (zip files in `./data/`):
 ///   7seg, dejavu, dotty, gawker, grandes, ledreal,
-///   marvel, moomy, noto, popins, roboto
+///   marvel, moomy, noto, poppins, roboto
 ///
 /// Falls back to `7seg` if the requested font cannot be loaded.
 pub fn set_clock_font(font_name: &str, display_height: u32) -> ClockFontData {

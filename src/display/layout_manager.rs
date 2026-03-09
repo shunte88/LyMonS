@@ -224,20 +224,19 @@ impl LayoutManager {
         let width_adj = width-4;
         let border_adj = 2;
 
-        // Constants from original code
-        // need to convert this to use SVG for the clock fonts
-        // preferably before we release alpha
-        const CLOCK_DIGIT_HEIGHT: i32 = 44; // custom font height
-        const CLOCK_DIGIT_WIDTH: i32 = 25; // custom font width
-        const PROGRESS_BAR_HEIGHT: i32 = 6;
-        const CLOCK_PROGRESS_BAR_GAP: i32 = 4;
+        const PROGRESS_BAR_HEIGHT: i32 = 4;
+        const CLOCK_PROGRESS_BAR_GAP: i32 = 2; // gap between digit bottom and progress bar
         const PROGRESS_BAR_DATE_GAP: i32 = 2;
         const DATE_FONT_HEIGHT: i32 = 10;
 
-        // Start clock at top of display (no offset)
-        let clock_y_start = border_adj;
+        // Digit size matches the SVG font render size (see clock_font_svg SIZE_LARGE/NORMAL)
+        let digit_h: i32 = if height > 70 { 105 } else { 44 };
+        let digit_w: i32 = if height > 70 { 60 } else { 25 };
+
+        // Bottom-up: anchor date at bottom, progress bar above it, digits 2px above that
         let date_y = height.saturating_sub(PROGRESS_BAR_DATE_GAP as u32 + DATE_FONT_HEIGHT as u32) as i32;
-        let progress_bar_y = date_y.saturating_sub(CLOCK_PROGRESS_BAR_GAP as i32);
+        let progress_bar_y = date_y - PROGRESS_BAR_HEIGHT - PROGRESS_BAR_DATE_GAP;
+        let clock_y_start = (progress_bar_y - CLOCK_PROGRESS_BAR_GAP - digit_h).max(border_adj);
  
         PageLayout::new("clock")
             // metrics if requested (centered)
@@ -251,23 +250,23 @@ impl LayoutManager {
                 )
                 .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
             )
-            // Clock digits - custom font with 2px border (orange color)
+            // Clock digits — SVG font, sized to display capability
             .add_field(
                 Field::new_custom(
                     "clock_digits",
                     Rectangle::new(
                         Point::new(border_adj, clock_y_start),
-                        Size::new(width_adj, CLOCK_DIGIT_HEIGHT as u32))
+                        Size::new(digit_w as u32, digit_h as u32))
                 )
                 .colors(Color::Orange, None)
             )
-            // Seconds progress bar (full width)
+            // Seconds progress bar (full width, 2px gap below digits)
             .add_field(
                 Field::new_custom(
                     "seconds_progress",
                     Rectangle::new(
-                        Point::new(border_adj, progress_bar_y), 
-                        Size::new(width_adj, PROGRESS_BAR_HEIGHT as u32 - 2))
+                        Point::new(border_adj, progress_bar_y),
+                        Size::new(width_adj, PROGRESS_BAR_HEIGHT as u32))
                 )
             )
             // Date at bottom (centered, cyan color)

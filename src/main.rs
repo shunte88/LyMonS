@@ -826,7 +826,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "dejavu",
             "dotty",
             "gawker",
-            "grandes",
             "ledreal",
             "marvel",
             "moomy",

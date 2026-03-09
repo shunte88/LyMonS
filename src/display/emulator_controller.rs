@@ -66,7 +66,7 @@ pub struct EmulatorDisplayController {
     last_clock_digits: [char; 5],
     colon_on: bool,
     last_colon_toggle_time: Instant,
-    clock_font: ClockFontData<'static>,
+    clock_font: ClockFontData,
     last_second_drawn: f32,
     last_date_drawn: String,
 
@@ -99,7 +99,7 @@ impl EmulatorDisplayController {
         DisplayDriver::init(&mut driver)?;
 
         let scroll_mode_enum = transform_scroll_mode(scroll_mode);
-        let clock_font_data = set_clock_font(clock_font);
+        let clock_font_data = set_clock_font(clock_font, driver.size().height);
         let easter_egg = set_easter_egg(egg_name);
 
         Ok(Self {

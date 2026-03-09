@@ -1322,7 +1322,7 @@ impl DisplayManager {
                         }
                         "clock_digits" => {
                             // Clock renders digits with field color (e.g., green)
-                            self.clock_display.render(fb, field.fg_binary())
+                            self.clock_display.render(fb, field.position().y, field.fg_binary())
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1391,7 +1391,7 @@ impl DisplayManager {
                         }
                         "clock_digits" => {
                             // Clock renders digits with field color (e.g., green → gray4 value 8)
-                            self.clock_display.render_gray4(fb, field.fg_color.to_gray4())
+                            self.clock_display.render_gray4(fb, field.position().y, field.fg_color.to_gray4())
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1452,7 +1452,7 @@ impl DisplayManager {
                         }
                         "clock_digits" => {
                             use crate::display::color_proxy::ConvertColor;
-                            self.clock_display.render_rgb565(fb, field.fg_color.to_color())
+                            self.clock_display.render_rgb565(fb, field.position().y, field.fg_color.to_color())
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
