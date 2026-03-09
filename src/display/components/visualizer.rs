@@ -561,8 +561,6 @@ impl VisualizerComponent {
         let mut bar_w = (stride - 1).max(1);
         if n <= 4 && w > n { stride = w / n; bar_w = stride-1; }
 
-        println!("w:{w:>3} h:{h:3} n:{n:>2} stride:{stride:>3} bar_w:{bar_w:>3}");
-
         let max_level = PEAK_METER_LEVELS_MAX as u32;
         let h_u = (panel_size.height as u32).saturating_sub(2);
 
