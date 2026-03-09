@@ -52,6 +52,7 @@ pub const EGGS_TYPE_TECHNICS: u8 = 90;
 pub const EGGS_TYPE_TUBEAMP: u8 = 100;
 pub const EGGS_TYPE_TVTIME: u8 = 110;
 pub const EGGS_TYPE_VCR: u8 = 120;
+pub const EGGS_TYPE_BLACKFLY: u8 = 130;
 pub const EGGS_TYPE_UNKNOWN: u8 = 255;
 
 pub const NO_WIDE_ASSETS: [u8; 1] = [EGGS_TYPE_CASSETTE];
@@ -169,6 +170,22 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 false,
                 Rectangle::new(Point::new(80,timepos), Size::new(48,12)),
                 false,
+            )
+        },
+        "blackfly" => {
+            let xpos = 70;
+            let tw = 128 - xpos as u32 - 2;
+            Eggs::new(
+                EGGS_TYPE_BLACKFLY,
+                "./assets/blackfly_faustus.svg",
+                Rectangle::new(Point::zero(), Size::new(128,64)),
+                Rectangle::new(Point::new(xpos,ypos), Size::new(tw,58)), 
+                Rectangle::new(Point::zero(), Size::new(0,0)),
+                0.0, 
+                0.0, 
+                true,
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
+                true,
             )
         },
         "cassette" => {

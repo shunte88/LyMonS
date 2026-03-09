@@ -839,6 +839,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .help("Easter Egg Animation")
         .value_parser(
             ["bass",
+            "blackfly",
             "cassette",
             "ibmpc",
             "moog",

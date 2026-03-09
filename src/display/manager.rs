@@ -3611,9 +3611,9 @@ impl DisplayManager {
         use crate::eggs::set_easter_egg;
 
         let egg_names = [
-            "bass", "cassette", "ibmpc", "moog", "pipboy", "reel2reel",
-            "radio40", "radio50", "scope", "technics", "tubeamp",
-            "tvtime", "vcr", "none"
+            "bass", "blackfly", "cassette", "ibmpc", "moog", "pipboy",
+            "reel2reel", "radio40", "radio50", "scope", "technics", 
+            "tubeamp", "tvtime", "vcr", "none"
         ];
 
         // Find current egg name
