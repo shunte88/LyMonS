@@ -1,6 +1,6 @@
 [package]
 name = "LyMonS"
-version = "0.3.8"
+version = "0.4.0"
 edition = "2024"
 
 [workspace]
@@ -47,6 +47,7 @@ rand = "0.9.2"
 mac_address = "1.1.8"
 arrayvec = "0.7.6"  # For stack-allocated strings in hot paths
 regex = "1.10.3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Plugin system for dynamic driver loading
 libloading = { version = "0.8", optional = true }

@@ -220,10 +220,13 @@ impl LayoutManager {
     /// Create the clock page layout
     pub fn create_clock_page(&self) -> PageLayout {
         let width = self.layout_config.width;
+        let height = self.layout_config.height;
         let width_adj = width-4;
         let border_adj = 2;
 
         // Constants from original code
+        // need to convert this to use SVG for the clock fonts
+        // preferably before we release alpha
         const CLOCK_DIGIT_HEIGHT: i32 = 44; // custom font height
         const CLOCK_DIGIT_WIDTH: i32 = 25; // custom font width
         const PROGRESS_BAR_HEIGHT: i32 = 6;
@@ -233,9 +236,9 @@ impl LayoutManager {
 
         // Start clock at top of display (no offset)
         let clock_y_start = border_adj;
-        let progress_bar_y = clock_y_start + CLOCK_DIGIT_HEIGHT + CLOCK_PROGRESS_BAR_GAP;
-        let date_y = progress_bar_y + PROGRESS_BAR_HEIGHT + PROGRESS_BAR_DATE_GAP - 3;
-
+        let date_y = height.saturating_sub(PROGRESS_BAR_DATE_GAP as u32 + DATE_FONT_HEIGHT as u32) as i32;
+        let progress_bar_y = date_y.saturating_sub(CLOCK_PROGRESS_BAR_GAP as i32);
+ 
         PageLayout::new("clock")
             // metrics if requested (centered)
             .add_field(
@@ -248,7 +251,7 @@ impl LayoutManager {
                 )
                 .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
             )
-            // Clock digits - custom font with 2px border (green color)
+            // Clock digits - custom font with 2px border (orange color)
             .add_field(
                 Field::new_custom(
                     "clock_digits",
@@ -256,7 +259,7 @@ impl LayoutManager {
                         Point::new(border_adj, clock_y_start),
                         Size::new(width_adj, CLOCK_DIGIT_HEIGHT as u32))
                 )
-                .colors(Color::Green, None)
+                .colors(Color::Orange, None)
             )
             // Seconds progress bar (full width)
             .add_field(
@@ -264,7 +267,7 @@ impl LayoutManager {
                     "seconds_progress",
                     Rectangle::new(
                         Point::new(border_adj, progress_bar_y), 
-                        Size::new(width_adj, 4))
+                        Size::new(width_adj, PROGRESS_BAR_HEIGHT as u32 - 2))
                 )
             )
             // Date at bottom (centered, cyan color)

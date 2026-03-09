@@ -24,9 +24,9 @@
 #![allow(dead_code)] // clock component helpers; some constants reserved
 
 use embedded_graphics::prelude::*;
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565};
 use crate::display::layout::LayoutConfig;
-use crate::clock_font::ClockFontData;
+use crate::clock_font_svg::ClockFontData;
 use std::time::Instant;
 
 /// Clock display state
@@ -63,14 +63,14 @@ impl Default for ClockState {
 /// Clock display component
 pub struct ClockDisplay {
     state: ClockState,
-    clock_font: ClockFontData<'static>,
+    clock_font: ClockFontData,
     layout: LayoutConfig,
     metrics: bool,
 }
 
 impl ClockDisplay {
     /// Create a new clock display component
-    pub fn new(layout: LayoutConfig, clock_font: ClockFontData<'static>, metrics: bool) -> Self {
+    pub fn new(layout: LayoutConfig, clock_font: ClockFontData, metrics: bool) -> Self {
         Self {
             state: ClockState::default(),
             clock_font,
@@ -264,6 +264,93 @@ impl ClockDisplay {
         Ok(())
     }
 
+    /// Render the clock display on Rgb565 displays with specified colour
+    pub fn render_rgb565<D>(&self, target: &mut D, color: Rgb565) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Rgb565>,
+    {
+        use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
+        use chrono::Local;
+
+        let current_time = Local::now();
+        let w = self.layout.width;
+        let h = self.layout.height;
+
+        let hours_str   = format!("{:02}", current_time.format("%H"));
+        let minutes_str = format!("{:02}", current_time.format("%M"));
+        let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
+        let colon_on = current_second % 2 == 0;
+
+        let time_chars: [char; 5] = [
+            hours_str.chars().nth(0).unwrap_or('0'),
+            hours_str.chars().nth(1).unwrap_or('0'),
+            if colon_on { ':' } else { ' ' },
+            minutes_str.chars().nth(0).unwrap_or('0'),
+            minutes_str.chars().nth(1).unwrap_or('0'),
+        ];
+
+        let digit_width  = self.clock_font.digit_width as i32;
+        let digit_height = self.clock_font.digit_height as i32;
+        const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
+        const CLOCK_COLON_MINUTE_GAP: i32 = 1;
+
+        let mut total_clock_visual_width: i32 = (digit_width * 5)
+            + CLOCK_DIGIT_GAP_HORIZONTAL * 2
+            + CLOCK_COLON_MINUTE_GAP
+            + CLOCK_DIGIT_GAP_HORIZONTAL;
+        if total_clock_visual_width > w as i32 { total_clock_visual_width = w as i32; }
+
+        let clock_x_start = ((w as i32) - total_clock_visual_width) / 2;
+        let clock_y_start = ((h as i32) - digit_height) / 2;
+
+        let x_positions: [i32; 5] = [
+            clock_x_start,
+            clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
+            clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2),
+            clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
+            clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
+        ];
+
+        for i in 0..5 {
+            EgRectangle::new(
+                Point::new(x_positions[i], clock_y_start),
+                Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
+            )
+            .into_styled(PrimitiveStyleBuilder::new().fill_color(Rgb565::BLACK).build())
+            .draw(target)?;
+
+            self.draw_clock_char_rgb565(target, time_chars[i], x_positions[i], clock_y_start, color)?;
+        }
+
+        Ok(())
+    }
+
+    /// Draw a single clock character on Rgb565 display with specified colour
+    fn draw_clock_char_rgb565<D>(&self, target: &mut D, c: char, x: i32, y: i32, color: Rgb565) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Rgb565>,
+    {
+        use embedded_graphics::image::GetPixel;
+
+        if let Some(image_raw) = self.clock_font.get_char_image_raw(c) {
+            let width  = self.clock_font.digit_width;
+            let height = self.clock_font.digit_height;
+            for dy in 0..height {
+                for dx in 0..width {
+                    if let Some(pixel_color) = image_raw.pixel(Point::new(dx as i32, dy as i32)) {
+                        if pixel_color == BinaryColor::On {
+                            target.draw_iter(core::iter::once(Pixel(
+                                Point::new(x + dx as i32, y + dy as i32),
+                                color,
+                            )))?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Draw a single clock character at the specified position
     fn draw_clock_char<D>(&self, target: &mut D, c: char, x: i32, y: i32, color: BinaryColor) -> Result<(), D::Error>
     where
@@ -274,16 +361,8 @@ impl ClockDisplay {
 
         // Get the image for this character from the clock font
         if let Some(image_raw) = self.clock_font.get_char_image_raw(c) {
-            // If using default color (On), draw image directly for performance
-            if color == BinaryColor::On {
-                Image::new(image_raw, Point::new(x, y))
-                    .draw(target)?;
-            } else {
-                // For other colors on binary displays, still use On
-                // (BinaryColor only has On/Off, no actual color)
-                Image::new(image_raw, Point::new(x, y))
-                    .draw(target)?;
-            }
+            let _ = color; // BinaryColor has no actual colour — always On
+            Image::new(&image_raw, Point::new(x, y)).draw(target)?;
         }
 
         Ok(())

@@ -24,7 +24,7 @@
 #[cfg(feature = "emulator")]
 use embedded_graphics::prelude::*;
 #[cfg(feature = "emulator")]
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4};
+use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565, RgbColor};
 #[cfg(feature = "emulator")]
 use embedded_graphics::primitives::Rectangle;
 #[cfg(feature = "emulator")]
@@ -42,25 +42,26 @@ use crate::vframebuf::VarFrameBuf;
 #[cfg(feature = "emulator")]
 use std::sync::{Arc, Mutex};
 
-/// Color type for emulator (can be monochrome or grayscale)
+/// Color type for emulator (monochrome, grayscale, or full Rgb565)
 #[cfg(feature = "emulator")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EmulatorColor {
     Mono(BinaryColor),
     Gray(Gray4),
+    Rgb(u8, u8, u8),
 }
 
 #[cfg(feature = "emulator")]
 impl EmulatorColor {
     pub fn to_rgba(&self) -> [u8; 4] {
         match self {
-            EmulatorColor::Mono(BinaryColor::Off) => [0, 0, 0, 255],      // Black
-            EmulatorColor::Mono(BinaryColor::On) => [0, 255, 128, 255],   // Green (OLED color)
+            EmulatorColor::Mono(BinaryColor::Off) => [0, 0, 0, 255],
+            EmulatorColor::Mono(BinaryColor::On)  => [0, 255, 128, 255], // green OLED
             EmulatorColor::Gray(gray) => {
-                let level = gray.luma() as u8;
-                let value = (level * 17) as u8; // 0-15 -> 0-255
-                [value, value, value, 255]
+                let v = (gray.luma() as u8) * 17; // 0-15 → 0-255
+                [v, v, v, 255]
             }
+            EmulatorColor::Rgb(r, g, b) => [*r, *g, *b, 255],
         }
     }
 }
@@ -146,6 +147,7 @@ pub struct EmulatorDriver {
 enum EmulatorFramebuffer {
     Mono(VarFrameBuf<BinaryColor>),
     Gray(VarFrameBuf<Gray4>),
+    Rgb565(VarFrameBuf<Rgb565>),
 }
 
 #[cfg(feature = "emulator")]
@@ -238,6 +240,46 @@ impl EmulatorDriver {
         })
     }
 
+    /// Create a full-colour Rgb565 emulator driver (ST7789)
+    pub fn new_rgb565(width: u32, height: u32, display_type: &str) -> Result<Self, DisplayError> {
+        let capabilities = DisplayCapabilities {
+            width,
+            height,
+            color_depth: ColorDepth::Rgb565,
+            interface: BusInterface::I2c(I2cInfo {
+                default_address: 0x00,
+                alt_address: None,
+                max_speed_hz: 40_000_000,
+            }),
+            supports_rotation: true,
+            max_fps: 60,
+            supports_brightness: true,
+            supports_invert: true,
+        };
+
+        let framebuffer = EmulatorFramebuffer::Rgb565(
+            VarFrameBuf::new(width, height, Rgb565::BLACK)
+        );
+
+        let state = Arc::new(Mutex::new(EmulatorState {
+            buffer: vec![EmulatorColor::Rgb(0, 0, 0); (width * height) as usize],
+            width,
+            height,
+            brightness: 255,
+            rotation: 0,
+            inverted: false,
+            frame_count: 0,
+            display_type: display_type.to_string(),
+            requested_mode: None,
+            manual_mode_override: false,
+            current_display_mode: crate::display::DisplayMode::Clock,
+            cycle_easter_egg: false,
+            cycle_visualization: false,
+        }));
+
+        Ok(Self { framebuffer, capabilities, state })
+    }
+
     /// Create from configuration
     pub fn new(config: &DisplayConfig) -> Result<Self, DisplayError> {
         let width = config.width.unwrap_or(128);
@@ -279,6 +321,15 @@ impl EmulatorDriver {
             EmulatorFramebuffer::Gray(fb) => {
                 for (i, &pixel) in fb.as_slice().iter().enumerate() {
                     state.buffer[i] = EmulatorColor::Gray(pixel);
+                }
+            }
+            EmulatorFramebuffer::Rgb565(fb) => {
+                for (i, &pixel) in fb.as_slice().iter().enumerate() {
+                    // Expand Rgb565 components to 8-bit for window display
+                    let r = ((pixel.r() as u16 * 255) / 31) as u8;
+                    let g = ((pixel.g() as u16 * 255) / 63) as u8;
+                    let b = ((pixel.b() as u16 * 255) / 31) as u8;
+                    state.buffer[i] = EmulatorColor::Rgb(r, g, b);
                 }
             }
         }
@@ -334,6 +385,10 @@ impl DisplayDriver for EmulatorDriver {
                 fb.clear(Gray4::new(0))
                     .map_err(|_| DisplayError::Other("Failed to clear framebuffer".to_string()))?;
             }
+            EmulatorFramebuffer::Rgb565(fb) => {
+                fb.clear(Rgb565::BLACK)
+                    .map_err(|_| DisplayError::Other("Failed to clear framebuffer".to_string()))?;
+            }
         }
         self.flush()
     }
@@ -385,6 +440,27 @@ impl DisplayDriver for EmulatorDriver {
                     }
                     if pixel_idx + 1 < fb_slice.len() {
                         fb_slice[pixel_idx + 1] = Gray4::new(byte & 0x0F);
+                    }
+                }
+            }
+            EmulatorFramebuffer::Rgb565(fb) => {
+                // Big-endian Rgb565: 2 bytes per pixel
+                let expected_size = (self.capabilities.width * self.capabilities.height * 2) as usize;
+                if buffer.len() != expected_size {
+                    return Err(DisplayError::BufferSizeMismatch {
+                        expected: expected_size,
+                        actual: buffer.len(),
+                    });
+                }
+
+                let fb_slice = fb.as_mut_slice();
+                for (i, chunk) in buffer.chunks_exact(2).enumerate() {
+                    if i < fb_slice.len() {
+                        let word = ((chunk[0] as u16) << 8) | (chunk[1] as u16);
+                        let r = ((word >> 11) & 0x1F) as u8;
+                        let g = ((word >>  5) & 0x3F) as u8;
+                        let b = (word          & 0x1F) as u8;
+                        fb_slice[i] = Rgb565::new(r, g, b);
                     }
                 }
             }

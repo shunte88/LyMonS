@@ -24,7 +24,6 @@
 #![allow(dead_code)] // display manager helpers; some utility methods reserved
 
 use log::info;
-use rustfft::num_traits::Saturating;
 use std::time::Instant;
 use arrayvec::ArrayString;
 use core::fmt::Write;
@@ -51,7 +50,7 @@ use crate::display::components::{
     VisualizerComponent,
 };
 
-use crate::clock_font::{set_clock_font};
+use crate::clock_font_svg::set_clock_font;
 use crate::eggs::{Eggs, set_easter_egg};
 use crate::metrics::MachineMetrics;
 use crate::vision::LastVizState;
@@ -383,7 +382,7 @@ impl DisplayManager {
         let scroll_mode_enum = crate::textable::transform_scroll_mode(scroll_mode);
         let scrolling_text = ScrollingText::new(layout.clone(), scroll_mode_enum);
 
-        let clock_font_data = set_clock_font(clock_font);
+        let clock_font_data = set_clock_font(clock_font, layout.height);
         let clock_display = ClockDisplay::new(layout.clone(), clock_font_data, show_metrics);
 
         let weather_display = WeatherComponent::new(layout.clone());
@@ -1327,27 +1326,25 @@ impl DisplayManager {
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
-                            // Render seconds progress bar in its own field
                             use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
                             use embedded_graphics::prelude::*;
 
                             let field_pos = field.position();
                             let field_width = field.width();
                             let field_height = field.height();
+                            let bar_color = field.fg_binary();
 
-                            // Draw progress bar outline
                             EgRectangle::new(
                                 Point::new(field_pos.x, field_pos.y),
                                 Size::new(field_width, field_height),
                             )
                             .into_styled(PrimitiveStyleBuilder::new()
-                                .stroke_color(BinaryColor::On)
+                                .stroke_color(bar_color)
                                 .stroke_width(1)
                                 .build())
                             .draw(fb)
                             .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar outline".to_string()))?;
 
-                            // Draw progress bar fill (seconds)
                             let progress = (current_second as f32) / 60.0;
                             let fill_width = (((field_width - 2) as f32) * progress) as u32;
 
@@ -1357,7 +1354,7 @@ impl DisplayManager {
                                     Size::new(fill_width, field_height - 2),
                                 )
                                 .into_styled(PrimitiveStyleBuilder::new()
-                                    .fill_color(BinaryColor::On)
+                                    .fill_color(bar_color)
                                     .build())
                                 .draw(fb)
                                 .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
@@ -1398,27 +1395,25 @@ impl DisplayManager {
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
-                            // Render seconds progress bar in white
                             use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
                             use embedded_graphics::prelude::*;
 
                             let field_pos = field.position();
                             let field_width = field.width();
                             let field_height = field.height();
+                            let bar_color = field.fg_color.to_gray4();
 
-                            // Draw progress bar outline (white)
                             EgRectangle::new(
                                 Point::new(field_pos.x, field_pos.y),
                                 Size::new(field_width, field_height),
                             )
                             .into_styled(PrimitiveStyleBuilder::new()
-                                .stroke_color(Gray4::WHITE)
+                                .stroke_color(bar_color)
                                 .stroke_width(1)
                                 .build())
                             .draw(fb)
                             .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar outline".to_string()))?;
 
-                            // Draw progress bar fill (seconds)
                             let progress = (current_second as f32) / 60.0;
                             let fill_width = (((field_width - 2) as f32) * progress) as u32;
 
@@ -1428,7 +1423,7 @@ impl DisplayManager {
                                     Size::new(fill_width, field_height - 2),
                                 )
                                 .into_styled(PrimitiveStyleBuilder::new()
-                                    .fill_color(Gray4::WHITE)
+                                    .fill_color(bar_color)
                                     .build())
                                 .draw(fb)
                                 .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
@@ -1456,22 +1451,25 @@ impl DisplayManager {
                             // Already rendered above
                         }
                         "clock_digits" => {
-                            // TODO: add render_rgb565 to ClockDisplay; skipping digits for now
+                            use crate::display::color_proxy::ConvertColor;
+                            self.clock_display.render_rgb565(fb, field.fg_color.to_color())
+                                .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
                             use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
-                            use embedded_graphics::prelude::*;
+                            use crate::display::color_proxy::ConvertColor;
 
                             let field_pos = field.position();
                             let field_width = field.width();
                             let field_height = field.height();
+                            let bar_color: Rgb565 = field.fg_color.to_color();
 
                             EgRectangle::new(
                                 Point::new(field_pos.x, field_pos.y),
                                 Size::new(field_width, field_height),
                             )
                             .into_styled(PrimitiveStyleBuilder::new()
-                                .stroke_color(Rgb565::WHITE)
+                                .stroke_color(bar_color)
                                 .stroke_width(1)
                                 .build())
                             .draw(fb)
@@ -1486,7 +1484,7 @@ impl DisplayManager {
                                     Size::new(fill_width, field_height - 2),
                                 )
                                 .into_styled(PrimitiveStyleBuilder::new()
-                                    .fill_color(Rgb565::WHITE)
+                                    .fill_color(bar_color)
                                     .build())
                                 .draw(fb)
                                 .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;

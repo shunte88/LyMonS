@@ -50,7 +50,7 @@ mod metrics;
 mod const_oled;
 mod constants;
 mod glyphs;
-mod clock_font;
+mod clock_font_svg;
 mod deutils;
 mod httprpc;
 mod sliminfo;
@@ -823,13 +823,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .help("Clock font to use")
         .value_parser(
             ["7seg",
-            "holdeco",
-            "holfestus",
+            "dejavu",
+            "dotty",
+            "gawker",
+            "grandes",
+            "ledreal",
+            "marvel",
+            "moomy",
             "noto",
-            "roboto",
-            "soldeco",
-            "solfestus",
-            "space1999"]
+            "poppins",
+            "roboto"]
             )
         .default_value("7seg")
         .required(false))
@@ -1004,12 +1007,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(crate::config::DriverKind::Sh1106) => (132, 64, false, "SH1106"),
             Some(crate::config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"), // Grayscale (Gray4)
             Some(crate::config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
-            Some(crate::config::DriverKind::St7789) => (320, 170, true, "ST7789"), // Full-colour; use Gray4 emulation
+            Some(crate::config::DriverKind::St7789) => (320, 170, true, "ST7789"),
             None => (256, 64, true, "SSD1322"), // default when no driver in config
         };
 
+        let is_rgb565 = matches!(display_config.driver, Some(crate::config::DriverKind::St7789));
+
         // Create EmulatorDriver (not the actual hardware driver!)
-        let mut emulator_driver: display::BoxedDriver = if is_grayscale {
+        let mut emulator_driver: display::BoxedDriver = if is_rgb565 {
+            Box::new(EmulatorDriver::new_rgb565(width, height, display_name)?)
+        } else if is_grayscale {
             Box::new(EmulatorDriver::new_grayscale(width, height, display_name)?)
         } else {
             Box::new(EmulatorDriver::new_monochrome(width, height, display_name)?)

@@ -819,8 +819,6 @@ impl VisualizerComponent {
         D: DrawTarget<Color = P::Output> + OriginDimensions,
         P: ColorProxy,
     {
-        use embedded_graphics::primitives::Rectangle;
-
         let Size { width, height } = display.size();
         let (w, h) = (width as i32, height as i32);
 

@@ -4,6 +4,7 @@ target/
 /target
 /safe_src
 .vscode
+.venv
 *.txt
 **/*.rs.bk
 **/*.old

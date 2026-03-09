@@ -56,8 +56,23 @@ pub enum Color {
     /// Yellow (bright, maps to LightGray on grayscale displays)
     Yellow,
 
+    /// Red (maps to DarkGray on grayscale displays)
+    Red,
+
+    /// Blue (maps to DarkGray on grayscale displays)
+    Blue,
+
+    /// Orange (maps to Gray on grayscale displays)
+    Orange,
+
+    /// Magenta (maps to Gray on grayscale displays)
+    Magenta,
+
     /// Custom grayscale value (0-255)
     Grayscale(u8),
+
+    /// Arbitrary 24-bit RGB — full gamut on Rgb565 displays, luminance-mapped on others
+    Rgb(u8, u8, u8),
 }
 
 impl Color {
@@ -72,13 +87,15 @@ impl Color {
             Color::LightGray => BinaryColor::On,
             Color::Cyan => BinaryColor::On, // Cyan is a bright color
             Color::Green => BinaryColor::On, // Green is visible, maps to On
-            Color::Yellow => BinaryColor::On, // Yellow is a bright color
-            Color::Grayscale(val) => {
-                if *val >= 128 {
-                    BinaryColor::On
-                } else {
-                    BinaryColor::Off
-                }
+            Color::Yellow  => BinaryColor::On,
+            Color::Red     => BinaryColor::Off, // low luminance
+            Color::Blue    => BinaryColor::Off, // low luminance
+            Color::Orange  => BinaryColor::On,  // bright warm
+            Color::Magenta => BinaryColor::On,  // mid-bright
+            Color::Grayscale(val) => if *val >= 128 { BinaryColor::On } else { BinaryColor::Off },
+            Color::Rgb(r, g, b) => {
+                let lum = (*r as u16 * 77 + *g as u16 * 150 + *b as u16 * 29) >> 8;
+                if lum >= 128 { BinaryColor::On } else { BinaryColor::Off }
             }
         }
     }
@@ -93,8 +110,16 @@ impl Color {
             Color::White => Gray4::new(15),
             Color::Cyan => Gray4::new(11), // Map to LightGray (bright but not full white)
             Color::Green => Gray4::new(8), // Map to Gray (medium brightness, ~50%)
-            Color::Yellow => Gray4::new(12), // Map to bright gray (~80%)
+            Color::Yellow  => Gray4::new(12),
+            Color::Red     => Gray4::new(4),   // dark — low luminance
+            Color::Blue    => Gray4::new(3),   // darkest — minimal luminance
+            Color::Orange  => Gray4::new(10),  // warm mid-bright
+            Color::Magenta => Gray4::new(8),   // mid gray
             Color::Grayscale(val) => Gray4::new(((*val as u16 * 15) / 255) as u8),
+            Color::Rgb(r, g, b) => {
+                let lum = (*r as u16 * 77 + *g as u16 * 150 + *b as u16 * 29) >> 8;
+                Gray4::new(((lum * 15) / 255) as u8)
+            }
         }
     }
 
@@ -108,12 +133,17 @@ impl Color {
             Color::White          => Rgb565::new(31,  63, 31),
             Color::Cyan           => Rgb565::new(0,   63, 31),
             Color::Green          => Rgb565::new(0,   63, 0),
-            Color::Yellow         => Rgb565::new(31,  63, 0),
+            Color::Yellow         => Rgb565::new(31,  63,  0),
+            Color::Red            => Rgb565::new(31,   0,  0),
+            Color::Blue           => Rgb565::new(0,    0, 31),
+            Color::Orange         => Rgb565::new(31,  40,  0),
+            Color::Magenta        => Rgb565::new(31,   0, 31),
             Color::Grayscale(val) => {
                 let v5 = (*val >> 3) as u8;
                 let v6 = (*val >> 2) as u8;
                 Rgb565::new(v5, v6, v5)
             }
+            Color::Rgb(r, g, b)   => Rgb565::new(*r >> 3, *g >> 2, *b >> 3),
         }
     }
 
@@ -136,8 +166,15 @@ impl Color {
             Color::White => 255,
             Color::Cyan => 180, // Bright cyan (~70% luminance)
             Color::Green => 128, // Green (~50% luminance)
-            Color::Yellow => 200, // Bright yellow (~78% luminance)
+            Color::Yellow  => 200,
+            Color::Red     => 76,
+            Color::Blue    => 29,
+            Color::Orange  => 166,
+            Color::Magenta => 105,
             Color::Grayscale(val) => *val,
+            Color::Rgb(r, g, b) => {
+                ((*r as u16 * 77 + *g as u16 * 150 + *b as u16 * 29) >> 8) as u8
+            }
         }
     }
 }
