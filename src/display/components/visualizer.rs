@@ -555,10 +555,13 @@ impl VisualizerComponent {
 
         let w = panel_size.width as i32;
         let h = panel_size.height as i32;
-        let n = (bars.len() as i32 - 2).max(1);
-        let mut stride = (w / n).max(1);
+        let n = (bars.len() as i32 - 1).max(1);
+        let mut stride = num_integer::div_floor(w, n).max(1);
+        if n*stride >= w {stride -= 1;} // should never happen!
         let mut bar_w = (stride - 1).max(1);
-        if n <= 4 && w > n { stride = w / n; bar_w = stride-1; }  // ?? fix
+        if n <= 4 && w > n { stride = w / n; bar_w = stride-1; }
+
+        println!("w:{w:>3} h:{h:3} n:{n:>2} stride:{stride:>3} bar_w:{bar_w:>3}");
 
         let max_level = PEAK_METER_LEVELS_MAX as u32;
         let h_u = (panel_size.height as u32).saturating_sub(2);
@@ -566,25 +569,22 @@ impl VisualizerComponent {
         let bar_color = P::proxy(Pal16::LightCyan);
         let cap_color = P::on();
 
-        for (i, &lvl) in bars.iter().enumerate() {
-            if i > n as usize { break; }
+        for (i, (&lvl, &cap)) in bars.iter().zip(caps.iter()).enumerate() {
+            if i > n as usize - 1  { break; }
+            let x = origin.x + (i as i32) * stride;
             let level_u = (lvl as u32).min(max_level);
             let bar_h = ((level_u * h_u) / max_level) as i32;
-            if bar_h <= 0 { continue; }
-            let x = origin.x + (i as i32) * stride;
-            let y = origin.y + (h - bar_h);
-            Rectangle::new(Point::new(x, y), Size::new(bar_w as u32, bar_h as u32)).into_styled(PrimitiveStyle::with_fill(bar_color)).draw(display)?;
-        }
-
-        for (i, &lvl) in caps.iter().enumerate() {
-            if i > n as usize { break; }
-            let level_u = (lvl as u32).min(max_level);
-            let cap_h = ((level_u * h_u) / max_level) as i32;
-            if cap_h <= 0 { continue; }
-            let x = origin.x + (i as i32) * stride;
-            let mut y = origin.y + (h - cap_h) - (Self::CAP_THICKNESS_PX as i32 - 1);
-            if y < origin.y { y = origin.y; }
-            Rectangle::new(Point::new(x, y), Size::new(bar_w as u32, Self::CAP_THICKNESS_PX)).into_styled(PrimitiveStyle::with_fill(cap_color)).draw(display)?;
+            let cap_level_u = (cap as u32).min(max_level);
+            let cap_h = ((cap_level_u * h_u) / max_level) as i32;
+            if bar_h > 0 {
+                let y = origin.y + (h - bar_h);
+                Rectangle::new(Point::new(x, y), Size::new(bar_w as u32, bar_h as u32)).into_styled(PrimitiveStyle::with_fill(bar_color)).draw(display)?;
+            }
+            if cap_h > 0 {
+                let mut cy = origin.y + (h - cap_h) - (Self::CAP_THICKNESS_PX as i32 - 1);
+                if cy < origin.y { cy = origin.y; }
+                Rectangle::new(Point::new(x, cy), Size::new(bar_w as u32, Self::CAP_THICKNESS_PX)).into_styled(PrimitiveStyle::with_fill(cap_color)).draw(display)?;
+            }
         }
 
         Ok(())
@@ -837,7 +837,8 @@ impl VisualizerComponent {
         state.init = false;
 
         if state.wide {
-            // Wide: stereo histogram on right 128px
+
+            // Wide: stereo histogram on right half
             let meter_x = w / 2 + 1;
             let meter_w = w - meter_x;
             ensure_band_state(state, bands_l.len(), bands_r.len(), 0, viz);
@@ -848,10 +849,10 @@ impl VisualizerComponent {
             Self::update_caps(&mut state.cap_l, &mut state.cap_hold_until_l, &mut state.cap_last_update_l, &state.draw_bands_l, now);
             Self::update_caps(&mut state.cap_r, &mut state.cap_hold_until_r, &mut state.cap_last_update_r, &state.draw_bands_r, now);
 
-            // Clear right panel
-            Rectangle::new(Point::new(meter_x, 0), Size::new(meter_w as u32, panel_h as u32))
-                .into_styled(PrimitiveStyle::with_fill(P::off()))
-                .draw(display)?;
+            // Clear right half
+            //Rectangle::new(Point::new(meter_x, 0), Size::new(meter_w as u32, panel_h as u32))
+            //    .into_styled(PrimitiveStyle::with_fill(P::off()))
+            //    .draw(display)?;
 
             let gap = 2i32;
             let inner_w = meter_w - 2 * mx;
@@ -872,6 +873,7 @@ impl VisualizerComponent {
             )?;
 
         } else {
+
             // Narrow: mono histogram on right half
             let (_, _, meter_area_start) = aio_text_attributes(w);
             let (meter_mx, meter_my, meter_width, _) = aio_meter_attributes(meter_area_start, w, h);
@@ -882,10 +884,10 @@ impl VisualizerComponent {
             Self::update_body_decay(&mut state.draw_bands_m, &state.last_bands_m, elapsed);
             Self::update_caps(&mut state.cap_m, &mut state.cap_hold_until_m, &mut state.cap_last_update_m, &state.draw_bands_m, now);
 
-            // Clear right panel
-            Rectangle::new(Point::new(meter_area_start, 0), Size::new((w - meter_area_start) as u32, panel_h as u32))
-                .into_styled(PrimitiveStyle::with_fill(P::off()))
-                .draw(display)?;
+            // Clear right panel - draw_hist_panel takes care of cleanup
+            //Rectangle::new(Point::new(meter_area_start, 0), Size::new((w - meter_area_start) as u32, panel_h as u32))
+            //    .into_styled(PrimitiveStyle::with_fill(P::off()))
+            //    .draw(display)?;
 
             Self::draw_hist_panel::<D, P>(
                 display, "", // no label as we have the scroller

@@ -24,6 +24,7 @@
 #![allow(dead_code)] // display manager helpers; some utility methods reserved
 
 use log::info;
+use rustfft::num_traits::Saturating;
 use std::time::Instant;
 use arrayvec::ArrayString;
 use core::fmt::Write;
@@ -277,12 +278,14 @@ pub struct DisplayManager {
     pub show_remaining: bool,
     /// Audio quality level (SD=1, HD=2, DSD=3, None=0) for easter egg animations
     pub audio_level: u8,
-    /// Current artist for aio viz & easter eggs (stored separately from scrolling_text)
-    pub artist: String,
+    /// Current album artist for aio viz & easter eggs (stored separately from scrolling_text)
+    pub album_artist: String,
     /// Current album for aio viz & easter eggs (stored separately from scrolling_text)
     pub album: String,
     /// Current title for aio viz & easter eggs (stored separately from scrolling_text)
     pub title: String,
+    /// Current artist for aio viz & easter eggs (stored separately from scrolling_text)
+    pub artist: String,
     /// Performance metrics
     pub metrics: PerformanceMetrics,
     /// Pre-allocated render buffers (zero allocations in render loop!)
@@ -420,9 +423,10 @@ impl DisplayManager {
             mode_text: String::new(),
             show_remaining: false,
             audio_level: 0,
-            artist: String::new(),
+            album_artist: String::new(),
             album: String::new(),
             title: String::new(),
+            artist: String::new(),
             metrics,
             render_buffers: RenderBuffers::default(),
             weather_temp_units: String::from("C"),
@@ -2961,42 +2965,44 @@ impl DisplayManager {
         if is_wide {
             if can_widen {
                 if artist_rect.size.width != 0 {
-                    artist_rect.size.width += 128;
+                    artist_rect.size.width += self.capabilities.width / 2;
                     if artist_rect.top_left.x+artist_rect.size.width as i32 > self.capabilities.width  as i32{
                         artist_rect.size.width = self.capabilities.width - (artist_rect.top_left.x - 4) as u32 
                     }
                 }
                 if title_rect.size.width != 0 {
-                    title_rect.size.width += 128;
+                    title_rect.size.width += self.capabilities.width / 2;
                     if title_rect.top_left.x+title_rect.size.width as i32 > self.capabilities.width  as i32{
                         title_rect.size.width = self.capabilities.width - (title_rect.top_left.x - 4) as u32 
                     }
                 }
             }
             // does not fall umder can_widen rule
-            time_rect.size.width += 128;
+            time_rect.size.width += self.capabilities.width / 2;
             if time_rect.top_left.x+time_rect.size.width as i32 > self.capabilities.width  as i32{
                 time_rect.size.width = self.capabilities.width - (time_rect.top_left.x - 4) as u32 
             }
+            // and pin it to the bottom
+            time_rect.top_left.y = self.capabilities.height.saturating_sub(11) as i32;
         }
 
         // Render and draw the easter egg SVG; color depth is inferred from the framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
                 self.easter_egg
-                    .render_and_draw(fb, &self.artist, &self.title,
+                    .render_and_draw(fb, &self.artist, &self.title, &self.album_artist, &self.album,
                         self.audio_level, track_percent, self.current_track_time_secs)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
                 self.easter_egg
-                    .render_and_draw(fb, &self.artist, &self.title,
+                    .render_and_draw(fb, &self.artist, &self.title, &self.album_artist, &self.album,
                         self.audio_level, track_percent, self.current_track_time_secs)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
             }
             crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
                 self.easter_egg
-                    .render_and_draw(fb, &self.artist, &self.title,
+                    .render_and_draw(fb, &self.artist, &self.title, &self.album_artist, &self.album,
                         self.audio_level, track_percent, self.current_track_time_secs)
                     .map_err(|_| DisplayError::DrawingError("Failed to draw easter egg image".to_string()))?;
             }
@@ -3367,6 +3373,8 @@ impl DisplayManager {
         // Store for easter eggs
         self.artist = artist.clone();
         self.title = title.clone();
+        self.album_artist = album_artist.clone();
+        self.album = album.clone();
 
         // Update scrolling text component
         self.scrolling_text.set_full_track_info(
@@ -3470,6 +3478,7 @@ impl DisplayManager {
 
         Ok(())
     }
+
     /// Setup weather service with background polling
     pub async fn setup_weather(&mut self, config: &str) -> Result<(), DisplayError> {
         use crate::weather::Weather;

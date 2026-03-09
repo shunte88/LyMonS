@@ -135,6 +135,8 @@ pub struct Eggs {
     artist: String,
     title_rect: Rectangle,
     title: String,
+    album_artist: String,
+    album: String,
     combine: bool,
     low_limit: f64,
     high_limit: f64,
@@ -144,12 +146,14 @@ pub struct Eggs {
     can_widen: bool,
     groovy: AnimState,
     re: String,
+    render_scale: f32,
 }
 
 /// Loads/sets the active easter_egg
 pub fn set_easter_egg(egg_name: &str) -> Eggs {
     info!("Load egg: {}",egg_name);
     let ypos = 3;
+    let timepos = ypos + 49;
     match egg_name {
         "bass" => {
             let xpos = 4;
@@ -163,7 +167,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 48.0,
                 88.0,
                 false,
-                Rectangle::new(Point::new(46,26), Size::new(48,12)),
+                Rectangle::new(Point::new(80,timepos), Size::new(48,12)),
                 false,
             )
         },
@@ -198,7 +202,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 0.0, 
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
         },
@@ -214,7 +218,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 -10.0, 
                 0.0, 
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
         },
@@ -230,7 +234,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 0.0, 
                 false,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 false,
             )
         },
@@ -246,7 +250,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 0.0, 
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
             },
@@ -262,7 +266,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 -5.0, 
                 5.0, 
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
             },
@@ -278,7 +282,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 0.0, 
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
             },
@@ -294,7 +298,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 10.0, 
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
         },
@@ -310,7 +314,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 -10.0,
                 12.0,
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
             },
@@ -326,7 +330,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0, 
                 100.0, 
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
             },
@@ -342,7 +346,7 @@ pub fn set_easter_egg(egg_name: &str) -> Eggs {
                 0.0,
                 0.0,
                 true,
-                Rectangle::new(Point::new(xpos,ypos+49), Size::new(tw,12)),
+                Rectangle::new(Point::new(xpos,timepos), Size::new(tw,12)),
                 true,
             )
             },
@@ -414,6 +418,8 @@ impl Eggs {
             artist: String::new(),
             title_rect,
             title: String::new(),
+            album_artist: String::new(),
+            album: String::new(),
             combine,
             low_limit,
             high_limit,
@@ -423,12 +429,15 @@ impl Eggs {
             can_widen,
             groovy,
             re,
+            render_scale: 1.0,
         }
     }
 
     pub fn update (&mut self, 
         artist: &str, 
         title: &str, 
+        album_artist: &str,
+        album: &str,
         level: u8, 
         track_percent: f64,
         track_time: f32,
@@ -442,6 +451,8 @@ impl Eggs {
         let mut data = self.svg_data.clone();
         self.artist = artist.to_string();
         self.title = title.to_string(); 
+        self.album_artist = album_artist.to_string();
+        self.album = album.to_string();
         if self.combine {
             self.artist = format!("{}\n{}", self.artist, self.title);
         }
@@ -571,6 +582,8 @@ impl Eggs {
         display: &mut D,
         artist: &str,
         title: &str,
+        album_artist: &str,
+        album: &str,
         level: u8,
         track_percent: f64,
         track_time: f32,
@@ -581,14 +594,22 @@ impl Eggs {
     {
         let width = self.rect.size.width;
         let height = self.rect.size.height;
+        // Scale SVG 2× on displays taller than 70px (e.g. ST7789 320×170)
+        let display_h = display.bounding_box().size.height;
+        self.render_scale = if display_h > 70 { 2.0 } else { 1.0 };
+        let (render_w, render_h) = if self.render_scale != 1.0 {
+            ((width as f32 * self.render_scale) as u32, (height as f32 * self.render_scale) as u32)
+        } else {
+            (width, height)
+        };
         if self.egg_type != EGGS_TYPE_UNKNOWN {
-            if self.update(artist, title, level, track_percent, track_time).is_ok() {
+            if self.update(artist, title, album_artist, album, level, track_percent, track_time).is_ok() {
                 let data = self.modified_svg_data.clone();
-                if let Ok(svg_renderer) = SvgImageRenderer::new(&data, width, height) {
-                    let buffer_size = D::Color::required_buffer_size(width, height);
+                if let Ok(svg_renderer) = SvgImageRenderer::new(&data, render_w, render_h) {
+                    let buffer_size = D::Color::required_buffer_size(render_w, render_h);
                     self.buffer.resize(buffer_size, 0);
                     if D::Color::render_to_buffer(&svg_renderer, &mut self.buffer).is_ok() {
-                        D::Color::draw_buffer_to_display(&self.buffer, width, Point::zero(), display)?;
+                        D::Color::draw_buffer_to_display(&self.buffer, render_w, Point::zero(), display)?;
                     }
                 }
             }
@@ -625,11 +646,26 @@ impl Eggs {
     }
 
     pub fn get_title_rect(&self) -> Rectangle {
-        self.title_rect
+        if !self.combine && self.render_scale != 1.0 {
+            Self::scale_rect(self.title_rect, self.render_scale)
+        } else {
+            self.title_rect
+        }
     }
 
     pub fn get_artist_rect(&self) -> Rectangle {
-        self.artist_rect
+        if !self.combine && self.render_scale != 1.0 {
+            Self::scale_rect(self.artist_rect, self.render_scale)
+        } else {
+            self.artist_rect
+        }
+    }
+
+    fn scale_rect(r: Rectangle, s: f32) -> Rectangle {
+        Rectangle::new(
+            Point::new((r.top_left.x as f32 * s) as i32, (r.top_left.y as f32 * s) as i32),
+            Size::new((r.size.width as f32 * s) as u32, (r.size.height as f32 * s) as u32),
+        )
     }
 
     pub fn get_time_rect(&self) -> Rectangle {

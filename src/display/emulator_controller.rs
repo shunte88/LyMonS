@@ -12,7 +12,7 @@
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  */
-
+#![allow(dead_code)] // easter egg animation helpers; some methods reserved
 use super::drivers::emulator::EmulatorDriver;
 use super::traits::DisplayDriver;
 use super::error::DisplayError;

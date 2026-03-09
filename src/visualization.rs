@@ -645,28 +645,3 @@ pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
     viz
 }
 
-/*
-
-if !peak_m.is_empty() && !hold_m.is_empty() {
-    let replacements: Vec<(String, &str)> = peak_m.iter()
-        .zip(hold_m.iter())
-        .enumerate()
-        .map(|(i, (&peak, &hold))| {
-            let tag = format!("{{{{peak_{:02}}}}}", i);
-            let value = if peak || hold { "1" } else { "0.5" };
-            (tag, value)
-        })
-        .collect();
-
-    for (tag, value) in &replacements {
-        data = data.replace(tag.as_str(), value);
-    }
-}
-
-A few notes:
-
-- `!peak_m.is_empty()` is idiomatic over `.len() > 0`
-- The `peak || hold` simplifies your conditional — if either is true, it's `"1"`
-- This is cleaner but still O(n × len(data)) due to repeated `replace` calls
-
-If you really need to scale, the proper fix is to do a **single pass** over `data` rather than N replacements. Something like the `aho-corasick` crate for multi-pattern replacement, or building the string from a template with indexed slots instead of doing find-and-replace. But for 19 LEDs and a reasonably sized string, this is likely fine. */

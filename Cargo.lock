@@ -30,6 +30,7 @@ dependencies = [
  "memmap2 0.9.8",
  "mini-moka",
  "mipidsi",
+ "num-integer",
  "pixels",
  "rand",
  "regex",
