@@ -348,7 +348,11 @@ impl LayoutConfig {
                 clock_digits: FontSize::ExtraLarge,
                 weather: FontSize::Medium,
             },
-            asset_path: "./assets/ssd1322/".to_string(), // 256-width assets
+            asset_path: if color_depth == ColorDepth::Rgb565 {
+                "./assets/st7789/".to_string()
+            } else {
+                "./assets/ssd1322/".to_string()
+            },
             visualizer: VisualizerLayout {
                 width: 256,
                 height: 54,

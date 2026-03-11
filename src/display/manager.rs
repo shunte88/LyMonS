@@ -305,6 +305,10 @@ pub struct DisplayManager {
     astral_service: Option<crate::astral::AstralService>,
     /// Last time auto-brightness was applied (rate-limits hardware writes)
     last_brightness_check: Option<std::time::Instant>,
+    /// Optional TTF font for scrolling-text and label rendering
+    ttf_font: Option<std::sync::Arc<crate::display::ttf_font::TtfFont>>,
+    /// SVG weather glyphs loaded from data/weather_glyphs.zip (Gray4 / Rgb565 only)
+    weather_glyphs: Option<crate::weather_glyph::WeatherGlyphSet>,
 }
 
 impl DisplayManager {
@@ -437,6 +441,8 @@ impl DisplayManager {
             splash_build_date: String::new(),
             astral_service: None,
             last_brightness_check: None,
+            ttf_font: None,
+            weather_glyphs: crate::weather_glyph::WeatherGlyphSet::load_from_zip("./data/weather_glyphs.zip"),
             #[cfg(feature = "emulator")]
             emulator_state: None,
         })
@@ -529,451 +535,126 @@ impl DisplayManager {
 
     /// Render scrolling text mode
     fn render_scrolling(&mut self) -> Result<(), DisplayError> {
-        // Get the scrolling page layout
         let page = self.layout_manager.create_scrolling_page(SCROLLING_PAGE);
 
-        // Update scroll positions using field widths
-        if let (
-            Some(album_artist_field), 
-            Some(album_field), 
-            Some(title_field), 
-            Some(artist_field)) = (
+        if let (Some(aa), Some(al), Some(ti), Some(ar)) = (
             page.get_field("album_artist"),
             page.get_field("album"),
             page.get_field("title"),
             page.get_field("artist"),
         ) {
-            self.scrolling_text.update_with_fields(
-                album_artist_field, 
-                album_field, 
-                title_field, 
-                artist_field);
+            self.scrolling_text.update_with_fields(aa, al, ti, ar);
         }
 
-        // Render each field - dispatch based on framebuffer type
+        // Pre-compute display data before the framebuffer borrow
+        let progress = (self.track_duration_secs > 0.0).then(||
+            (self.current_track_time_secs / self.track_duration_secs).clamp(0.0, 1.0)
+        );
+        let elapsed = self.render_buffers.format_time(self.current_track_time_secs).to_string();
+        let time_secs = if self.show_remaining { self.remaining_time_secs } else { self.track_duration_secs };
+        let (m, s) = ((time_secs as u32) / 60, (time_secs as u32) % 60);
+        let end = if self.show_remaining { format!("-{}:{:02}", m, s) } else { format!("{}:{:02}", m, s) };
+        let mode = self.mode_text.clone();
+
         match &mut self.framebuffer {
-            crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                for field in page.fields() {
-                    match field.name.as_str() {
-                        "status_bar" => {
-                            self.status_bar.render_field(field, fb)
-                                .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
-                        }
-                        "album_artist" | "album" | "title" | "artist" => {
-                            self.scrolling_text.render_field(field, fb)
-                                .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
-                        }
-                        "track_progress_bar" => {
-                            if self.track_duration_secs > 0.0 {
-                                // Extract data inline to avoid borrow conflicts
-                                use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
-                                use embedded_graphics::prelude::*;
-                                let field_pos = field.position();
-                                let field_width = field.width();
-                                let field_height = field.height();
-                                let track_duration = self.track_duration_secs;
-                                let current_time = self.current_track_time_secs;
+            crate::display::framebuffer::FrameBuffer::Mono(fb) =>
+                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end),
+            crate::display::framebuffer::FrameBuffer::Gray4(fb) =>
+                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end),
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) =>
+                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end),
+        }
+    }
 
-                                // Draw outline (inset by 2 pixels on sides)
-                                Rectangle::new(
-                                    Point::new(field_pos.x + 2, field_pos.y),
-                                    Size::new(field_width - 4, field_height),
-                                )
-                                .into_styled(PrimitiveStyleBuilder::new()
-                                    .stroke_color(BinaryColor::On)
-                                    .stroke_width(1)
-                                    .build())
+    /// Generic scroller page renderer — dispatched from `render_scrolling` for each color depth.
+    fn render_scrolling_page<D>(
+        fb: &mut D,
+        page: &crate::display::PageLayout,
+        status_bar: &mut StatusBar,
+        scrolling_text: &mut ScrollingText,
+        progress: Option<f32>,
+        mode_text: &str,
+        elapsed_str: &str,
+        end_str: &str,
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default
+            + crate::display::ttf_font::BlendCoverage,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<D::Color>,
+    {
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
+        use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
+        use embedded_text::{
+            alignment::{HorizontalAlignment, VerticalAlignment},
+            style::TextBoxStyleBuilder,
+            TextBox,
+        };
+        use crate::display::color_proxy::ConvertColor;
+
+        for field in page.fields() {
+            match field.name.as_str() {
+                "status_bar" => {
+                    status_bar.render_field(field, fb)
+                        .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
+                }
+                "album_artist" | "album" | "title" | "artist" => {
+                    scrolling_text.render_field(field, fb)
+                        .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
+                }
+                "track_progress_bar" => {
+                    if let Some(p) = progress {
+                        let pos = field.position();
+                        let fw = field.width();
+                        let fh = field.height();
+                        let color: D::Color = field.fg_color.to_color();
+                        Rectangle::new(Point::new(pos.x + 2, pos.y), Size::new(fw - 4, fh))
+                            .into_styled(PrimitiveStyleBuilder::new().stroke_color(color).stroke_width(1).build())
+                            .draw(fb)
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar".to_string()))?;
+                        let fill_w = ((fw - 6) as f32 * p) as u32;
+                        if fill_w > 0 {
+                            Rectangle::new(Point::new(pos.x + 3, pos.y + 1), Size::new(fill_w, fh.saturating_sub(2)))
+                                .into_styled(PrimitiveStyleBuilder::new().fill_color(color).build())
                                 .draw(fb)
-                                .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar".to_string()))?;
-
-                                // Draw fill
-                                let progress = (current_time / track_duration).clamp(0.0, 1.0);
-                                let fill_width = ((field_width - 6) as f32 * progress) as u32;
-
-                                if fill_width > 0 {
-                                    Rectangle::new(
-                                        Point::new(field_pos.x + 3, field_pos.y + 1),
-                                        Size::new(fill_width, field_height.saturating_sub(2)),
-                                    )
-                                    .into_styled(PrimitiveStyleBuilder::new()
-                                        .fill_color(BinaryColor::On)
-                                        .build())
-                                    .draw(fb)
-                                    .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
-                                }
-                            }
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
                         }
-                        "info_line" => {
-                            // Inline the info line rendering to avoid borrow conflicts
-                            use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
-                            use embedded_graphics::prelude::*;
-                            use embedded_text::{
-                                alignment::{HorizontalAlignment, VerticalAlignment},
-                                style::TextBoxStyleBuilder,
-                                TextBox,
-                            };
-
-                            let font = field.font.unwrap_or(&FONT_5X8);
-                            let style = MonoTextStyle::new(font, field.fg_binary());
-
-                            let textbox_style_left = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Left)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-                            let textbox_style_center = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Center)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-                            let textbox_style_right = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Right)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-
-                            // Current time (left)
-                            let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
-
-                            TextBox::with_textbox_style(
-                                &self.mode_text,
-                                field.bounds,
-                                style,
-                                textbox_style_center,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
-
-                            let fix_width = 30;
-                            let mut rect = field.bounds;
-                            rect.size.width = fix_width;
-                            rect.size.height += 1;
-
-                            TextBox::with_textbox_style(
-                                current_time_str,
-                                rect,
-                                style,
-                                textbox_style_left,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
-
-                            let mut rect = field.bounds;
-                            rect.top_left.x = (rect.size.width - fix_width) as i32;
-                            rect.size.width = fix_width;
-
-                            // Remaining/total time (right)
-                            self.render_buffers.temp_buffer.clear();
-                            let time_secs = if self.show_remaining {
-                                self.remaining_time_secs
-                            } else {
-                                self.track_duration_secs
-                            };
-                            let mins = (time_secs as u32) / 60;
-                            let secs = (time_secs as u32) % 60;
-                            if self.show_remaining {
-                                let _ = write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs);
-                            } else {
-                                let _ = write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs);
-                            }
-                            let time_str = self.render_buffers.temp_buffer.as_str();
-
-                            TextBox::with_textbox_style(
-                                time_str,
-                                rect,
-                                style,
-                                textbox_style_right,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw time".to_string()))?;
-                        }
-                        _ => {}
                     }
                 }
-            }
-            crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                for field in page.fields() {
-                    match field.name.as_str() {
-                        "status_bar" => {
-                            self.status_bar.render_field(field, fb)
-                                .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
-                        }
-                        "album_artist" | "album" | "title" | "artist" => {
-                            self.scrolling_text.render_field(field, fb)
-                                .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
-                        }
-                        "track_progress_bar" => {
-                            if self.track_duration_secs > 0.0 {
-                                // Progress bar rendering for Gray4 displays
-                                use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
-                                use embedded_graphics::prelude::*;
-                                let field_pos = field.position();
-                                let field_width = field.width();
-                                let field_height = field.height();
-                                let track_duration = self.track_duration_secs;
-                                let current_time = self.current_track_time_secs;
+                "info_line" => {
+                    let font = field.font.unwrap_or(&FONT_5X8);
+                    let color: D::Color = field.fg_color.to_color();
+                    let style = MonoTextStyle::new(font, color);
+                    let tb_left   = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Left).vertical_alignment(VerticalAlignment::Top).build();
+                    let tb_center = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Center).vertical_alignment(VerticalAlignment::Top).build();
+                    let tb_right  = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Right).vertical_alignment(VerticalAlignment::Top).build();
+                    const FIX_W: u32 = 30;
 
-                                // Draw outline (inset by 2 pixels on sides) - use field color or white
-                                use crate::display::color_proxy::ConvertColor;
-                                let outline_color = field.fg_color.to_color();
-                                Rectangle::new(
-                                    Point::new(field_pos.x + 2, field_pos.y),
-                                    Size::new(field_width - 4, field_height),
-                                )
-                                .into_styled(PrimitiveStyleBuilder::new()
-                                    .stroke_color(outline_color)
-                                    .stroke_width(1)
-                                    .build())
-                                .draw(fb)
-                                .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar".to_string()))?;
+                    // Center: mode text (full field width)
+                    let mut rect = field.bounds;
+                    rect.size.height += 1;
+                    TextBox::with_textbox_style(mode_text, rect, style, tb_center)
+                        .draw(fb).map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
 
-                                // Draw fill
-                                let progress = (current_time / track_duration).clamp(0.0, 1.0);
-                                let fill_width = ((field_width - 6) as f32 * progress) as u32;
+                    // Left: elapsed time
+                    let mut rect = field.bounds;
+                    rect.size.width = FIX_W;
+                    rect.size.height += 1;
+                    TextBox::with_textbox_style(elapsed_str, rect, style, tb_left)
+                        .draw(fb).map_err(|_| DisplayError::DrawingError("Failed to draw elapsed time".to_string()))?;
 
-                                if fill_width > 0 {
-                                    Rectangle::new(
-                                        Point::new(field_pos.x + 3, field_pos.y + 1),
-                                        Size::new(fill_width, field_height.saturating_sub(2)),
-                                    )
-                                    .into_styled(PrimitiveStyleBuilder::new()
-                                        .fill_color(outline_color)
-                                        .build())
-                                    .draw(fb)
-                                    .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
-                                }
-                            }
-                        }
-                        "info_line" => {
-                            // Info line rendering for Gray4 displays
-                            use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
-                            use embedded_graphics::prelude::*;
-                            use crate::display::color_proxy::ConvertColor;
-
-                            use embedded_text::{
-                                alignment::{HorizontalAlignment, VerticalAlignment},
-                                style::TextBoxStyleBuilder,
-                                TextBox,
-                            };
-
-                            let font = field.font.unwrap_or(&FONT_5X8);
-                            let text_color = field.fg_color.to_color();
-                            let style = MonoTextStyle::new(font, text_color);
-
-                            let textbox_style_left = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Left)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-                            let textbox_style_center = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Center)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-                            let textbox_style_right = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Right)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-
-                            // Current time (left)
-                            let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
-
-                            let fix_width = 30;
-                            let mut rect = field.bounds;
-                            rect.size.height += 1;
-
-                            TextBox::with_textbox_style(
-                                &self.mode_text,
-                                rect,
-                                style,
-                                textbox_style_center,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
-
-                            let mut rect = field.bounds;
-                            rect.size.width = fix_width;
-                            rect.size.height += 1;
-
-                            TextBox::with_textbox_style(
-                                current_time_str,
-                                rect,
-                                style,
-                                textbox_style_left,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
-
-                            let mut rect = field.bounds;
-                            rect.top_left.x = (rect.size.width - fix_width) as i32;
-                            rect.size.width = fix_width;
-                            rect.size.height += 1;
-
-                            // Remaining/total time (right)
-                            self.render_buffers.temp_buffer.clear();
-                            let time_secs = if self.show_remaining {
-                                self.remaining_time_secs
-                            } else {
-                                self.track_duration_secs
-                            };
-                            let mins = (time_secs as u32) / 60;
-                            let secs = (time_secs as u32) % 60;
-                            if self.show_remaining {
-                                let _ = write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs);
-                            } else {
-                                let _ = write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs);
-                            }
-                            let time_str = self.render_buffers.temp_buffer.as_str();
-
-                            TextBox::with_textbox_style(
-                                time_str,
-                                rect,
-                                style,
-                                textbox_style_right,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
-                        }
-                        _ => {}
-                    }
+                    // Right: end/remaining time
+                    let mut rect = field.bounds;
+                    rect.top_left.x = (rect.size.width - FIX_W) as i32;
+                    rect.size.width = FIX_W;
+                    rect.size.height += 1;
+                    TextBox::with_textbox_style(end_str, rect, style, tb_right)
+                        .draw(fb).map_err(|_| DisplayError::DrawingError("Failed to draw end time".to_string()))?;
                 }
-            }
-            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
-                for field in page.fields() {
-                    match field.name.as_str() {
-                        "status_bar" => {
-                            self.status_bar.render_field(field, fb)
-                                .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
-                        }
-                        "album_artist" | "album" | "title" | "artist" => {
-                            self.scrolling_text.render_field(field, fb)
-                                .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
-                        }
-                        "track_progress_bar" => {
-                            if self.track_duration_secs > 0.0 {
-                                use embedded_graphics::primitives::{Rectangle, PrimitiveStyleBuilder};
-                                use embedded_graphics::prelude::*;
-                                let field_pos = field.position();
-                                let field_width = field.width();
-                                let field_height = field.height();
-                                let track_duration = self.track_duration_secs;
-                                let current_time = self.current_track_time_secs;
-
-                                use crate::display::color_proxy::ConvertColor;
-                                let outline_color = field.fg_color.to_color();
-                                Rectangle::new(
-                                    Point::new(field_pos.x + 2, field_pos.y),
-                                    Size::new(field_width - 4, field_height),
-                                )
-                                .into_styled(PrimitiveStyleBuilder::new()
-                                    .stroke_color(outline_color)
-                                    .stroke_width(1)
-                                    .build())
-                                .draw(fb)
-                                .map_err(|_| DisplayError::DrawingError("Failed to draw progress bar".to_string()))?;
-
-                                let progress = (current_time / track_duration).clamp(0.0, 1.0);
-                                let fill_width = ((field_width - 6) as f32 * progress) as u32;
-
-                                if fill_width > 0 {
-                                    Rectangle::new(
-                                        Point::new(field_pos.x + 3, field_pos.y + 1),
-                                        Size::new(fill_width, field_height.saturating_sub(2)),
-                                    )
-                                    .into_styled(PrimitiveStyleBuilder::new()
-                                        .fill_color(outline_color)
-                                        .build())
-                                    .draw(fb)
-                                    .map_err(|_| DisplayError::DrawingError("Failed to draw progress fill".to_string()))?;
-                                }
-                            }
-                        }
-                        "info_line" => {
-                            use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
-                            use embedded_graphics::prelude::*;
-                            use crate::display::color_proxy::ConvertColor;
-
-                            use embedded_text::{
-                                alignment::{HorizontalAlignment, VerticalAlignment},
-                                style::TextBoxStyleBuilder,
-                                TextBox,
-                            };
-
-                            let font = field.font.unwrap_or(&FONT_5X8);
-                            let text_color = field.fg_color.to_color();
-                            let style = MonoTextStyle::new(font, text_color);
-
-                            let textbox_style_left = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Left)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-                            let textbox_style_center = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Center)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-                            let textbox_style_right = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Right)
-                                .vertical_alignment(VerticalAlignment::Top)
-                                .build();
-
-                            let current_time_str = self.render_buffers.format_time(self.current_track_time_secs);
-
-                            let fix_width = 30;
-                            let mut rect = field.bounds;
-                            rect.size.height += 1;
-
-                            TextBox::with_textbox_style(
-                                &self.mode_text,
-                                rect,
-                                style,
-                                textbox_style_center,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
-
-                            let mut rect = field.bounds;
-                            rect.size.width = fix_width;
-                            rect.size.height += 1;
-
-                            TextBox::with_textbox_style(
-                                current_time_str,
-                                rect,
-                                style,
-                                textbox_style_left,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
-
-                            let mut rect = field.bounds;
-                            rect.top_left.x = (rect.size.width - fix_width) as i32;
-                            rect.size.width = fix_width;
-                            rect.size.height += 1;
-
-                            self.render_buffers.temp_buffer.clear();
-                            let time_secs = if self.show_remaining {
-                                self.remaining_time_secs
-                            } else {
-                                self.track_duration_secs
-                            };
-                            let mins = (time_secs as u32) / 60;
-                            let secs = (time_secs as u32) % 60;
-                            if self.show_remaining {
-                                let _ = write!(&mut self.render_buffers.temp_buffer, "-{}:{:02}", mins, secs);
-                            } else {
-                                let _ = write!(&mut self.render_buffers.temp_buffer, "{}:{:02}", mins, secs);
-                            }
-                            let time_str = self.render_buffers.temp_buffer.as_str();
-
-                            TextBox::with_textbox_style(
-                                time_str,
-                                rect,
-                                style,
-                                textbox_style_right,
-                            )
-                            .draw(fb)
-                            .map_err(|_| DisplayError::DrawingError("Failed to draw current time".to_string()))?;
-                        }
-                        _ => {}
-                    }
-                }
+                _ => {}
             }
         }
-
         Ok(())
     }
 
@@ -1303,7 +984,7 @@ impl DisplayManager {
         let page = self.layout_manager.create_clock_page();
 
         // Extract current second, millisecond fidelity, for progress bar
-        let current_second: f32 = chrono::Local::now().format("%S.%.3f").to_string().parse().unwrap_or(0.0);
+        let current_second: f32 = chrono::Local::now().format("%S.%3f").to_string().parse().unwrap_or(0.0);
 
         // Render metrics first (if present) before borrowing framebuffer
         if page.fields().iter().any(|f| f.name == "metrics") {
@@ -1547,7 +1228,7 @@ impl DisplayManager {
             }
             return Ok(());
         };
-
+        
         // Get weather icon SVG path
         let svg_path = weather_data.weather_code.svg.clone();
 
@@ -1599,7 +1280,9 @@ impl DisplayManager {
             .map(|a| a.moon_phase_description())
             .unwrap_or("");
 
-            // Dispatch rendering based on framebuffer type
+            let weather_glyphs = self.weather_glyphs.as_ref();
+
+        // Dispatch rendering based on framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
                 Self::render_weather_fields(
@@ -1616,7 +1299,8 @@ impl DisplayManager {
                     &moonrise_text,
                     &moonset_text,
                     moon_phase_index,
-                    &moonphase_text
+                    &moonphase_text,
+                    weather_glyphs,
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
@@ -1634,7 +1318,8 @@ impl DisplayManager {
                     &moonrise_text,
                     &moonset_text,
                     moon_phase_index,
-                    &moonphase_text
+                    &moonphase_text,
+                    weather_glyphs,
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
@@ -1652,7 +1337,8 @@ impl DisplayManager {
                     &moonrise_text,
                     &moonset_text,
                     moon_phase_index,
-                    &moonphase_text
+                    &moonphase_text,
+                    weather_glyphs,
                 )?;
             }
         }
@@ -1676,6 +1362,7 @@ impl DisplayManager {
         moonset_text: &str,
         moon_phase_index: usize,
         moonphase_text: &str,
+        weather_glyphs: Option<&crate::weather_glyph::WeatherGlyphSet>,
     ) -> Result<(), DisplayError>
     where
         D: DrawTarget,
@@ -1724,25 +1411,29 @@ impl DisplayManager {
                         }
                     }
                 }
-                "temp_glyph" => {
-                    use crate::weather_glyph::GLYPH_TEMPERATURE;
-                    Self::draw_weather_glyph(target, GLYPH_TEMPERATURE, pos.x, pos.y, field.fg_color.to_color())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw temp glyph".to_string()))?;
-                }
-                "humidity_glyph" => {
-                    use crate::weather_glyph::GLYPH_HUMIDITY;
-                    Self::draw_weather_glyph(target, GLYPH_HUMIDITY, pos.x, pos.y, field.fg_color.to_color())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw humidity glyph".to_string()))?;
-                }
-                "wind_glyph" => {
-                    use crate::weather_glyph::GLYPH_WIND;
-                    Self::draw_weather_glyph(target, GLYPH_WIND, pos.x, pos.y, field.fg_color.to_color())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw wind glyph".to_string()))?;
-                }
-                "precip_glyph" => {
-                    use crate::weather_glyph::GLYPH_PRECIPITATION;
-                    Self::draw_weather_glyph(target, GLYPH_PRECIPITATION, pos.x, pos.y, field.fg_color.to_color())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw precip glyph".to_string()))?;
+                n @ ("temp_glyph" | "humidity_glyph" | "wind_glyph" | "precip_glyph"
+                   | "sunrise_glyph" | "sunset_glyph" | "moonrise_glyph" | "moonset_glyph") => {
+                    use crate::weather_glyph::glyph_index_for_field;
+                    use crate::visualization::SvgColorDepth;
+
+                    let mut used_svg = false;
+                    if D::Color::use_svg_glyphs() {
+                        if let Some(svg_data) = weather_glyphs.and_then(|g| g.get(n)) {
+                            Self::draw_svg_weather_glyph(
+                                target, svg_data,
+                                pos.x, pos.y,
+                                field.width(), field.height(),
+                            )?;
+                            used_svg = true;
+                        }
+                    }
+                    if !used_svg {
+                        let idx = glyph_index_for_field(n);
+                        if idx != usize::MAX {
+                            Self::draw_weather_glyph(target, idx, pos.x, pos.y, field.fg_color.to_color())
+                                .map_err(|_| DisplayError::DrawingError(format!("Failed to draw {} bitmap", n)))?;
+                        }
+                    }
                 }
                 "temperature" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_6X13_BOLD), field.fg_color.to_color());
@@ -1775,21 +1466,11 @@ impl DisplayManager {
                         .draw(target)
                         .map_err(|_| DisplayError::DrawingError("Failed to write conditions".to_string()))?;
                 }
-                "sunrise_glyph" => {
-                    use crate::weather_glyph::GLYPH_SUNRISE;
-                    Self::draw_weather_glyph(target, GLYPH_SUNRISE, pos.x, pos.y, field.fg_color.to_color())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunrise glyph".to_string()))?;
-                }
                 "sunrise_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     TextBox::with_textbox_style(sunrise_text, field.bounds, style, tbstyle_left)
                         .draw(target)
                         .map_err(|_| DisplayError::DrawingError("Failed to write sunrise text".to_string()))?;
-                }
-                "sunset_glyph" => {
-                    use crate::weather_glyph::GLYPH_SUNSET;
-                    Self::draw_weather_glyph(target, GLYPH_SUNSET, pos.x, pos.y, field.fg_color.to_color())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw sunset glyph".to_string()))?;
                 }
                 "sunset_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
@@ -1797,21 +1478,11 @@ impl DisplayManager {
                         .draw(target)
                         .map_err(|_| DisplayError::DrawingError("Failed to write sunset text".to_string()))?;
                 }
-                "moonrise_glyph" => {
-                    use crate::weather_glyph::GLYPH_MOONRISE;
-                    Self::draw_weather_glyph(target, GLYPH_MOONRISE, pos.x, pos.y, field.fg_color.to_color())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonrise glyph".to_string()))?;
-                }
                 "moonrise_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
                     TextBox::with_textbox_style(moonrise_text, field.bounds, style, tbstyle_left)
                         .draw(target)
                         .map_err(|_| DisplayError::DrawingError("Failed to write moonrise text".to_string()))?;
-                }
-                "moonset_glyph" => {
-                    use crate::weather_glyph::GLYPH_MOONSET;
-                    Self::draw_weather_glyph(target, GLYPH_MOONSET, pos.x, pos.y, field.fg_color.to_color())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonset glyph".to_string()))?;
                 }
                 "moonset_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
@@ -1834,6 +1505,35 @@ impl DisplayManager {
             }
         }
 
+        Ok(())
+    }
+
+    /// Render an SVG weather glyph at the given position and pixel dimensions.
+    ///
+    /// Used for Gray4 / Rgb565 displays when `D::Color::use_svg_glyphs()` is true.
+    /// The SVG is scaled to fit `width × height` exactly.
+    fn draw_svg_weather_glyph<D>(
+        target:    &mut D,
+        svg_data:  &[u8],
+        x:         i32,
+        y:         i32,
+        width:     u32,
+        height:    u32,
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default,
+    {
+        use crate::visualization::SvgColorDepth;
+        if let Ok(svg_str) = std::str::from_utf8(svg_data) {
+            if let Ok(renderer) = crate::svgimage::SvgImageRenderer::new(svg_str, width, height) {
+                let mut buf = vec![0u8; D::Color::required_buffer_size(width, height)];
+                if D::Color::render_to_buffer(&renderer, &mut buf).is_ok() {
+                    D::Color::draw_buffer_to_display(&buf, width, Point::new(x, y), target)
+                        .map_err(|_| DisplayError::DrawingError("svg weather glyph".to_string()))?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1908,7 +1608,6 @@ impl DisplayManager {
         use embedded_graphics::mono_font::MonoTextStyle;
         use embedded_graphics::text::{Text, Baseline};
         use embedded_graphics::mono_font::iso_8859_13::FONT_6X10;
-
 
         // Get the weather forecast page layout
         let page = self.layout_manager.create_weather_forecast_page();
@@ -2349,15 +2048,15 @@ impl DisplayManager {
         // Dispatch to the appropriate render method based on framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                self.visualizer.render_mono(fb)
+                self.visualizer.render::<_, crate::display::color_proxy::MonoProxy>(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to render visualizer (mono)".to_string()))?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                self.visualizer.render_gray4(fb)
+                self.visualizer.render::<_, crate::display::color_proxy::Gray4Proxy>(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to render visualizer (gray4)".to_string()))?;
             }
             crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
-                self.visualizer.render_rgb565(fb)
+                self.visualizer.render::<_, crate::display::color_proxy::Rgb565Proxy>(fb)
                     .map_err(|_| DisplayError::DrawingError("Failed to render visualizer (rgb565)".to_string()))?;
             }
         }
@@ -3175,13 +2874,24 @@ impl DisplayManager {
         self.astral_service = Some(service);
     }
 
+    /// Attach a TTF font for scrolling-text and label rendering.
+    ///
+    /// Once set, all scroller fields will render using the TTF font instead of
+    /// the MonoFont bitmaps.  Text-width measurement (for scroll loop gaps and
+    /// centering) will also use TTF metrics, giving correct results for CJK and
+    /// other variable-width scripts.
+    pub fn set_text_font(&mut self, font: std::sync::Arc<crate::display::ttf_font::TtfFont>) {
+        self.scrolling_text.set_ttf_font(std::sync::Arc::clone(&font));
+        self.ttf_font = Some(font);
+    }
+
     /// Apply auto-brightness based on local sunrise/sunset.
     /// Rate-limited to at most one hardware write every 5 minutes.
     fn update_auto_brightness(&mut self) {
         use std::time::Instant;
         const CHECK_INTERVAL_SECS: u64 = 300; // 5 minutes
         const BRIGHTNESS_DAY:   u8 = 255;
-        const BRIGHTNESS_NIGHT: u8 = 32;
+        const BRIGHTNESS_NIGHT: u8 = 128;
 
         let now = Instant::now();
         if let Some(last) = self.last_brightness_check {

@@ -56,6 +56,14 @@ pub mod field;
 pub mod page;
 pub mod layout_manager;
 
+// TTF/OTF font renderer (ab_glyph-based, with glyph cache)
+pub mod ttf_font;
+
+// Declarative layout template system
+pub mod layout_template;
+pub mod layout_expr;
+pub mod layout_resolver;
+
 // Display mode controller
 pub mod mode_controller;
 

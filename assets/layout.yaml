@@ -1,0 +1,859 @@
+#
+#  assets/layout.yaml
+#
+#  LyMonS — Declarative layout templates
+#
+#  Defines reusable components and page templates evaluated at runtime by
+#  layout_resolver::LayoutResolver against a concrete DisplayProfile.
+#
+#  Expression variables available in component fields:
+#    display.width  display.height   — full display dimensions
+#    parent.width   parent.height    — region dimensions allocated by the template
+#    font_height                     — character_size.height of the field's font (0 if none)
+#    <name>.top  .bottom  .left  .right  .width  .height  — prior field geometry
+#
+#  Arithmetic: + - * / with integer truncation; parentheses; unary minus.
+#
+#  Geometry notes (base profile: 128×64 monochrome):
+#    y_height = 9, border_adj = 2
+#    status_bar occupies y=2..11; first scroller row at y=12 (1px gap)
+#    progress bar at y=49 (parent.height - 15), info_line at y=54 (parent.height - 10)
+#
+
+components:
+
+  # Scroller panel — status bar + 4 scrolling text rows + progress bar + info line.
+  # Fills any region; parent.width/height drive all expressions.
+  scroller_panel:
+    fields:
+      - name: status_bar
+        type: status_bar
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_4x6
+
+      - name: album_artist
+        type: scrolling_text
+        x: "2"
+        y: "status_bar.bottom + 1"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        scrollable: true
+
+      - name: album
+        type: scrolling_text
+        x: "2"
+        y: "album_artist.bottom"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        scrollable: true
+
+      - name: title
+        type: scrolling_text
+        x: "2"
+        y: "album.bottom"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        scrollable: true
+
+      - name: artist
+        type: scrolling_text
+        x: "2"
+        y: "title.bottom"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        scrollable: true
+
+      # parent.height - 15 = 49 on 64px display (matches: height - 6 - y_height)
+      - name: track_progress_bar
+        type: track_progress_bar
+        x: "2"
+        y: "parent.height - 15"
+        width: "parent.width - 4"
+        height: "3"
+
+      # parent.height - 10 = 54 on 64px display (matches: height - 1 - y_height)
+      - name: info_line
+        type: info_line
+        x: "2"
+        y: "parent.height - 10"
+        width: "parent.width - 4"
+        height: "10"
+        font: font_5x8
+
+  # AIO compact panel — placed in the left half of the display.
+  # Compact status bar, wall clock, track times, progress bar, and a combination
+  # scroller that spans the full display width (display.width, not parent.width).
+  aio_compact_panel:
+    fields:
+      - name: status_bar_small
+        type: status_bar_small
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_6x9
+
+      # x=29 matches the time_adj constant in the legacy layout manager
+      - name: current_time
+        type: label
+        x: "29"
+        y: "13"
+        width: "parent.width - 31"
+        height: "9"
+        font: font_7x13_bold
+
+      - name: duration_time
+        type: label
+        x: "29"
+        y: "25"
+        width: "parent.width - 31"
+        height: "9"
+        font: font_7x13_bold
+
+      - name: track_time
+        type: label
+        x: "29"
+        y: "38"
+        width: "parent.width - 31"
+        height: "9"
+        font: font_7x13_bold
+
+      # parent.height - 14 = 50 on 64px display (matches: height - 5 - y_height)
+      - name: track_progress_bar
+        type: track_progress_bar
+        x: "2"
+        y: "parent.height - 14"
+        width: "parent.width - 4"
+        height: "3"
+
+      # Spans full display width so the scroller crosses both info and visualizer panels.
+      # parent.height - 12 = 52 on 64px display (matches: height - 3 - y_height)
+      - name: combination
+        type: scrolling_text_combination
+        x: "2"
+        y: "parent.height - 12"
+        width: "display.width - 4"
+        height: "9"
+        font: font_5x8
+        scrollable: true
+
+  # Clock face for displays up to 70px tall (digit size 25×44).
+  # Geometry: digits at y=2, seconds progress at y=parent.height-18, date at bottom.
+  clock_face_small:
+    fields:
+      - name: metrics
+        type: label
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "7"
+        font: font_5x7
+        horizontal_alignment: Center
+
+      - name: clock_digits
+        type: clock_digits
+        x: "2"
+        y: "2"
+        width: "25"
+        height: "44"
+
+      - name: seconds_progress
+        type: seconds_progress
+        x: "2"
+        y: "parent.height - 18"
+        width: "parent.width - 4"
+        height: "4"
+
+      - name: date
+        type: date
+        x: "2"
+        y: "parent.height - 12"
+        width: "parent.width - 4"
+        height: "10"
+        font: font_6x10
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+  # Clock face for displays taller than 70px (digit size 60×105).
+  clock_face_large:
+    fields:
+      - name: metrics
+        type: label
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "7"
+        font: font_5x7
+        horizontal_alignment: Center
+
+      - name: clock_digits
+        type: clock_digits
+        x: "2"
+        y: "2"
+        width: "60"
+        height: "105"
+
+      - name: seconds_progress
+        type: seconds_progress
+        x: "2"
+        y: "parent.height - 18"
+        width: "parent.width - 4"
+        height: "4"
+
+      - name: date
+        type: date
+        x: "2"
+        y: "parent.height - 12"
+        width: "parent.width - 4"
+        height: "10"
+        font: font_6x10
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+  # Splash screen — logo SVG full screen with version/build/status text at bottom.
+  splash_screen:
+    fields:
+      - name: logo_svg
+        type: custom
+        x: "0"
+        y: "0"
+        width: "parent.width"
+        height: "parent.height"
+
+      # version_y = parent.height - 7 - 9 - 15 = parent.height - 31
+      - name: version
+        type: label
+        x: "0"
+        y: "parent.height - 31"
+        width: "parent.width"
+        height: "15"
+        font: font_6x13_bold
+        horizontal_alignment: Center
+        vertical_alignment: Bottom
+        fg_color: White
+
+      # build_y = parent.height - 7 - 9 = parent.height - 16
+      - name: build_date
+        type: label
+        x: "0"
+        y: "parent.height - 16"
+        width: "parent.width"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        vertical_alignment: Bottom
+        fg_color: Cyan
+
+      # status_y = parent.height - 7
+      - name: status
+        type: label
+        x: "0"
+        y: "parent.height - 7"
+        width: "parent.width"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        vertical_alignment: Bottom
+        fg_color: Green
+
+  # Current weather page — left side visible on all displays.
+  # weather_icon size is display.height/2+2 (=34 on 64px).
+  # Metric glyphs and text anchor off weather_icon.right.
+  weather_current_main:
+    fields:
+      - name: weather_icon
+        type: weather_icon
+        x: "12"
+        y: "10"
+        width: "display.height / 2 + 2"
+        height: "display.height / 2 + 2"
+
+      - name: temp_glyph
+        type: weather_glyph
+        x: "weather_icon.right + 6"
+        y: "2"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+
+      - name: temperature
+        type: label
+        x: "temp_glyph.right + 2"
+        y: "2"
+        width: "parent.width - temp_glyph.right - 2"
+        height: "14"
+        font: font_6x13_bold
+        fg_color: Cyan
+
+      - name: humidity_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "14"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+
+      - name: humidity
+        type: label
+        x: "temperature.left"
+        y: "15"
+        width: "temperature.width"
+        height: "12"
+        font: font_5x8
+        fg_color: Cyan
+
+      - name: wind_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "24"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+
+      - name: wind
+        type: label
+        x: "temperature.left"
+        y: "25"
+        width: "temperature.width"
+        height: "12"
+        font: font_5x8
+        fg_color: Cyan
+
+      - name: precip_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "34"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+
+      - name: precipitation
+        type: label
+        x: "temperature.left"
+        y: "35"
+        width: "temperature.width"
+        height: "12"
+        font: font_5x8
+        fg_color: Cyan
+
+      # parent.height - 16 = 48 on 64px display
+      - name: conditions
+        type: label
+        x: "2"
+        y: "parent.height - 16"
+        width: "parent.width - 4"
+        height: "14"
+        font: font_7x14
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+  # Astral panel — right side of wide displays only (placed at x=0 full width so
+  # expressions can use display.width for anchoring).
+  # All x positions are anchored from (display.width + 12) / 2 (= 134 on 256px).
+  weather_astral_panel:
+    fields:
+      - name: sunrise_glyph
+        type: weather_glyph
+        x: "(display.width + 12) / 2"
+        y: "2"
+        width: "12"
+        height: "12"
+        fg_color: Yellow
+
+      - name: sunrise_text
+        type: label
+        x: "sunrise_glyph.right + 2"
+        y: "3"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      - name: sunset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "16"
+        width: "12"
+        height: "12"
+        fg_color: Yellow
+
+      - name: sunset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "17"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      - name: moonrise_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left + 40"
+        y: "2"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+
+      - name: moonrise_text
+        type: label
+        x: "moonrise_glyph.right + 2"
+        y: "3"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: moonset_glyph
+        type: weather_glyph
+        x: "moonrise_glyph.left"
+        y: "16"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+
+      - name: moonset_text
+        type: label
+        x: "moonrise_text.left"
+        y: "17"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: moonphase_svg
+        type: custom
+        x: "moonrise_glyph.left + 48"
+        y: "10"
+        width: "34"
+        height: "34"
+        fg_color: Yellow
+
+      # x = moonphase_svg.left - 30; width = parent.width - x - 4
+      - name: moonphase_text
+        type: label
+        x: "moonphase_svg.left - 30"
+        y: "43"
+        width: "parent.width - moonphase_svg.left + 30 - 4"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Right
+        fg_color: Yellow
+
+  # Forecast 3-column panel — days 1-3, fits any display width.
+  # Column width (spacing) = display.height/2+8 (=40 on 64px).
+  # Icon size = display.height/2-2 (=30 on 64px); icon_offset=5 (constant).
+  weather_forecast_3col:
+    fields:
+      - name: day1_icon
+        type: weather_icon
+        x: "9"
+        y: "1"
+        width: "display.height / 2 - 2"
+        height: "display.height / 2 - 2"
+
+      - name: day1_name
+        type: label
+        x: "4"
+        y: "day1_icon.bottom + 3"
+        width: "display.height / 2 + 8"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+        border: 1
+
+      - name: day1_data_box
+        type: custom
+        x: "4"
+        y: "day1_icon.bottom + 11"
+        width: "display.height / 2 + 8"
+        height: "22"
+        border: 1
+
+      - name: day1_temp
+        type: label
+        x: "5"
+        y: "day1_icon.bottom + 14"
+        width: "display.height / 2 + 6"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day1_precip
+        type: label
+        x: "5"
+        y: "day1_icon.bottom + 21"
+        width: "display.height / 2 + 6"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day2_icon
+        type: weather_icon
+        x: "day1_name.right + 5"
+        y: "1"
+        width: "display.height / 2 - 2"
+        height: "display.height / 2 - 2"
+
+      - name: day2_name
+        type: label
+        x: "day1_name.right"
+        y: "day1_name.top"
+        width: "display.height / 2 + 8"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+        border: 1
+
+      - name: day2_data_box
+        type: custom
+        x: "day1_data_box.right"
+        y: "day1_data_box.top"
+        width: "display.height / 2 + 8"
+        height: "22"
+        border: 1
+
+      - name: day2_temp
+        type: label
+        x: "day1_name.right + 1"
+        y: "day1_temp.top"
+        width: "display.height / 2 + 6"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day2_precip
+        type: label
+        x: "day1_name.right + 1"
+        y: "day1_precip.top"
+        width: "display.height / 2 + 6"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day3_icon
+        type: weather_icon
+        x: "day2_name.right + 5"
+        y: "1"
+        width: "display.height / 2 - 2"
+        height: "display.height / 2 - 2"
+
+      - name: day3_name
+        type: label
+        x: "day2_name.right"
+        y: "day1_name.top"
+        width: "display.height / 2 + 8"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+        border: 1
+
+      - name: day3_data_box
+        type: custom
+        x: "day2_data_box.right"
+        y: "day1_data_box.top"
+        width: "display.height / 2 + 8"
+        height: "22"
+        border: 1
+
+      - name: day3_temp
+        type: label
+        x: "day2_name.right + 1"
+        y: "day1_temp.top"
+        width: "display.height / 2 + 6"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day3_precip
+        type: label
+        x: "day2_name.right + 1"
+        y: "day1_precip.top"
+        width: "display.height / 2 + 6"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+  # Forecast extra columns — days 4-6 for wide displays.
+  # Placed as a second region starting at x = 3 * display.height/2 + 28 (=124 on 64px).
+  # Field x positions are relative to that region origin.
+  weather_forecast_ext_cols:
+    fields:
+      - name: day4_icon
+        type: weather_icon
+        x: "5"
+        y: "1"
+        width: "display.height / 2 - 2"
+        height: "display.height / 2 - 2"
+
+      - name: day4_name
+        type: label
+        x: "0"
+        y: "day4_icon.bottom + 1"
+        width: "display.height / 2 + 8"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+        border: 1
+
+      - name: day4_data_box
+        type: custom
+        x: "0"
+        y: "day4_icon.bottom + 11"
+        width: "display.height / 2 + 8"
+        height: "22"
+        border: 1
+
+      - name: day4_temp
+        type: label
+        x: "1"
+        y: "day4_icon.bottom + 14"
+        width: "display.height / 2 + 6"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day4_precip
+        type: label
+        x: "1"
+        y: "day4_icon.bottom + 21"
+        width: "display.height / 2 + 6"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day5_icon
+        type: weather_icon
+        x: "day4_name.right + 5"
+        y: "1"
+        width: "display.height / 2 - 2"
+        height: "display.height / 2 - 2"
+
+      - name: day5_name
+        type: label
+        x: "day4_name.right"
+        y: "day4_name.top"
+        width: "display.height / 2 + 8"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+        border: 1
+
+      - name: day5_data_box
+        type: custom
+        x: "day4_data_box.right"
+        y: "day4_data_box.top"
+        width: "display.height / 2 + 8"
+        height: "22"
+        border: 1
+
+      - name: day5_temp
+        type: label
+        x: "day4_name.right + 1"
+        y: "day4_temp.top"
+        width: "display.height / 2 + 6"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day5_precip
+        type: label
+        x: "day4_name.right + 1"
+        y: "day4_precip.top"
+        width: "display.height / 2 + 6"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day6_icon
+        type: weather_icon
+        x: "day5_name.right + 5"
+        y: "1"
+        width: "display.height / 2 - 2"
+        height: "display.height / 2 - 2"
+
+      - name: day6_name
+        type: label
+        x: "day5_name.right"
+        y: "day4_name.top"
+        width: "display.height / 2 + 8"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+        border: 1
+
+      - name: day6_data_box
+        type: custom
+        x: "day5_data_box.right"
+        y: "day4_data_box.top"
+        width: "display.height / 2 + 8"
+        height: "22"
+        border: 1
+
+      - name: day6_temp
+        type: label
+        x: "day5_name.right + 1"
+        y: "day4_temp.top"
+        width: "display.height / 2 + 6"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day6_precip
+        type: label
+        x: "day5_name.right + 1"
+        y: "day4_precip.top"
+        width: "display.height / 2 + 6"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+templates:
+
+  # Each template lists variants in priority order; first match wins.
+  # An absent or empty `match` block is a catch-all.
+
+  playback:
+    variants:
+      - name: default
+        regions:
+          - component: scroller_panel
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  aio:
+    variants:
+      # Wide displays: left half uses the full scroller panel at half width.
+      - name: wide
+        match:
+          category: [Large, ExtraLarge]
+        regions:
+          - component: scroller_panel
+            x: "0"
+            y: "0"
+            width: "display.width / 2"
+            height: "display.height"
+
+      # Narrow displays: left half uses the compact AIO panel.
+      - name: narrow
+        regions:
+          - component: aio_compact_panel
+            x: "0"
+            y: "0"
+            width: "display.width / 2"
+            height: "display.height"
+
+  clock:
+    variants:
+      # ExtraLarge only (e.g. 400×240): tall digit set (60×105).
+      - name: large_display
+        match:
+          category: [ExtraLarge]
+        regions:
+          - component: clock_face_large
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+      # All other display sizes: standard digit set (25×44).
+      - name: small_display
+        regions:
+          - component: clock_face_small
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  weather_current:
+    variants:
+      # Wide: main fields + astral panel (both regions span full display width).
+      - name: wide
+        match:
+          category: [Large, ExtraLarge]
+        regions:
+          - component: weather_current_main
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+          - component: weather_astral_panel
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+      - name: default
+        regions:
+          - component: weather_current_main
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  weather_forecast:
+    variants:
+      # Wide: 3-col panel + extra 3-col panel starting at column 4.
+      # Extra panel region x = 3 * display.height/2 + 28 (= 124 on 64px display).
+      - name: wide
+        match:
+          category: [Large, ExtraLarge]
+        regions:
+          - component: weather_forecast_3col
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+          - component: weather_forecast_ext_cols
+            x: "3 * display.height / 2 + 28"
+            y: "0"
+            width: "display.width - 3 * display.height / 2 - 28"
+            height: "display.height"
+
+      - name: default
+        regions:
+          - component: weather_forecast_3col
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  splash:
+    variants:
+      - name: default
+        regions:
+          - component: splash_screen
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"

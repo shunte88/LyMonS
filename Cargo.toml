@@ -73,6 +73,7 @@ memmap2 = "0.9.8"
 mipidsi = { version = "0.10.0", optional = true }
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 num-integer = "0.1.46"
+ab_glyph = "0.2.32"
 
 [profile.release]
 opt-level = "s"       # "z" we prioritize size over speed, "s" is balanced

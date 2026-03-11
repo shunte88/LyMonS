@@ -1122,6 +1122,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             display_manager.set_astral_service(astral);
         }
 
+        // Load TTF text font (graceful — MonoFont used if zip not found)
+        {
+            let text_font_name = if let Ok(cfg_content) = std::fs::read_to_string(_config_file) {
+                serde_yaml::from_str::<serde_yaml::Value>(&cfg_content).ok()
+                    .and_then(|v| v.get("text_font").and_then(|f| f.as_str()).map(String::from))
+                    .unwrap_or_else(|| clock_font.clone())
+            } else {
+                clock_font.clone()
+            };
+            let zip_path = format!("./data/{}-text.zip", text_font_name);
+            if let Some(font) = display::ttf_font::TtfFont::load_from_zip(&zip_path, 9.0) {
+                display_manager.set_text_font(font);
+            }
+        }
+
         if show_splash {
             display_manager.update_splash_status("Initialization complete")?;
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
@@ -1272,6 +1287,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         display_manager.set_astral_service(astral);
+    }
+
+    // Load TTF text font (graceful — MonoFont used if zip not found)
+    {
+        let text_font_name = if let Ok(cfg_content) = std::fs::read_to_string(_config_file) {
+            serde_yaml::from_str::<serde_yaml::Value>(&cfg_content).ok()
+                .and_then(|v| v.get("text_font").and_then(|f| f.as_str()).map(String::from))
+                .unwrap_or_else(|| clock_font.clone())
+        } else {
+            clock_font.clone()
+        };
+        let zip_path = format!("./data/{}-text.zip", text_font_name);
+        if let Some(font) = display::ttf_font::TtfFont::load_from_zip(&zip_path, 9.0) {
+            display_manager.set_text_font(font);
+        }
     }
 
     if show_splash {

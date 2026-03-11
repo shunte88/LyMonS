@@ -105,6 +105,11 @@ impl MockDriver {
             width,
             height,
             color_depth: ColorDepth::Monochrome,
+            interface: crate::display::traits::BusInterface::I2c(crate::display::traits::I2cInfo {
+                default_address: 0x3C,
+                alt_address: None,
+                max_speed_hz: 400_000,
+            }),
             supports_rotation: true,
             max_fps: 60,
             supports_brightness: true,

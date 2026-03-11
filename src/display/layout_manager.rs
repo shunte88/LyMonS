@@ -23,670 +23,83 @@
 
 #![allow(dead_code)] // layout manager helpers; some page-builder fns reserved
 
-use super::field::Field;
 use super::page::PageLayout;
 use super::layout::{LayoutConfig, LayoutCategory};
-use super::color::Color;
-use embedded_graphics::mono_font::ascii::{FONT_6X9};
-use embedded_graphics::primitives::Rectangle;
-use embedded_graphics::geometry::{Point, Size};
-use embedded_graphics::mono_font::iso_8859_13::{
-    FONT_4X6,
-    FONT_5X7, FONT_5X8,
-    FONT_6X10, FONT_6X13_BOLD,
-    FONT_7X13_BOLD, FONT_7X14
-};
-use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
+use super::layout_template::LayoutTemplates;
+use super::layout_resolver::{DisplayProfile, LayoutResolver};
 
 pub const SCROLLING_PAGE: &str = "scrolling";
 pub const SCROLLING_AIO_PAGE: &str = "aio_small";
 pub const SCROLLING_AIO_WIDE_PAGE: &str = "aio_wide";
 
-/// Layout manager - creates and owns all page definitions
 pub struct LayoutManager {
     layout_config: LayoutConfig,
+    templates: LayoutTemplates,
+    profile: DisplayProfile,
 }
 
 impl LayoutManager {
 
-    /// Create a new layout manager
     pub fn new(layout_config: LayoutConfig) -> Self {
-        Self { layout_config }
+        let templates = LayoutTemplates::load_with_driver_override(&layout_config.asset_path);
+        let profile = DisplayProfile {
+            width:       layout_config.width,
+            height:      layout_config.height,
+            color_depth: layout_config.color_depth,
+            category:    layout_config.category,
+        };
+        Self { layout_config, templates, profile }
+    }
+
+    fn resolve(&self, template_name: &str) -> Option<PageLayout> {
+        LayoutResolver::new(&self.templates).resolve(template_name, self.profile)
     }
 
     pub fn create_aio_scrolling_page(&self) -> PageLayout {
-
-        let combination_width = self.layout_config.width;
-        let width = self.layout_config.width / 2;
-        let height = self.layout_config.height;
-        let border_adj: i32 = 2;
-        let time_adj: i32 = 29;
-        let width_time_adj = width - time_adj as u32 - border_adj as u32;
-        let width_adj = width - 2 * border_adj as u32;
-        let combination_width_adj = combination_width - 2 * border_adj as u32;
-        let y_height: i32 = 9;
-
-        PageLayout::new(SCROLLING_AIO_PAGE)
-            // Status bar at top (y=0)
-            .add_field(
-                Field::new_text(
-                    "status_bar_small",
-                    Rectangle::new(
-                        Point::new(border_adj, border_adj), 
-                        Size::new(width_adj, y_height as u32)),
-                    &FONT_6X9
-                )
-                .scrollable(false)
-            )
-            .add_field(
-                Field::new_text(
-                    "current_time",
-                    Rectangle::new(
-                        Point::new(time_adj, 2 + border_adj+y_height), 
-                        Size::new(width_time_adj, y_height as u32)),
-                    &FONT_7X13_BOLD
-                )
-                .scrollable(false)
-            )
-            .add_field(
-                Field::new_text(
-                    "duration_time",
-                    Rectangle::new(
-                        Point::new(time_adj, 5 + border_adj+2*y_height), 
-                        Size::new(width_time_adj, y_height as u32)),
-                    &FONT_7X13_BOLD
-                )
-                .scrollable(false)
-            )
-            .add_field(
-                Field::new_text(
-                    "track_time",
-                    Rectangle::new(
-                        Point::new(time_adj, 9 + border_adj+3*y_height), 
-                        Size::new(width_time_adj, y_height as u32)),
-                    &FONT_7X13_BOLD
-                )
-                .scrollable(false)
-            )
-            // Progress bar
-            .add_field(
-                Field::new_custom(
-                    "track_progress_bar",
-                    Rectangle::new(
-                        Point::new(border_adj, height.saturating_sub(5 + y_height as u32) as i32), 
-                        Size::new(width_adj, 3))
-                )
-                .scrollable(false)
-            )
-            // combination scroller occupies the full width of the device
-            .add_field(
-                Field::new_text(
-                    "combination",
-                    Rectangle::new(
-                        Point::new(border_adj, height.saturating_sub(3 + y_height as u32) as i32), 
-                        Size::new(combination_width_adj, y_height as u32)),
-                    &FONT_5X8
-                )
-                .scrollable(true)
-            )
+        self.resolve("aio").unwrap_or_else(|| {
+            log::error!("layout_manager: failed to resolve 'aio' template");
+            PageLayout::new(SCROLLING_AIO_PAGE)
+        })
     }
 
-    /// Create the scrolling music page layout
-    pub fn create_scrolling_page(
-        &self,
-        page_name: &str,
-    ) -> PageLayout {
-        
-        let width = if page_name == SCROLLING_PAGE { self.layout_config.width } else { self.layout_config.width / 2 };
-        let height = self.layout_config.height;
-        let width_adj = width-4;
-        let border_adj = 2;
-        let y_height: i32 = 9;
-        let y_start: i32 = border_adj + y_height + 1; // line 1 start: 1px gap below status bar
-
-        PageLayout::new(page_name)
-            // Status bar at top
-            .add_field(
-                Field::new_text(
-                    "status_bar",
-                    Rectangle::new(
-                        Point::new(border_adj, border_adj),
-                        Size::new(width_adj, y_height as u32)),
-                    &FONT_6X9
-                )
-            )
-            // Album Artist (1px gap below status bar, lines packed tightly below)
-            .add_field(
-                Field::new_text(
-                    "album_artist",
-                    Rectangle::new(
-                        Point::new(border_adj, y_start),
-                        Size::new(width_adj, y_height as u32)),
-                    &FONT_6X9
-                )
-                .scrollable(true)
-            )
-            .add_field(
-                Field::new_text(
-                    "album",
-                    Rectangle::new(
-                        Point::new(border_adj, y_start + y_height),
-                        Size::new(width_adj, y_height as u32)),
-                    &FONT_6X9
-                )
-                .scrollable(true)
-            )
-            .add_field(
-                Field::new_text(
-                    "title",
-                    Rectangle::new(
-                        Point::new(border_adj, y_start + 2*y_height),
-                        Size::new(width_adj, y_height as u32)),
-                    &FONT_6X9
-                )
-                .scrollable(true)
-            )
-            .add_field(
-                Field::new_text(
-                    "artist",
-                    Rectangle::new(
-                        Point::new(border_adj, y_start + 3*y_height),
-                        Size::new(width_adj, y_height as u32)),
-                    &FONT_6X9
-                )
-                .scrollable(true)
-            )
-            // Progress bar (y=40, height=4)
-            .add_field(
-                Field::new_custom(
-                    "track_progress_bar",
-                    Rectangle::new(
-                        Point::new(border_adj, height.saturating_sub(6 + y_height as u32) as i32), 
-                        Size::new(width_adj, 3))
-                )
-            )
-            // Info line (times) at bottom (y=62 for 128x64 displays)
-            .add_field(
-                Field::new_text(
-                    "info_line",
-                    Rectangle::new(
-                        Point::new(border_adj, height.saturating_sub(1+y_height as u32) as i32), 
-                        Size::new(width_adj, y_height as u32)),
-                    &FONT_6X9
-                )
-            )
+    pub fn create_scrolling_page(&self, page_name: &str) -> PageLayout {
+        let template = if page_name == SCROLLING_PAGE { "playback" } else { "aio" };
+        self.resolve(template).unwrap_or_else(|| {
+            log::error!("layout_manager: failed to resolve '{template}' template");
+            PageLayout::new(page_name)
+        })
     }
 
-    /// Create the clock page layout
     pub fn create_clock_page(&self) -> PageLayout {
-        let width = self.layout_config.width;
-        let height = self.layout_config.height;
-        let width_adj = width-4;
-        let border_adj = 2;
-
-        const PROGRESS_BAR_HEIGHT: i32 = 4;
-        const CLOCK_PROGRESS_BAR_GAP: i32 = 2; // gap between digit bottom and progress bar
-        const PROGRESS_BAR_DATE_GAP: i32 = 2;
-        const DATE_FONT_HEIGHT: i32 = 10;
-
-        // Digit size matches the SVG font render size (see clock_font_svg SIZE_LARGE/NORMAL)
-        let digit_h: i32 = if height > 70 { 105 } else { 44 };
-        let digit_w: i32 = if height > 70 { 60 } else { 25 };
-
-        // Bottom-up: anchor date at bottom, progress bar above it, digits 2px above that
-        let date_y = height.saturating_sub(PROGRESS_BAR_DATE_GAP as u32 + DATE_FONT_HEIGHT as u32) as i32;
-        let progress_bar_y = date_y - PROGRESS_BAR_HEIGHT - PROGRESS_BAR_DATE_GAP;
-        let clock_y_start = (progress_bar_y - CLOCK_PROGRESS_BAR_GAP - digit_h).max(border_adj);
- 
-        PageLayout::new("clock")
-            // metrics if requested (centered)
-            .add_field(
-                Field::new_text(
-                    "metrics",
-                    Rectangle::new(
-                        Point::new(border_adj, border_adj),
-                        Size::new(width_adj, 7)),
-                    &FONT_5X7
-                )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
-            )
-            // Clock digits — SVG font, sized to display capability
-            .add_field(
-                Field::new_custom(
-                    "clock_digits",
-                    Rectangle::new(
-                        Point::new(border_adj, clock_y_start),
-                        Size::new(digit_w as u32, digit_h as u32))
-                )
-                //.colors(Color::Cyan, None)
-            )
-            // Seconds progress bar (full width, 2px gap below digits)
-            .add_field(
-                Field::new_custom(
-                    "seconds_progress",
-                    Rectangle::new(
-                        Point::new(border_adj, progress_bar_y),
-                        Size::new(width_adj, PROGRESS_BAR_HEIGHT as u32))
-                )
-            )
-            // Date at bottom (centered, cyan color)
-            .add_field(
-                Field::new_text(
-                    "date",
-                    Rectangle::new(
-                        Point::new(border_adj, date_y),
-                        Size::new(width_adj, DATE_FONT_HEIGHT as u32)),
-                    &FONT_6X10
-                )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
-                .colors(Color::Cyan, None)
-            )
+        self.resolve("clock").unwrap_or_else(|| {
+            log::error!("layout_manager: failed to resolve 'clock' template");
+            PageLayout::new("clock")
+        })
     }
 
     pub fn is_wide(&self) -> bool{
         matches!(self.layout_config.category, LayoutCategory::Large | LayoutCategory::ExtraLarge)
     }
 
-    /// Create the current weather page layout
     pub fn create_weather_current_page(&self) -> PageLayout {
-        let width = self.layout_config.width;
-        let height = self.layout_config.height;
-        let is_wide = self.is_wide();
-
-        // Original: icon_w = height/2 + 2 = 34 for 128x64
-        let icon_size = height / 2 + 2;
-        let glyph_w = 12;
-        let mut glyph_x = 52;
-        let mut text_x = glyph_x + 2 + glyph_w; // 66
-
-        let mut page = PageLayout::new("weather_current")
-            // Large weather icon - left side (original: 12, 10, 34x34)
-            .add_field(
-                Field::new_glyph(
-                    "weather_icon",
-                    Rectangle::new(
-                        Point::new(12, 10), 
-                        Size::new(icon_size, icon_size))
-                )
-            )
-            // Temperature row with glyph (thermo icon at 52, 2)
-            .add_field(
-                Field::new_custom(
-                    "temp_glyph",
-                    Rectangle::new(
-                        Point::new(glyph_x as i32, 2),
-                        Size::new(glyph_w, glyph_w))
-                )
-                .colors(Color::Cyan, None)
-            )
-            .add_field(
-                Field::new_text(
-                    "temperature",  // "72(68) °F" format
-                    Rectangle::new(
-                        Point::new(text_x as i32, 2),
-                        Size::new(width - text_x, 14)),
-                    &FONT_6X13_BOLD
-                )
-                .colors(Color::Cyan, None)
-            )
-            // Humidity row with glyph (humidity icon at 52, 15)
-            .add_field(
-                Field::new_custom(
-                    "humidity_glyph",
-                    Rectangle::new(
-                        Point::new(glyph_x as i32, 14),
-                        Size::new(glyph_w, glyph_w))
-                )
-                .colors(Color::Cyan, None)
-            )
-            .add_field(
-                Field::new_text(
-                    "humidity",  // "65%" format
-                    Rectangle::new(
-                        Point::new(text_x as i32, 15),
-                        Size::new(width - text_x, 12)),
-                    &FONT_5X8
-                )
-                .colors(Color::Cyan, None)
-            )
-            // Wind row with glyph (wind icon at 52, 24)
-            .add_field(
-                Field::new_custom(
-                    "wind_glyph",
-                    Rectangle::new(
-                        Point::new(glyph_x as i32, 24),
-                        Size::new(glyph_w, glyph_w))
-                )
-                .colors(Color::Cyan, None)
-            )
-            .add_field(
-                Field::new_text(
-                    "wind",  // "10 mph NW" format
-                    Rectangle::new(
-                        Point::new(text_x as i32, 25),
-                        Size::new(width - text_x, 12)),
-                    &FONT_5X8
-                )
-                .colors(Color::Cyan, None)
-            )
-            // Precipitation row with glyph (rain icon at 52, 34)
-            .add_field(
-                Field::new_custom(
-                    "precip_glyph",
-                    Rectangle::new(
-                        Point::new(glyph_x as i32, 34),
-                        Size::new(glyph_w, glyph_w))
-                )
-                .colors(Color::Cyan, None)
-            )
-            .add_field(
-                Field::new_text(
-                    "precipitation",  // "20%" format
-                    Rectangle::new(
-                        Point::new(text_x as i32, 35),
-                        Size::new(width - text_x, 12)),
-                    &FONT_5X8
-                )
-                .colors(Color::Cyan, None)
-            )
-            // Conditions text centered at bottom (yellow, original: y=46+, FONT_7X14)
-            .add_field(
-                Field::new_text(
-                    "conditions",
-                    Rectangle::new(
-                        Point::new(2, height as i32 - 16),
-                        Size::new(width - 4, 14)),
-                    &FONT_7X14
-                )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
-                .colors(Color::Yellow, None)
-            );
-
-        // Wide display additions (width > 132): Sunrise/Sunset/Moon on the right
-        // we're going to want Moonrise, Moonset, and Moonphase
-        if is_wide {
-
-            glyph_x = 130;
-            text_x = glyph_x + 2 + glyph_w;
-            let mut astral_field_width = 33;
-
-            page = page
-                // Sunrise glyph
-                .add_field(
-                    Field::new_custom(
-                        "sunrise_glyph",
-                        Rectangle::new(
-                            Point::new(glyph_x as i32, 2),
-                            Size::new(glyph_w, glyph_w))
-                    )
-                    .colors(Color::Yellow, None)
-                )
-                // Sunrise text
-                .add_field(
-                    Field::new_text(
-                        "sunrise_text",
-                        Rectangle::new(
-                            Point::new(text_x as i32, 3),
-                            Size::new(astral_field_width, 10)),
-                        &FONT_5X8
-                    )
-                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
-                    .colors(Color::Yellow, None)
-                )
-                .add_field(
-                    Field::new_custom(
-                        "sunset_glyph",
-                        Rectangle::new(
-                            Point::new(glyph_x as i32, 16),
-                            Size::new(glyph_w, glyph_w))
-                    )
-                    .colors(Color::Yellow, None)
-                )
-                // Sunset text
-                .add_field(
-                    Field::new_text(
-                        "sunset_text",
-                        Rectangle::new(
-                            Point::new(text_x as i32, 17),
-                            Size::new(astral_field_width, 10)),
-                        &FONT_5X8
-                    )
-                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
-                    .colors(Color::Yellow, None)
-                );
-
-            glyph_x += 40;
-            text_x = glyph_x + 2 + glyph_w;
-            page = page
-                // Moonrise glyph
-                .add_field(
-                    Field::new_custom(
-                        "moonrise_glyph",
-                        Rectangle::new(
-                            Point::new(glyph_x as i32, 2),
-                            Size::new(glyph_w, glyph_w))
-                    )
-                    .colors(Color::Cyan, None)
-                )
-                // moonrise text
-                .add_field(
-                    Field::new_text(
-                        "moonrise_text",
-                        Rectangle::new(
-                            Point::new(text_x as i32, 3),
-                            Size::new(astral_field_width, 10)),
-                        &FONT_5X8
-                    )
-                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
-                    .colors(Color::Cyan, None)
-                )
-                // Moonset glyph
-                .add_field(
-                    Field::new_custom(
-                        "moonset_glyph",
-                        Rectangle::new(
-                            Point::new(glyph_x as i32, 16),
-                            Size::new(glyph_w, glyph_w))
-                    )
-                    .colors(Color::Cyan, None)
-                )
-                // moonset text
-                .add_field(
-                    Field::new_text(
-                        "moonset_text",
-                        Rectangle::new(
-                            Point::new(text_x as i32, 17),
-                            Size::new(astral_field_width, 10)),
-                        &FONT_5X8
-                    )
-                    .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top)
-                    .colors(Color::Cyan, None)
-                )
-;
-            glyph_x += 48;
-            text_x = glyph_x - 30;
-            astral_field_width = width - text_x - 4;
-            page = page
-                // Moonphase svg
-                .add_field(
-                    Field::new_custom(
-                        "moonphase_svg",
-                        Rectangle::new(
-                            Point::new(glyph_x as i32, 10),
-                            Size::new(34, 34))
-                    )
-                    .colors(Color::Yellow, None)
-                )
-                // moonset text
-                .add_field(
-                    Field::new_text(
-                        "moonphase_text",
-                        Rectangle::new(
-                            Point::new(text_x as i32, 43),
-                            Size::new(astral_field_width, 7)),
-                        &FONT_4X6
-                    )
-                    .styled_alignment(HorizontalAlignment::Right, VerticalAlignment::Top)
-                    .colors(Color::Yellow, None)
-                );
-        }
-
-        page
+        self.resolve("weather_current").unwrap_or_else(|| {
+            log::error!("layout_manager: failed to resolve 'weather_current' template");
+            PageLayout::new("weather_current")
+        })
     }
 
-    /// Create the weather forecast page layout
     pub fn create_weather_forecast_page(&self) -> PageLayout {
-        let _width = self.layout_config.width;
-        let height = self.layout_config.height;
-        let is_wide = self.is_wide();
-
-        // Original: icon_w = height/2 + 2 = 34, icon size = icon_w - 4 = 30
-        let header_y = 2;
-        let header_height = 10;
-        let icon_w = height / 2 + 2;
-        let icon_size = icon_w - 4;  // 30 for 128x64
-        let spacing = icon_w + 6;    // 40 pixels - column width
-
-        // Start leftmost column at x=4, use spacing (40px) for column width
-        let col_x1 = 4;
-        let col_x2 = col_x1 + spacing as i32;  // 44
-        let col_x3 = col_x2 + spacing as i32;  // 84
-        let col_x4 = col_x3 + spacing as i32;  // 124 (wide display)
-        let col_x5 = col_x4 + spacing as i32;  // 164 (wide display)
-        let col_x6 = col_x5 + spacing as i32;  // 204 (wide display)
-
-        // Center icons (30px) within columns (40px): offset = (40-30)/2 = 5
-        let icon_offset = (spacing - icon_size) / 2;
-        let icon_x1 = col_x1 + icon_offset as i32;  // 9
-        let icon_x2 = col_x2 + icon_offset as i32;  // 49
-        let icon_x3 = col_x3 + icon_offset as i32;  // 89
-        let icon_x4 = col_x4 + icon_offset as i32;  // 129 (wide display)
-        let icon_x5 = col_x5 + icon_offset as i32;  // 169 (wide display)
-        let icon_x6 = col_x6 + icon_offset as i32;  // 209 (wide display)
-
-        let mut page = PageLayout::new("weather_forecast")
-            // Day 1 column (x=4, width=40)
-            .add_field(Field::new_glyph("day1_icon",Rectangle::new(Point::new(icon_x1, 1), Size::new(icon_size, icon_size))))
-            // day name. Mon, Tue... etc
-            .add_field(Field::new_text("day1_name",Rectangle::new(Point::new(col_x1, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
-                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
-                .colors(Color::Cyan, None)
-                .border(1))
-            // Bordered box for temp+precip
-            .add_field(Field::new_custom("day1_data_box", Rectangle::new(Point::new(col_x1, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
-            // "45°F|62°F" format - 3px down from box top, inset by 1px for border
-            .add_field(Field::new_text("day1_temp",Rectangle::new(Point::new(col_x1 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-            // "20%" format - below temp, inset by 1px for border
-            .add_field(Field::new_text("day1_precip",Rectangle::new(Point::new(col_x1 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-            // Day 2 column (x=44, width=40)
-            .add_field(Field::new_glyph("day2_icon",Rectangle::new(Point::new(icon_x2, 1), Size::new(icon_size, icon_size))))
-            .add_field(Field::new_text("day2_name",Rectangle::new(Point::new(col_x2, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
-                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
-                .colors(Color::Cyan, None)
-                .border(1))
-            // Bordered box for temp+precip
-            .add_field(Field::new_custom("day2_data_box",Rectangle::new(Point::new(col_x2, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
-            // "45°F|62°F" format
-            .add_field(Field::new_text("day2_temp", Rectangle::new(Point::new(col_x2 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-            // "20%" format
-            .add_field(Field::new_text("day2_precip",Rectangle::new(Point::new(col_x2 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-            // Day 3 column (x=84, width=40)
-            .add_field(Field::new_glyph("day3_icon",Rectangle::new(Point::new(icon_x3, 1), Size::new(icon_size, icon_size))))
-            .add_field(Field::new_text("day3_name",Rectangle::new(Point::new(col_x3, icon_size as i32 + header_y),Size::new(spacing, header_height)),&FONT_4X6)
-                .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
-                .colors(Color::Cyan, None)
-                .border(1))
-            // Bordered box for temp+precip
-            .add_field(Field::new_custom("day3_data_box",Rectangle::new(Point::new(col_x3, icon_size as i32 + 12),Size::new(spacing, 22))).border(1))
-            // "45°F|62°F" format
-            .add_field(Field::new_text("day3_temp", Rectangle::new(Point::new(col_x3 + 1, icon_size as i32 + 15),Size::new(spacing - 2, 7)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-            // "20%" format
-            .add_field(Field::new_text("day3_precip", Rectangle::new(Point::new(col_x3 + 1, icon_size as i32 + 22),Size::new(spacing - 2, 10)),&FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None));
-
-        // Wide display additions (width > 128): Days 4-6
-        if is_wide {
-            page = page
-                // Day 4 column
-                .add_field(Field::new_glyph("day4_icon", Rectangle::new(Point::new(icon_x4, 1), Size::new(icon_size, icon_size))))
-                .add_field(Field::new_text("day4_name", Rectangle::new(Point::new(col_x4, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
-                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
-                    .colors(Color::Cyan, None)
-                    .border(1))
-                .add_field(Field::new_custom("day4_data_box", Rectangle::new(Point::new(col_x4, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
-                .add_field(Field::new_text("day4_temp", Rectangle::new(Point::new(col_x4 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-                .add_field(Field::new_text("day4_precip", Rectangle::new(Point::new(col_x4 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-                // Day 5 column
-                .add_field(Field::new_glyph("day5_icon", Rectangle::new(Point::new(icon_x5, 1), Size::new(icon_size, icon_size))))
-                .add_field(Field::new_text("day5_name", Rectangle::new(Point::new(col_x5, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
-                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
-                    .colors(Color::Cyan, None)
-                    .border(1))
-                .add_field(Field::new_custom("day5_data_box", Rectangle::new(Point::new(col_x5, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
-                .add_field(Field::new_text("day5_temp", Rectangle::new(Point::new(col_x5 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-                .add_field(Field::new_text("day5_precip", Rectangle::new(Point::new(col_x5 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-                // Day 6 column
-                .add_field(Field::new_glyph("day6_icon", Rectangle::new(Point::new(icon_x6, 1), Size::new(icon_size, icon_size))))
-                .add_field(Field::new_text("day6_name", Rectangle::new(Point::new(col_x6, icon_size as i32 + header_y), Size::new(spacing, header_height)), &FONT_4X6)
-                    .styled_alignment(HorizontalAlignment::Center,VerticalAlignment::Top)
-                    .colors(Color::Cyan, None)
-                    .border(1))
-                .add_field(Field::new_custom("day6_data_box", Rectangle::new(Point::new(col_x6, icon_size as i32 + 12), Size::new(spacing, 22))).border(1))
-                .add_field(Field::new_text("day6_temp", Rectangle::new(Point::new(col_x6 + 1, icon_size as i32 + 15), Size::new(spacing - 2, 7)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None))
-                .add_field(Field::new_text("day6_precip", Rectangle::new(Point::new(col_x6 + 1, icon_size as i32 + 22), Size::new(spacing - 2, 10)), &FONT_4X6).styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Top).colors(Color::Cyan, None));
-        }
-
-        page
+        self.resolve("weather_forecast").unwrap_or_else(|| {
+            log::error!("layout_manager: failed to resolve 'weather_forecast' template");
+            PageLayout::new("weather_forecast")
+        })
     }
 
-    /// Create the splash screen layout
-    /// Shows: logo SVG (background), version, build date, and optional status message
     pub fn create_splash_page(&self) -> PageLayout {
-        let width = self.layout_config.width;
-        let height = self.layout_config.height;
-
-        // Calculate text detail positions
-        let version_y = (height as i32) - 7 - 9 - 15;
-        let build_y = (height as i32) - 7 - 9;
-        let status_y = (height as i32) - 7;
-
-        PageLayout::new("splash")
-            // Logo SVG (full screen background) - custom field for SVG rendering
-            .add_field(
-                Field::new_custom(
-                    "logo_svg",
-                    Rectangle::new(Point::new(0, 0), Size::new(width, height))
-                )
-            )
-            // Version string (e.g., "LyMonS v0.m.n")
-            .add_field(
-                Field::new_text(
-                    "version",
-                    Rectangle::new(Point::new(0, version_y), Size::new(width, 15)),
-                    &FONT_6X13_BOLD
-                )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
-                .colors(Color::White, None)
-            )
-            // Status/task message (optional, for showing initialization progress)
-            // Build date (e.g., "2026-02-04")
-            .add_field(
-                Field::new_text(
-                    "build_date",
-                    Rectangle::new(Point::new(0, build_y), Size::new(width, 7)),
-                    &FONT_4X6
-                )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
-                .colors(Color::Cyan, None)
-            )
-            .add_field(
-                Field::new_text(
-                    "status",
-                    Rectangle::new(Point::new(0, status_y), Size::new(width, 7)),
-                    &FONT_4X6
-                )
-                .styled_alignment(HorizontalAlignment::Center, VerticalAlignment::Bottom)
-                .colors(Color::Green, None)
-            )
+        self.resolve("splash").unwrap_or_else(|| {
+            log::error!("layout_manager: failed to resolve 'splash' template");
+            PageLayout::new("splash")
+        })
     }
 
     /// Get the layout configuration

@@ -100,6 +100,114 @@ pub fn get_moon_phase_slice(phase: MoonPhase) -> &'static [u8] {
 ///
 /// # Returns
 /// string description of the requested phase
+/// Map a `*_glyph` field name to its 1bpp bitmap index in `THERMO_RAW_DATA`.
+/// Returns `usize::MAX` for unrecognised names (caller should skip).
+pub fn glyph_index_for_field(name: &str) -> usize {
+    match name {
+        "temp_glyph"     => GLYPH_TEMPERATURE,
+        "humidity_glyph" => GLYPH_HUMIDITY,
+        "wind_glyph"     => GLYPH_WIND,
+        "precip_glyph"   => GLYPH_PRECIPITATION,
+        "sunrise_glyph"  => GLYPH_SUNRISE,
+        "sunset_glyph"   => GLYPH_SUNSET,
+        "moonset_glyph"  => GLYPH_MOONSET,
+        "moonrise_glyph" => GLYPH_MOONRISE,
+        _                => usize::MAX,
+    }
+}
+
+/// SVG glyph data loaded from `data/weather_glyphs.zip` at startup.
+///
+/// Each field holds the raw SVG bytes for one glyph.  Missing entries (file
+/// not found in the zip) are represented as empty `Vec`s; the renderer falls
+/// back to the 1bpp bitmap in that case.
+#[derive(Default)]
+pub struct WeatherGlyphSet {
+    pub temperature:   Vec<u8>,
+    pub humidity:      Vec<u8>,
+    pub wind:          Vec<u8>,
+    pub precipitation: Vec<u8>,
+    pub sunrise:       Vec<u8>,
+    pub sunset:        Vec<u8>,
+    pub moonrise:      Vec<u8>,
+    pub moonset:       Vec<u8>,
+    pub pressure:      Vec<u8>,
+}
+
+impl WeatherGlyphSet {
+    /// Load all matching entries from a zip archive.
+    ///
+    /// Entries are matched by filename keywords (e.g. `weather_temperature.svg`).
+    /// Returns `None` only if the zip cannot be opened at all; a partially-populated
+    /// set is returned when individual entries are missing.
+    pub fn load_from_zip(zip_path: &str) -> Option<Self> {
+        use std::io::Read;
+        let file = std::fs::File::open(zip_path)
+            .map_err(|e| log::warn!("weather_glyphs: cannot open {}: {}", zip_path, e))
+            .ok()?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| log::warn!("weather_glyphs: cannot read zip {}: {}", zip_path, e))
+            .ok()?;
+
+        let mut set = WeatherGlyphSet::default();
+
+        for i in 0..archive.len() {
+            let mut entry = match archive.by_index(i) {
+                Ok(e)  => e,
+                Err(_) => continue,
+            };
+            let name = entry.name().to_lowercase();
+
+            let dest: &mut Vec<u8> =
+                if      name.contains("temperature")   { &mut set.temperature   }
+                else if name.contains("humidity")      { &mut set.humidity      }
+                else if name.contains("wind")          { &mut set.wind          }
+                else if name.contains("precipitation") { &mut set.precipitation }
+                else if name.contains("sunrise")       { &mut set.sunrise       }
+                else if name.contains("sunset")        { &mut set.sunset        }
+                else if name.contains("moonrise")      { &mut set.moonrise      }
+                else if name.contains("moonset")       { &mut set.moonset       }
+                else if name.contains("pressure")      { &mut set.pressure      }
+                else { continue };
+
+            if entry.read_to_end(dest).is_err() {
+                log::warn!("weather_glyphs: failed to read {} from {}", entry.name(), zip_path);
+                dest.clear();
+            }
+        }
+
+        log::info!(
+            "weather_glyphs: loaded from {} (temp={}, humidity={}, wind={}, precip={}, \
+             sunrise={}, sunset={}, moonrise={}, moonset={})",
+            zip_path,
+            !set.temperature.is_empty(), !set.humidity.is_empty(),
+            !set.wind.is_empty(), !set.precipitation.is_empty(),
+            !set.sunrise.is_empty(), !set.sunset.is_empty(),
+            !set.moonrise.is_empty(), !set.moonset.is_empty(),
+        );
+
+        Some(set)
+    }
+
+    /// Look up SVG bytes by the YAML field name (`"temp_glyph"` etc.).
+    /// Returns `None` for unknown names or glyphs that failed to load.
+    pub fn get(&self, field_name: &str) -> Option<&[u8]> {
+        let v = match field_name {
+            "temp_glyph"     => &self.temperature,
+            "humidity_glyph" => &self.humidity,
+            "wind_glyph"     => &self.wind,
+            "precip_glyph"   => &self.precipitation,
+            "sunrise_glyph"  => &self.sunrise,
+            "sunset_glyph"   => &self.sunset,
+            "moonrise_glyph" => &self.moonrise,
+            "moonset_glyph"  => &self.moonset,
+            "pressure_glyph" => &self.pressure,
+            _                => return None,
+        };
+        if v.is_empty() { None } else { Some(v.as_slice()) }
+    }
+}
+
 // moon phase strings - these need to be translatable
 pub fn get_moon_phase_description(phase: MoonPhase) -> &'static str {
     match phase {

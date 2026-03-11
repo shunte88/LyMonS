@@ -23,15 +23,18 @@
 
 #![allow(dead_code)] // scroller component helpers; some methods reserved
 
+use std::sync::Arc;
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::BinaryColor;
 use crate::display::layout::LayoutConfig;
 use crate::display::field::Field;
+use crate::display::ttf_font::{BlendCoverage, TtfFont};
 use crate::textable::{TextScroller, ScrollMode};
 
 /// Simple scroll state for one line of text
 struct ScrollState {
     text: String,
+    char_width: usize,
     offset: i32,
     direction: i32, // -1 for left, 1 for right
     pause_counter: u32,
@@ -43,6 +46,7 @@ impl ScrollState {
         Self {
             text: String::new(),
             offset: 0,
+            char_width: 6,
             direction: -1,
             pause_counter: 0,
             log_counter: 0,
@@ -59,14 +63,16 @@ impl ScrollState {
         }
     }
 
-    fn update(&mut self, display_width: u32, scroll_mode: ScrollMode) {
+    fn update(&mut self, display_width: u32, scroll_mode: ScrollMode, ttf: Option<&TtfFont>, char_width: usize) {
 
         if self.text.is_empty() {
             return;
         }
 
-        // Calculate text width in pixels (approximate: 6 pixels per char)
-        let text_width = (self.text.len() * 6) as i32;
+        let text_width = match ttf {
+            Some(f) => f.measure_text(&self.text),
+            None    => (self.text.len() * char_width) as i32,
+        };
         let display_width = display_width as i32;
 
         // If text fits on screen, no scrolling needed
@@ -131,6 +137,8 @@ pub struct ScrollingText {
     scroll_mode: ScrollMode,
     layout: LayoutConfig,
     display_width: u32,
+    /// Optional TTF renderer; when set, replaces MonoFont bitmap rendering.
+    ttf_font: Option<Arc<TtfFont>>,
 }
 
 impl ScrollingText {
@@ -151,7 +159,14 @@ impl ScrollingText {
             scroll_mode,
             layout,
             display_width,
+            ttf_font: None,
         }
+    }
+
+    /// Attach a TTF font.  Replaces MonoFont rendering in `render_field` and
+    /// enables accurate pixel-width measurement for CJK and variable-width text.
+    pub fn set_ttf_font(&mut self, font: Arc<TtfFont>) {
+        self.ttf_font = Some(font);
     }
 
     /// Update album artist text
@@ -215,35 +230,39 @@ impl ScrollingText {
 
     /// Update scroll position (called on each frame)
     pub fn update(&mut self) {
-        self.album_artist_scroll.update(self.display_width, self.scroll_mode);
-        self.album_scroll.update(self.display_width, self.scroll_mode);
-        self.title_scroll.update(self.display_width, self.scroll_mode);
-        self.artist_scroll.update(self.display_width, self.scroll_mode);
-        self.combination_scroll.update(self.display_width, self.scroll_mode);
+        let ttf = self.ttf_font.as_deref();
+        self.album_artist_scroll.update(self.display_width, self.scroll_mode, ttf, self.album_artist_scroll.char_width);
+        self.album_scroll.update(self.display_width, self.scroll_mode, ttf, self.album_scroll.char_width);
+        self.title_scroll.update(self.display_width, self.scroll_mode, ttf, self.title_scroll.char_width);
+        self.artist_scroll.update(self.display_width, self.scroll_mode, ttf, self.artist_scroll.char_width);
+        self.combination_scroll.update(self.display_width, self.scroll_mode, ttf, self.combination_scroll.char_width);
     }
 
-    /// Update scroll position (called on each frame)
+    /// Update combination scroll position (called on each frame)
     pub fn update_combination(&mut self) {
-        self.combination_scroll.update(self.display_width, self.scroll_mode);
+        let ttf = self.ttf_font.as_deref();
+        self.combination_scroll.update(self.display_width, self.scroll_mode, ttf, self.combination_scroll.char_width);
     }
 
     /// Update combination scroll position using actual field width
     pub fn update_combination_with_field(&mut self, field: &Field) {
-        self.combination_scroll.update(field.width(), self.scroll_mode);
+        let ttf = self.ttf_font.as_deref();
+        self.combination_scroll.update(field.width(), self.scroll_mode, ttf, self.combination_scroll.char_width);
     }
 
     /// Update scroll position using field widths
     pub fn update_with_fields(
-        &mut self, 
-        album_artist_field: &Field, 
-        album_field: &Field, 
-        title_field: &Field, 
-        artist_field: &Field
+        &mut self,
+        album_artist_field: &Field,
+        album_field:        &Field,
+        title_field:        &Field,
+        artist_field:       &Field,
     ) {
-        self.album_artist_scroll.update(album_artist_field.width(), self.scroll_mode);
-        self.album_scroll.update(album_field.width(), self.scroll_mode);
-        self.title_scroll.update(title_field.width(), self.scroll_mode);
-        self.artist_scroll.update(artist_field.width(), self.scroll_mode);
+        let ttf = self.ttf_font.as_deref();
+        self.album_artist_scroll.update(album_artist_field.width(), self.scroll_mode, ttf, self.album_artist_scroll.char_width);
+        self.album_scroll.update(album_field.width(), self.scroll_mode, ttf, self.album_scroll.char_width);
+        self.title_scroll.update(title_field.width(), self.scroll_mode, ttf, self.title_scroll.char_width);
+        self.artist_scroll.update(artist_field.width(), self.scroll_mode, ttf, self.artist_scroll.char_width);
     }
 
     /// Render the scrolling text
@@ -255,8 +274,9 @@ impl ScrollingText {
         use embedded_graphics::text::Text;
         use embedded_graphics::geometry::Point;
 
-        let text_style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
-        let char_width = 6;
+        let font = &FONT_5X8;
+        let text_style = MonoTextStyle::new(font, BinaryColor::On);
+        let char_width = font.character_size.width as usize;
         let word_gap = 2 * char_width as i32;
         let mut text_y = 15;
         let text_height = 9; // need to get this from bounds and font metrics
@@ -317,68 +337,75 @@ impl ScrollingText {
         Ok(())
     }
 
-    /// Render to a specific field by name
+    /// Render to a specific field by name.
+    ///
+    /// When a TTF font is attached (`set_ttf_font`), it is used for rendering
+    /// and for measuring text width (loop gap, centering).  Otherwise the field's
+    /// MonoFont is used, preserving the original behaviour exactly.
     pub fn render_field<D, C>(&self, field: &Field, target: &mut D) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = C>,
-        C: PixelColor,
+        C: PixelColor + BlendCoverage,
         crate::display::color::Color: crate::display::color_proxy::ConvertColor<C>,
     {
-        use embedded_graphics::mono_font::MonoTextStyle;
-        use embedded_graphics::text::Text;
-        use embedded_graphics::geometry::Point;
+        use crate::display::color_proxy::ConvertColor;
 
-        // Get the scroll state based on field name
         let scroll_state = match field.name.as_str() {
             "album_artist" => &self.album_artist_scroll,
-            "artist" => &self.artist_scroll,
-            "album" => &self.album_scroll,
-            "title" => &self.title_scroll,
-            "combination" => &self.combination_scroll,
-            _ => return Ok(()), // Unknown field, skip
+            "artist"       => &self.artist_scroll,
+            "album"        => &self.album_scroll,
+            "title"        => &self.title_scroll,
+            "combination"  => &self.combination_scroll,
+            _              => return Ok(()),
         };
 
-        // Skip if no text
         if scroll_state.text.is_empty() {
             return Ok(());
         }
 
-        // Use field's font and colors (convert to appropriate color depth)
-        let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8);
-        use crate::display::color_proxy::ConvertColor;
-        let text_style = MonoTextStyle::new(font, field.fg_color.to_color());
-        let char_width = 5;
-        let word_gap = 2 * char_width as i32;
-
-        // Position baseline using the font's own metric so the character cell
-        // starts exactly at field_pos.y and all pixels fall within field.bounds.
-        // (The old formula used field.height()+1 which placed the baseline below
-        // the field bottom, causing the clip rect to cut through the glyphs.)
-        let field_pos = field.position();
-        let baseline_y = field_pos.y + font.baseline as i32;
-
-        // Calculate scroll offset
-        let x = field_pos.x + scroll_state.get_offset();
-
-        // Clip to field bounds so scrolling text never bleeds into adjacent fields.
+        let field_pos  = field.position();
+        let fg: C      = field.fg_color.to_color();
         let mut clipped = target.clipped(&field.bounds);
 
-        // Draw main text
-        Text::new(
-            &scroll_state.text,
-            Point::new(x, baseline_y),
-            text_style)
-            .draw(&mut clipped)?;
+        if let Some(ttf) = &self.ttf_font {
+            // TTF path — vertically centre the text within the field using real metrics.
+            let ascent     = ttf.ascent();
+            let line_h     = ttf.line_height();
+            let field_h    = field.height() as i32;
+            let baseline_y = field_pos.y + (field_h - line_h) / 2 + ascent;
+            let x          = field_pos.x + scroll_state.get_offset();
 
-        // For continuous loop mode, draw the text again after a gap
-        if field.scrollable && self.scroll_mode == ScrollMode::ScrollLeft {
-            let text_width = (scroll_state.text.len() * char_width) as i32;
-            let loop_x = x + text_width + word_gap;
-            Text::new(
-                &scroll_state.text,
-                Point::new(loop_x, baseline_y),
-                text_style)
+            ttf.render_text(&scroll_state.text, x, baseline_y, fg, &mut clipped)?;
+
+            if field.scrollable && self.scroll_mode == ScrollMode::ScrollLeft {
+                let text_px = ttf.measure_text(&scroll_state.text);
+                let gap     = (ttf.pixel_size() * 2.0).round() as i32;
+                ttf.render_loop_copy(
+                    &scroll_state.text, x, baseline_y, fg, text_px, gap, &mut clipped,
+                )?;
+            }
+        } else {
+            // MonoFont path — identical to the previous implementation.
+            use embedded_graphics::mono_font::MonoTextStyle;
+            use embedded_graphics::text::Text;
+            use embedded_graphics::geometry::Point;
+
+            let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8);
+            let text_style = MonoTextStyle::new(font, fg);
+            let char_width = font.character_size.width as usize;
+            let word_gap   = 2 * char_width as usize;
+            let baseline_y = field_pos.y + font.baseline as i32;
+            let x          = field_pos.x + scroll_state.get_offset();
+
+            Text::new(&scroll_state.text, Point::new(x, baseline_y), text_style)
                 .draw(&mut clipped)?;
+
+            if field.scrollable && self.scroll_mode == ScrollMode::ScrollLeft {
+                let text_width = (scroll_state.text.len() * char_width) as i32;
+                let loop_x     = x + text_width + word_gap as i32;
+                Text::new(&scroll_state.text, Point::new(loop_x, baseline_y), text_style)
+                    .draw(&mut clipped)?;
+            }
         }
 
         Ok(())

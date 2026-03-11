@@ -17,7 +17,7 @@ use super::drivers::emulator::EmulatorDriver;
 use super::traits::DisplayDriver;
 use super::error::DisplayError;
 use super::DisplayMode;
-use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode, GAP_BETWEEN_LOOP_TEXT_FIXED};
+use crate::textable::{ScrollMode, TextScroller, transform_scroll_mode};
 use crate::eggs::{Eggs, set_easter_egg};
 use crate::clock_font_svg::{ClockFontData, set_clock_font};
 use crate::glyphs::{RepeatMode, ShuffleMode};
@@ -351,6 +351,7 @@ impl EmulatorDisplayController {
             let current_mode = scroller_state.scroll_mode;
 
             let top_left = scroller.top_left;
+            let loop_text_gap = scroller_state.gap_between_looped_text;
             let x_start = top_left.x;
             let y_start = top_left.y;
 
@@ -362,7 +363,7 @@ impl EmulatorDisplayController {
 
             // For continuous loop, draw second copy
             if current_mode == ScrollMode::ScrollLeft {
-                let second_copy_x = draw_x_main + text_width as i32 + GAP_BETWEEN_LOOP_TEXT_FIXED;
+                let second_copy_x = draw_x_main + text_width as i32 + loop_text_gap as i32;
                 draw_text(&mut self.driver, &current_text, second_copy_x, y_start, &FONT_5X8)?;
             }
 

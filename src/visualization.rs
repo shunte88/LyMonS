@@ -62,6 +62,14 @@ pub trait SvgColorDepth: PixelColor + From<<Self as PixelColor>::Raw> {
 
     /// Maximum brightness / "on" color for this depth.
     fn on() -> Self;
+
+    /// Whether this color depth should render weather glyphs from SVG rather
+    /// than the compiled-in 1bpp bitmaps.
+    ///
+    /// Returns `false` for `BinaryColor` (mono OLEDs: pixel-precise hand-crafted
+    /// bitmaps look better at 12×12) and `true` for `Gray4` / `Rgb565` (smooth
+    /// anti-aliased SVG rendering at any size).
+    fn use_svg_glyphs() -> bool { true }
 }
 
 impl SvgColorDepth for BinaryColor {
@@ -82,6 +90,7 @@ impl SvgColorDepth for BinaryColor {
     }
     fn weather_asset_folder() -> &'static str { "./assets/mono" }
     fn on() -> Self { BinaryColor::On }
+    fn use_svg_glyphs() -> bool { false }
 }
 
 impl SvgColorDepth for Gray4 {

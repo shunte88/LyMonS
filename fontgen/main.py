@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """
+
+  LyMonS fontgen - it's worth the squeeze
+  (c) 2025-26 Stuart Hunter
+
 generate_tiles.py - Generate SVG tiles for characters "0123456789: -"
 
 Usage:
@@ -20,8 +24,10 @@ Sizing rules:
   - All glyphs share a common baseline 2px from the bottom of the tile.
   - Digits (0-9) are right-justified with a 2px right margin.
   - Colon, minus, and space are horizontally centred.
-  - Character path: fill #00ffff, stroke #ffff00 at 0.5px (stroke-width scaled
-    to font units so it renders at 0.5px in SVG space).
+  - If a glyph would exceed the tile width, it is horizontally scaled down
+    to fit within (TILE_W - RIGHT_MARGIN - 1px) keeping right-justification,
+    with a minimum 1px gap at the left ink edge.
+  - Character path: fill #00ffff, stroke #ffffff at 0.5px opacity 0.4.
 """
 
 import sys
@@ -114,6 +120,7 @@ def compute_scale(tt: TTFont) -> float:
 
 
 RIGHT_MARGIN   = 2      # px gap between glyph right ink edge and tile right edge
+LEFT_GAP       = 1      # minimum px gap between glyph left ink edge and tile left edge
 FILL_COLOR     = '#00ffff'
 STROKE_COLOR   = '#ffffff'
 STROKE_OPACITY = 0.4
@@ -128,9 +135,12 @@ def make_svg(path_d, x_min, y_min, x_max, y_max, scale: float, char: str) -> str
     Build an SVG with the glyph path positioned using a shared scale and baseline.
       - Baseline sits BASELINE px from the bottom of the tile.
       - Digits are right-justified; colon, minus and space are centred.
+      - If the glyph at the shared scale would be wider than the available
+        horizontal space, it is scaled down horizontally only until it fits,
+        preserving right-justification and maintaining a LEFT_GAP px minimum
+        gap at the left ink edge. Vertical scale is always the shared scale.
       - y-axis is flipped (font = y-up, SVG = y-down).
-      - Path style: fill FILL_COLOR, stroke STROKE_COLOR at STROKE_PX.
-        stroke-width is expressed in font units so it maps to STROKE_PX after scaling.
+      - Path style: fill FILL_COLOR, stroke STROKE_COLOR at STROKE_PX / 0.4 opacity.
       - Transparent tile background, no tile border.
     """
     if path_d is None:
@@ -141,21 +151,38 @@ def make_svg(path_d, x_min, y_min, x_max, y_max, scale: float, char: str) -> str
             f'viewBox="0 0 {TILE_W} {TILE_H}"></svg>'
         )
 
-    glyph_w = (x_max - x_min) * scale
+    glyph_units_w = x_max - x_min
+
+    # Maximum rendered width before the left-gap constraint is violated
+    if char in CENTRED_CHARS:
+        max_glyph_px = TILE_W - 2 * LEFT_GAP          # equal margins both sides
+    else:
+        max_glyph_px = TILE_W - RIGHT_MARGIN - LEFT_GAP  # right-margin + left-gap
+
+    # Clamp horizontal scale down if needed; never scale up beyond shared scale
+    h_scale = scale
+    if glyph_units_w > 0:
+        max_h_scale = max_glyph_px / glyph_units_w
+        if max_h_scale < scale:
+            h_scale = max_h_scale
+
+    glyph_px_w = glyph_units_w * h_scale
 
     if char in CENTRED_CHARS:
-        # Centre the ink bounding box horizontally
-        tx = (TILE_W - glyph_w) / 2 - x_min * scale
+        # Centre the (possibly clamped) ink bounding box horizontally
+        tx = (TILE_W - glyph_px_w) / 2 - x_min * h_scale
     else:
         # Right-justify: glyph right ink edge = TILE_W - RIGHT_MARGIN
-        tx = (TILE_W - RIGHT_MARGIN) - x_max * scale
+        tx = (TILE_W - RIGHT_MARGIN) - x_max * h_scale
 
     # Vertical: font baseline (y=0) → svg_y = TILE_H - BASELINE; y-axis flipped
+    # Vertical scale always uses the shared scale for consistent glyph heights.
     ty = TILE_H - BASELINE
 
-    transform = f"translate({tx:.4f},{ty:.4f}) scale({scale:.6f},{-scale:.6f})"
+    # Non-uniform scale only when h_scale was clamped; uniform otherwise.
+    transform = f"translate({tx:.4f},{ty:.4f}) scale({h_scale:.6f},{-scale:.6f})"
 
-    # stroke-width in font units so it renders as STROKE_PX after the scale transform
+    # stroke-width in font units so it renders as STROKE_PX after the vertical scale
     sw_font = STROKE_PX / scale
 
     style = (
@@ -165,13 +192,16 @@ def make_svg(path_d, x_min, y_min, x_max, y_max, scale: float, char: str) -> str
         f'stroke-opacity="{STROKE_OPACITY}"'
     )
 
+    clamped = " [width clamped]" if h_scale < scale else ""
+    # (clamped flag available for callers; not used in SVG output)
+
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{TILE_W}" height="{TILE_H}" '
         f'viewBox="0 0 {TILE_W} {TILE_H}">\n'
         f'  <path d="{path_d}" {style} transform="{transform}"/>\n'
         f'</svg>'
-    )
+    ), h_scale < scale
 
 
 def main():
@@ -195,7 +225,12 @@ def main():
 
     for char, label in CHARACTERS:
         path_d, x_min, y_min, x_max, y_max = get_glyph_info(tt, char)
-        svg_content = make_svg(path_d, x_min, y_min, x_max, y_max, scale, char)
+        result = make_svg(path_d, x_min, y_min, x_max, y_max, scale, char)
+
+        if isinstance(result, tuple):
+            svg_content, clamped = result
+        else:
+            svg_content, clamped = result, False
 
         filename = f"{seed}_{label}.svg"
         filepath = os.path.join(output_dir, filename)
@@ -203,7 +238,12 @@ def main():
             f.write(svg_content)
 
         generated_files.append(filepath)
-        status = "path rendered" if path_d else "blank (no glyph)"
+        if path_d is None:
+            status = "blank (no glyph)"
+        elif clamped:
+            status = "path rendered [width clamped to fit]"
+        else:
+            status = "path rendered"
         print(f"  {filename}  [{status}]")
 
     # Zip all SVGs

@@ -25,8 +25,7 @@
 
 use embedded_graphics::{
     mono_font::{
-        ascii::{
-            FONT_5X8},
+        iso_8859_13::FONT_5X8,
         MonoFont,
     },
     prelude::*,
@@ -41,7 +40,6 @@ use log::{info, debug}; // Add logging
 
 const SCROLL_LEFT: i8 = -1;
 const SCROLL_RIGHT: i8 = 1;
-pub const GAP_BETWEEN_LOOP_TEXT_FIXED: i32 = 12; // Fixed gap for continuous loop
 
 /// Enum for scroll modes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,6 +61,9 @@ pub struct State { // Made public so OledDisplay can read it
     pub direction: i8, // -1 for left, 1 for right (for cylon)
     pub paused: bool, // For pause states in scrolling
     pub has_paused: bool, // For pause states in scrolling
+    pub character_width: usize,
+    pub character_height: usize,
+    pub gap_between_looped_text: f32,
 }
 
 pub fn transform_scroll_mode(scroll_mode: &str) -> ScrollMode {
@@ -76,10 +77,14 @@ pub fn transform_scroll_mode(scroll_mode: &str) -> ScrollMode {
 
 impl Default for State {
     fn default() -> Self {
+        let font = FONT_5X8;
+        let character_width = font.character_size.width as usize;
+        let gap_between_looped_text = 3.0 * character_width as f32;
+        let character_height = font.character_size.height as usize;
         State {
             text: String::new(),
             scroll_mode: ScrollMode::Static,
-            font: FONT_5X8, // Default font
+            font, // Default font
             text_width: 0,
             stop_flag: false,
             current_offset_float: 0.0,
@@ -87,6 +92,9 @@ impl Default for State {
             direction: SCROLL_LEFT,
             paused: false,
             has_paused: false,
+            character_width,
+            character_height,
+            gap_between_looped_text,
         }
     }
 }
@@ -97,6 +105,7 @@ pub struct TextScroller {
     pub name: String,
     pub top_left: Point, // Public so OledDisplay can get position
     pub width: u32, // Display region width
+    pub char_width: usize,
     pub state: Arc<TokMutex<State>>, // Shared state for the scrolling task
     task_handle: Option<JoinHandle<()>>, // Handle to the spawned async task
 }
@@ -113,6 +122,9 @@ impl TextScroller {
         initial_font: MonoFont<'static>,
         initial_scroll_mode: ScrollMode,
     ) -> Self {
+        let character_width = initial_font.character_size.width as usize;
+        let gap_between_looped_text = 3.0 * character_width as f32;
+        let character_height = initial_font.character_size.height as usize;
         let state = Arc::new(TokMutex::new(State {
             text: initial_text,
             scroll_mode: initial_scroll_mode,
@@ -124,12 +136,16 @@ impl TextScroller {
             direction: SCROLL_LEFT,
             paused: false,
             has_paused: false,
+            character_width,
+            character_height,
+            gap_between_looped_text,
         }));
 
         Self {
             name, // for debug purposes
             top_left,
             width,
+            char_width: character_width,
             state,
             task_handle: None,
         }
@@ -163,6 +179,7 @@ impl TextScroller {
                 let text_width = s.text_width; // Get text width from state
                 let mode = s.scroll_mode;
                 let max_offset_right = display_width as f32 - text_width as f32;
+                let looped_text_gap = s.gap_between_looped_text;
 
                 // If somehow in Static mode or text fits and task is running, stop it
                 if mode == ScrollMode::Static || text_width <= display_width {
@@ -185,7 +202,7 @@ impl TextScroller {
                     }
                     ScrollMode::ScrollLeft => {
                         s.current_offset_float -= SCROLL_AMOUNT_PER_TICK;
-                        if s.current_offset_float <= -(text_width as f32 + GAP_BETWEEN_LOOP_TEXT_FIXED as f32) {
+                        if s.current_offset_float <= -(text_width as f32 + looped_text_gap) {
                             s.current_offset_float = 0.0; // emulkate wrap around
                         }
                     }

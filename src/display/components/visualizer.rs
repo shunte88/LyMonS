@@ -24,11 +24,10 @@
 #![allow(dead_code)] // visualizer component helpers; some methods reserved
 
 use embedded_graphics::prelude::*;
-use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565};
 use embedded_graphics::primitives::PrimitiveStyle;
 use embedded_graphics::mono_font::iso_8859_13::FONT_5X8;
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
-use crate::display::color_proxy::{ColorProxy, MonoProxy, Gray4Proxy, Rgb565Proxy, Pal16};
+use crate::display::color_proxy::{ColorProxy, Pal16};
 use crate::display::layout::LayoutConfig;
 use crate::visualizer::Visualizer;
 use crate::visualization::{Visualization, Visual, SvgColorDepth};
@@ -163,226 +162,50 @@ impl VisualizerComponent {
         };
     }
 
-    /// Render the visualizer (monochrome version)
-    pub fn render_mono<D>(&mut self, target: &mut D) -> Result<bool, D::Error>
+    /// Render the visualizer — generic over display color depth and color proxy.
+    ///
+    /// Callers select the appropriate proxy at the call site:
+    ///   `render::<_, MonoProxy>`, `render::<_, Gray4Proxy>`, `render::<_, Rgb565Proxy>`
+    pub fn render<D, P>(&mut self, target: &mut D) -> Result<bool, D::Error>
     where
-        D: DrawTarget<Color = BinaryColor> + OriginDimensions + 'static,
+        D: DrawTarget<Color = P::Output> + OriginDimensions + 'static,
+        P: ColorProxy,
+        P::Output: SvgColorDepth,
     {
         let viz_mut = &mut self.viz;
-
-        // Dispatch based on visualization type
+        let s = &mut self.viz_state;
         match self.visualization_type {
             Visualization::PeakMono => {
-                Self::draw_peak_mono(target, viz_mut, self.viz_state.this.db_m, self.viz_state.this.hold_m, &mut self.viz_state)
+                Self::draw_peak_mono(target, viz_mut, s.this.db_m, s.this.hold_m, s)
             }
             Visualization::PeakStereo => {
-                Self::draw_peak_stereo(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, self.viz_state.this.hold_l, self.viz_state.this.hold_r, &mut self.viz_state)
+                Self::draw_peak_stereo(target, viz_mut, s.this.db_l, s.this.db_r, s.this.hold_l, s.this.hold_r, s)
             }
             Visualization::HistMono => {
-                Self::draw_hist_mono::<D, MonoProxy>(target, viz_mut, self.viz_state.last_bands_m.clone(), &mut self.viz_state)
+                Self::draw_hist_mono::<D, P>(target, viz_mut, s.last_bands_m.clone(), s)
             }
             Visualization::HistStereo => {
-                Self::draw_hist_pair::<D, MonoProxy>(target, viz_mut, self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone(), &mut self.viz_state)
+                Self::draw_hist_pair::<D, P>(target, viz_mut, s.last_bands_l.clone(), s.last_bands_r.clone(), s)
             }
             Visualization::VuMono => {
-                Self::draw_vu_mono(target, viz_mut, self.viz_state.this.db_m, &mut self.viz_state)
+                Self::draw_vu_mono(target, viz_mut, s.this.db_m, s)
             }
             Visualization::VuStereo => {
-                Self::draw_vu_stereo(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, &mut self.viz_state)
+                Self::draw_vu_stereo(target, viz_mut, s.this.db_l, s.this.db_r, s)
             }
             Visualization::VuAio => {
-                let (
-                    db_m, 
-                    db_l, 
-                    db_r
-                ) = (
-                    self.viz_state.this.db_m, 
-                    self.viz_state.this.db_l, 
-                    self.viz_state.this.db_r
-                );
-                Self::draw_aio_vu::<D, MonoProxy>(target, viz_mut, db_m, db_l, db_r, &mut self.viz_state)
+                let (db_m, db_l, db_r) = (s.this.db_m, s.this.db_l, s.this.db_r);
+                Self::draw_aio_vu::<D, P>(target, viz_mut, db_m, db_l, db_r, s)
             }
             Visualization::HistAio => {
-                let (
-                    bands, 
-                    bands_l, 
-                    bands_r
-                ) = (
-                    self.viz_state.last_bands_m.clone(), 
-                    self.viz_state.last_bands_l.clone(), 
-                    self.viz_state.last_bands_r.clone()
-                );
-                Self::draw_aio_hist::<D, MonoProxy>(target, viz_mut, bands, bands_l, bands_r, &mut self.viz_state)
+                let (bands, bands_l, bands_r) = (s.last_bands_m.clone(), s.last_bands_l.clone(), s.last_bands_r.clone());
+                Self::draw_aio_hist::<D, P>(target, viz_mut, bands, bands_l, bands_r, s)
             }
             Visualization::WaveformSpectrum => {
-                Self::draw_waveform_spectrum::<D, MonoProxy>(target, self.viz_state.last_waveform_l.clone(), self.viz_state.last_waveform_r.clone(), Vec::new(), &mut self.viz_state, &self.layout)
+                Self::draw_waveform_spectrum::<D, P>(target, s.last_waveform_l.clone(), s.last_waveform_r.clone(), Vec::new(), s, &self.layout)
             }
             Visualization::VuStereoWithCenterPeak => {
-                Self::draw_vu_combi(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, self.viz_state.this.db_m, self.viz_state.this.hold_m, &mut self.viz_state)
-            }
-            _ => Ok(false)
-        }
-    }
-
-    /// Render the visualizer (grayscale version)
-    pub fn render_gray4<D>(&mut self, target: &mut D) -> Result<bool, D::Error>
-    where
-        D: DrawTarget<Color = Gray4> + OriginDimensions + 'static,
-    {
-        let viz_mut = &mut self.viz;
-        // Dispatch based on visualization type
-        match self.visualization_type {
-            Visualization::PeakMono => {
-                Self::draw_peak_mono(
-                    target,
-                    viz_mut,
-                    self.viz_state.this.db_m,
-                    self.viz_state.this.hold_m,
-                    &mut self.viz_state
-                )
-            }
-            Visualization::PeakStereo => {
-                Self::draw_peak_stereo(
-                    target,
-                    viz_mut,
-                    self.viz_state.this.db_l,
-                    self.viz_state.this.db_r,
-                    self.viz_state.this.hold_l,
-                    self.viz_state.this.hold_r,
-                    &mut self.viz_state
-                )
-            }
-            Visualization::HistMono => {
-                Self::draw_hist_mono::<D, Gray4Proxy>(
-                    target,
-                    viz_mut,
-                    self.viz_state.last_bands_m.clone(),
-                    &mut self.viz_state
-                )
-            }
-            Visualization::HistStereo => {
-                Self::draw_hist_pair::<D, Gray4Proxy>(
-                    target,
-                    viz_mut,
-                    self.viz_state.last_bands_l.clone(),
-                    self.viz_state.last_bands_r.clone(),
-                    &mut self.viz_state
-                )
-            }
-            Visualization::VuMono => {
-                Self::draw_vu_mono(
-                    target,
-                    viz_mut,
-                    self.viz_state.this.db_m,
-                    &mut self.viz_state,
-                )
-            }
-            Visualization::VuStereo => {
-                Self::draw_vu_stereo(
-                    target,
-                    viz_mut,
-                    self.viz_state.this.db_l,
-                    self.viz_state.this.db_r,
-                    &mut self.viz_state,
-                )
-            }
-            Visualization::VuAio => {
-                let (
-                    db_m, 
-                    db_l, 
-                    db_r
-                ) = (
-                    self.viz_state.this.db_m, 
-                    self.viz_state.this.db_l, 
-                    self.viz_state.this.db_r
-                );
-                Self::draw_aio_vu::<D, Gray4Proxy>(
-                    target,
-                    viz_mut,
-                    db_m, db_l, db_r,
-                    &mut self.viz_state,
-                )
-            }
-            Visualization::HistAio => {
-                let (
-                    bands, 
-                    bands_l, 
-                    bands_r
-                ) = (
-                    self.viz_state.last_bands_m.clone(),
-                    self.viz_state.last_bands_l.clone(),
-                    self.viz_state.last_bands_r.clone(),
-                );
-                Self::draw_aio_hist::<D, Gray4Proxy>(
-                    target,
-                    viz_mut,
-                    bands, bands_l, bands_r,
-                    &mut self.viz_state,
-                )
-            }
-            Visualization::WaveformSpectrum => {
-                Self::draw_waveform_spectrum::<D, Gray4Proxy>(
-                    target,
-                    self.viz_state.last_waveform_l.clone(),
-                    self.viz_state.last_waveform_r.clone(),
-                    Vec::new(), // spectrum_column already in history
-                    &mut self.viz_state,
-                    &self.layout,
-                )
-            }
-            Visualization::VuStereoWithCenterPeak => {
-                Self::draw_vu_combi(
-                    target,
-                    viz_mut,
-                    self.viz_state.this.db_l,
-                    self.viz_state.this.db_r,
-                    self.viz_state.this.db_m,
-                    self.viz_state.this.hold_m,
-                    &mut self.viz_state,
-                )
-            }
-            _ => Ok(false) // Other types not yet implemented
-        }
-    }
-
-    /// Render the visualizer (Rgb565 full-color version)
-    pub fn render_rgb565<D>(&mut self, target: &mut D) -> Result<bool, D::Error>
-    where
-        D: DrawTarget<Color = Rgb565> + OriginDimensions + 'static,
-    {
-        let viz_mut = &mut self.viz;
-        match self.visualization_type {
-            Visualization::PeakMono => {
-                Self::draw_peak_mono(target, viz_mut, self.viz_state.this.db_m, self.viz_state.this.hold_m, &mut self.viz_state)
-            }
-            Visualization::PeakStereo => {
-                Self::draw_peak_stereo(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, self.viz_state.this.hold_l, self.viz_state.this.hold_r, &mut self.viz_state)
-            }
-            Visualization::HistMono => {
-                Self::draw_hist_mono::<D, Rgb565Proxy>(target, viz_mut, self.viz_state.last_bands_m.clone(), &mut self.viz_state)
-            }
-            Visualization::HistStereo => {
-                Self::draw_hist_pair::<D, Rgb565Proxy>(target, viz_mut, self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone(), &mut self.viz_state)
-            }
-            Visualization::VuMono => {
-                Self::draw_vu_mono(target, viz_mut, self.viz_state.this.db_m, &mut self.viz_state)
-            }
-            Visualization::VuStereo => {
-                Self::draw_vu_stereo(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, &mut self.viz_state)
-            }
-            Visualization::VuAio => {
-                let (db_m, db_l, db_r) = (self.viz_state.this.db_m, self.viz_state.this.db_l, self.viz_state.this.db_r);
-                Self::draw_aio_vu::<D, Rgb565Proxy>(target, viz_mut, db_m, db_l, db_r, &mut self.viz_state)
-            }
-            Visualization::HistAio => {
-                let (bands, bands_l, bands_r) = (self.viz_state.last_bands_m.clone(), self.viz_state.last_bands_l.clone(), self.viz_state.last_bands_r.clone());
-                Self::draw_aio_hist::<D, Rgb565Proxy>(target, viz_mut, bands, bands_l, bands_r, &mut self.viz_state)
-            }
-            Visualization::WaveformSpectrum => {
-                Self::draw_waveform_spectrum::<D, Rgb565Proxy>(target, self.viz_state.last_waveform_l.clone(), self.viz_state.last_waveform_r.clone(), Vec::new(), &mut self.viz_state, &self.layout)
-            }
-            Visualization::VuStereoWithCenterPeak => {
-                Self::draw_vu_combi(target, viz_mut, self.viz_state.this.db_l, self.viz_state.this.db_r, self.viz_state.this.db_m, self.viz_state.this.hold_m, &mut self.viz_state)
+                Self::draw_vu_combi(target, viz_mut, s.this.db_l, s.this.db_r, s.this.db_m, s.this.hold_m, s)
             }
             _ => Ok(false)
         }
