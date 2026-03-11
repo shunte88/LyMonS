@@ -93,10 +93,11 @@ driver-ssd1306 = ["dep:ssd1306"]
 driver-ssd1309 = ["dep:ssd1309"]
 driver-ssd1322 = ["dep:ssd1322"]
 driver-sh1106 = ["dep:sh1106"]
+driver-sh1122 = []
 driver-st7789 = ["dep:mipidsi"]
 
 # Convenience features
-all-drivers = ["driver-ssd1306", "driver-ssd1309", "driver-ssd1322", "driver-sh1106", "driver-st7789"]
+all-drivers = ["driver-ssd1306", "driver-ssd1309", "driver-ssd1322", "driver-sh1106", "driver-sh1122", "driver-st7789"]
 
 # Plugin system for dynamic driver loading
 plugin-system = ["dep:libloading"]

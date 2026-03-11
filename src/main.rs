@@ -889,8 +889,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg(Arg::new("driver")
         .short('d')
         .long("driver")
-        .help("Display driver type for emulator, overrides config (ssd1306, ssd1309, ssd1322, sh1106, sharpmemory, st7789)")
-        .value_parser(["ssd1306", "ssd1309", "ssd1322", "sh1106", "sharpmemory", "st7789"])
+        .help("Display driver type for emulator, overrides config (ssd1306, ssd1309, ssd1322, sh1106, sh1122, sharpmemory, st7789)")
+        .value_parser(["ssd1306", "ssd1309", "ssd1322", "sh1106", "sh1122", "sharpmemory", "st7789"])
         .required(false))
         .arg(Arg::new("viz")
         .short('a')
@@ -989,6 +989,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "ssd1309"     => crate::config::DriverKind::Ssd1309,
                 "ssd1322"     => crate::config::DriverKind::Ssd1322,
                 "sh1106"      => crate::config::DriverKind::Sh1106,
+                "sh1122"      => crate::config::DriverKind::Sh1122,
                 "sharpmemory" => crate::config::DriverKind::SharpMemory,
                 "st7789"      => crate::config::DriverKind::St7789,
                 _ => unreachable!(), // value_parser enforces valid values
@@ -1005,6 +1006,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(crate::config::DriverKind::Ssd1309) => (128, 64, false, "SSD1309"),
             Some(crate::config::DriverKind::Sh1106) => (132, 64, false, "SH1106"),
             Some(crate::config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"), // Grayscale (Gray4)
+            Some(crate::config::DriverKind::Sh1122)  => (256, 64, true, "SH1122"),  // Grayscale (Gray4)
             Some(crate::config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
             Some(crate::config::DriverKind::St7789) => (320, 170, true, "ST7789"),
             None => (256, 64, true, "SSD1322"), // default when no driver in config

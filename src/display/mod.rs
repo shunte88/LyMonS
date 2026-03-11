@@ -34,7 +34,8 @@ pub mod color_proxy;
     feature = "driver-ssd1306",
     feature = "driver-ssd1309",
     feature = "driver-ssd1322",
-    feature = "driver-sh1106"
+    feature = "driver-sh1106",
+    feature = "driver-sh1122"
 ))]
 pub mod drivers;
 

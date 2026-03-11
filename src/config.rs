@@ -241,6 +241,7 @@ pub enum DriverKind {
     Ssd1309,
     Ssd1322,
     Sh1106,
+    Sh1122,      // 256x64 grayscale 4-wire SPI (Gray4)
     SharpMemory, // Future implementation - 400x240 memory LCD
     St7789,      // Full-colour 320x170 (Rgb565)
 }

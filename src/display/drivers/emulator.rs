@@ -288,6 +288,7 @@ impl EmulatorDriver {
         // Determine if grayscale based on driver type
         let is_grayscale = match &config.driver {
             Some(crate::config::DriverKind::Ssd1322) => true,
+            Some(crate::config::DriverKind::Sh1122)  => true,
             _ => false,
         };
 

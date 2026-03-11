@@ -40,6 +40,9 @@ use crate::display::drivers::ssd1322::Ssd1322Driver;
 #[cfg(feature = "driver-sh1106")]
 use crate::display::drivers::sh1106::Sh1106Driver;
 
+#[cfg(feature = "driver-sh1122")]
+use crate::display::drivers::sh1122::Sh1122Driver;
+
 #[cfg(feature = "driver-st7789")]
 use crate::display::drivers::st7789::St7789Driver;
 
@@ -142,6 +145,18 @@ impl DisplayDriverFactory {
                 Ok(Box::new(Sh1106Driver::new_i2c(bus, *address, config)?))
             }
 
+            #[cfg(feature = "driver-sh1122")]
+            (DriverKind::Sh1122, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
+                Ok(Box::new(Sh1122Driver::new_spi(
+                    bus,
+                    *dc_pin,
+                    rst_pin.ok_or_else(|| DisplayFactoryError::ConfigError(
+                        "SH1122 requires rst_pin".to_string()
+                    ))?,
+                    config
+                )?))
+            }
+
             #[cfg(feature = "driver-st7789")]
             (DriverKind::St7789, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
                 Ok(Box::new(St7789Driver::new_spi(
@@ -184,6 +199,13 @@ impl DisplayDriverFactory {
                     ));
                 }
 
+                #[cfg(not(feature = "driver-sh1122"))]
+                if matches!(driver_kind, DriverKind::Sh1122) {
+                    return Err(DisplayFactoryError::ConfigError(
+                        "SH1122 driver not enabled. Enable with --features driver-sh1122".to_string()
+                    ));
+                }
+
                 #[cfg(not(feature = "driver-st7789"))]
                 if matches!(driver_kind, DriverKind::St7789) {
                     return Err(DisplayFactoryError::ConfigError(
@@ -211,6 +233,7 @@ impl DisplayDriverFactory {
             DriverKind::Ssd1309 => "ssd1309",
             DriverKind::Ssd1322 => "ssd1322",
             DriverKind::Sh1106 => "sh1106",
+            DriverKind::Sh1122 => "sh1122",
             DriverKind::SharpMemory => "sharpmemory",
             DriverKind::St7789 => "st7789",
         };
@@ -260,6 +283,7 @@ impl DisplayDriverFactory {
             DriverKind::Ssd1309 => (128, 64, false, "SSD1309"),
             DriverKind::Sh1106 => (132, 64, false, "SH1106"),
             DriverKind::Ssd1322 => (256, 64, true, "SSD1322"),
+            DriverKind::Sh1122 => (256, 64, true, "SH1122"),
             DriverKind::SharpMemory => (400, 240, false, "SharpMemory"),
             DriverKind::St7789 => (320, 170, true, "ST7789"),  // Gray4 emulation (Rgb565 not yet supported by emulator)
         };
@@ -307,6 +331,11 @@ impl DisplayDriverFactory {
             DriverKind::Sh1106 => {
                 use crate::display::drivers::sh1106::Sh1106Driver;
                 Sh1106Driver::default_config()
+            }
+            #[cfg(feature = "driver-sh1122")]
+            DriverKind::Sh1122 => {
+                use crate::display::drivers::sh1122::Sh1122Driver;
+                Sh1122Driver::default_config()
             }
             DriverKind::SharpMemory => {
                 use crate::config::BusConfig;

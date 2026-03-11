@@ -31,6 +31,9 @@ pub mod ssd1309;
 #[cfg(feature = "driver-ssd1322")]
 pub mod ssd1322;
 
+#[cfg(feature = "driver-sh1122")]
+pub mod sh1122;
+
 #[cfg(feature = "driver-sh1106")]
 pub mod sh1106;
 
