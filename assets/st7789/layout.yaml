@@ -7,7 +7,7 @@
 #  Only components/templates that differ from the base are defined here.
 #
 #  Display geometry:
-#    300×170 px, full-colour Rgb565
+#    300×170 px, full-color Rgb565
 #    SVG icon: 150×150 at (0, 10) — vertically centred ((170-150)/2=10)
 #    Right column: x=152, width=148
 #    Glyph col x=152, text col x=glyph.right+2
@@ -17,6 +17,7 @@
 #    y=32   humidity           (font_7x13_bold, glyph 20×20)
 #    y=58   wind               (font_7x13_bold, glyph 20×20)
 #    y=84   precipitation      (font_7x13_bold, glyph 20×20)
+#    y=84   pressure           (font_7x13_bold, glyph 20×20)
 #    y=106  astral block — sunrise/sunset/moonrise/moonset chained at no gap
 #    y=154  conditions strip   (font_7x13_bold, full width)
 #
@@ -36,41 +37,64 @@ components:
         height: "20"
         font: font_10x20
 
+      - name: cover_art
+        type: custom
+        x: "4"
+        y: "parent.height/2 - 70"
+        width: "120"
+        height: "120"
+        scrollable: false
+
       - name: album_artist
         type: scrolling_text
-        x: "2"
+        x: "cover_art.right + 4"
         y: "status_bar.bottom + 1"
-        width: "parent.width - 4"
+        width: "parent.width - cover_art.right - 12"
         height: "20"
-        font: font_10x20
+        font: font_7x13
+        fg_color: Yellow
         scrollable: true
 
       - name: album
         type: scrolling_text
-        x: "2"
+        x: "album_artist.left"
         y: "album_artist.bottom"
-        width: "parent.width - 4"
+        width: "album_artist.width"
         height: "20"
-        font: font_10x20
+        font: font_7x13
+        fg_color: Yellow
         scrollable: true
 
       - name: title
         type: scrolling_text
-        x: "2"
+        x: "album_artist.left"
         y: "album.bottom"
-        width: "parent.width - 4"
+        width: "album_artist.width"
         height: "20"
-        font: font_10x20
+        font: font_7x13
+        fg_color: Yellow
         scrollable: true
 
       - name: artist
         type: scrolling_text
-        x: "2"
+        x: "album_artist.left"
         y: "title.bottom"
-        width: "parent.width - 4"
+        width: "album_artist.width"
         height: "20"
-        font: font_10x20
+        font: font_7x13
+        fg_color: Yellow
         scrollable: true
+
+      - name: year
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "artist.bottom"
+        width: "album_artist.width"
+        height: "20"
+        font: font_7x13
+        horizontal_alignment: Center
+        fg_color: Yellow
+        scrollable: false
 
       # parent.height - 15 = 49 on 64px display (matches: height - 6 - y_height)
       - name: track_progress_bar
@@ -89,11 +113,50 @@ components:
         height: "20"
         font: font_10x20
 
-  # Current weather — 150×150 SVG icon left, all data in right column,
+  warning_panel:
+    fields:
+      - name: warn_icon
+        type: custom
+        x: "parent.width/2 - 30"
+        y: "20"
+        width: "60"
+        height: "60"
+
+      - name: warn_title
+        type: label
+        x: "10"
+        y: "warn_icon.bottom + 8"
+        width: "parent.width - 20"
+        height: "20"
+        font: font_10x20
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      - name: warn_detail
+        type: label
+        x: "10"
+        y: "warn_title.bottom + 4"
+        width: "parent.width - 20"
+        height: "14"
+        font: font_7x13
+        horizontal_alignment: Center
+        fg_color: White
+
+      - name: retry_info
+        type: label
+        x: "10"
+        y: "parent.height - 20"
+        width: "parent.width - 20"
+        height: "14"
+        font: font_7x13
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+  # Current weather — 140×140 SVG icon left, all data in right column,
   # conditions as a full-width strip at the bottom of the display.
   weather_current_main:
     fields:
-      # SVG icon — 140×140 vertically centred
+      # SVG icon — 140×140 vertically centered
       - name: weather_icon
         type: weather_icon
         x: "0"
@@ -122,7 +185,7 @@ components:
       - name: humidity_glyph
         type: weather_glyph
         x: "temp_glyph.left"
-        y: "temp_glyph.bottom + 6"
+        y: "temp_glyph.bottom + 2"
         width: "20"
         height: "20"
         fg_color: Cyan
@@ -133,13 +196,13 @@ components:
         y: "humidity_glyph.top"
         width: "temperature.width"
         height: "14"
-        font: font_7x13_bold
+        font: font_7x13
         fg_color: Cyan
 
       - name: wind_glyph
         type: weather_glyph
         x: "temp_glyph.left"
-        y: "humidity_glyph.bottom + 6"
+        y: "humidity_glyph.bottom + 1"
         width: "20"
         height: "20"
         fg_color: Cyan
@@ -150,13 +213,13 @@ components:
         y: "wind_glyph.top"
         width: "temperature.width"
         height: "14"
-        font: font_7x13_bold
+        font: font_7x13
         fg_color: Cyan
 
       - name: precip_glyph
         type: weather_glyph
         x: "temp_glyph.left"
-        y: "wind_glyph.bottom + 6"
+        y: "wind_glyph.bottom + 1"
         width: "20"
         height: "20"
         fg_color: Cyan
@@ -167,17 +230,33 @@ components:
         y: "precip_glyph.top"
         width: "temperature.width"
         height: "14"
-        font: font_7x13_bold
+        font: font_7x13
         fg_color: Cyan
 
-      # Astral block — rows chained with no gap, 12×12 glyphs
+      - name: pressure_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "precip_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+
+      - name: pressure
+        type: label
+        x: "temperature.left"
+        y: "pressure_glyph.top"
+        width: "temperature.width"
+        height: "14"
+        font: font_7x13
+        fg_color: Cyan
+
+      # Astral block — rows chained with no gap, 20x20 glyphs
       - name: sunrise_glyph
         type: weather_glyph
         x: "temp_glyph.left"
-        y: "precip_glyph.bottom + 2"
-        width: "12"
-        height: "12"
-        fg_color: Yellow
+        y: "pressure_glyph.bottom + 2"
+        width: "20"
+        height: "20"
 
       - name: sunrise_text
         type: label
@@ -193,9 +272,8 @@ components:
         type: weather_glyph
         x: "sunrise_glyph.left"
         y: "sunrise_glyph.bottom"
-        width: "12"
-        height: "12"
-        fg_color: Yellow
+        width: "20"
+        height: "20"
 
       - name: sunset_text
         type: label
@@ -209,15 +287,14 @@ components:
 
       - name: moonrise_glyph
         type: weather_glyph
-        x: "sunrise_glyph.left"
-        y: "sunset_glyph.bottom"
-        width: "12"
-        height: "12"
-        fg_color: Cyan
+        x: "sunrise_text.right + 8"
+        y: "pressure_glyph.bottom + 3"
+        width: "20"
+        height: "20"
 
       - name: moonrise_text
         type: label
-        x: "sunrise_text.left"
+        x: "moonrise_glyph.right + 2"
         y: "moonrise_glyph.top"
         width: "33"
         height: "10"
@@ -227,15 +304,14 @@ components:
 
       - name: moonset_glyph
         type: weather_glyph
-        x: "sunrise_glyph.left"
-        y: "moonrise_glyph.bottom"
-        width: "12"
-        height: "12"
-        fg_color: Cyan
+        x: "sunset_text.right + 8"
+        y: "sunset_glyph.top"
+        width: "20"
+        height: "20"
 
       - name: moonset_text
         type: label
-        x: "sunrise_text.left"
+        x: "moonset_glyph.right + 2"
         y: "moonset_glyph.top"
         width: "33"
         height: "10"
@@ -243,24 +319,26 @@ components:
         horizontal_alignment: Center
         fg_color: Cyan
 
-      # Moonphase — 42×42 glyph right-justified, multi-line text below
-      - name: moonphase_svg
-        type: custom
-        x: "parent.width - 46"
-        y: "82"
-        width: "42"
-        height: "42"
-        fg_color: Yellow
-
+      # Moonphase — multi-line text below
+      # glyph will be centered above this text
       - name: moonphase_text
         type: label
-        x: "moonphase_svg.left - 4"
-        y: "moonphase_svg.bottom + 2"
+        x: "parent.width - 52"
+        y: "precip_glyph.top"
         width: "50"
         height: "22"
         font: font_5x8
         horizontal_alignment: Center
         fg_color: Yellow
+
+      # Moonphase — 42×42 glyph center-justified 
+      # with multi-line text below
+      - name: moonphase_svg
+        type: custom
+        x: "moonphase_text.left - (moonphase_text.width/2 - 21)"
+        y: "12"
+        width: "42"
+        height: "42"
 
       # Conditions — full-width strip at the bottom of the display
       - name: conditions
@@ -271,7 +349,7 @@ components:
         height: "13"
         font: font_7x13_bold
         horizontal_alignment: Center
-        fg_color: Yellow
+        fg_color: Green
 
   # Six forecast columns for ST7789 (300px wide, 50px per column, 40×40 icons).
   # All 6 days in a single component; field positions chain via name references.

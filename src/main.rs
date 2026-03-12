@@ -245,6 +245,7 @@ async fn unified_display_loop(
             display::DisplayMode::Clock => "clock",
             display::DisplayMode::WeatherCurrent => "weather_current",
             display::DisplayMode::WeatherForecast => "weather_forecast",
+            display::DisplayMode::Warning => "warning",
         };
 
         if is_playing {
@@ -281,7 +282,12 @@ async fn unified_display_loop(
                     lms_guard.sliminfo.album.clone(),
                     lms_guard.sliminfo.title.clone(),
                     lms_guard.sliminfo.artist.clone(),
+                    lms_guard.sliminfo.year.clone(),
                     "scroll_mode",
+                    &lms_guard.sliminfo.coverid.clone(),
+                    &lms_guard.host.to_string(),
+                    lms_guard.port,
+                    lms_guard.player_mac(),
                 ).await;
 
                 display_lock.set_track_progress_data(
@@ -1338,13 +1344,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else{
         info!("LMS communication...");
     }
-    let lms_arc = match LMSServer::init_server(name_filter, mac_addr.as_str()).await {
-        Ok(server_arc) => server_arc,
-        Err(e) => {
-            error!("LMS Server initialization failed: {}", e);
-            return Err(e);
+    const RETRY_INTERVAL_SECS: u64 = 30;
+    let lms_arc = loop {
+        match LMSServer::init_server(name_filter, mac_addr.as_str()).await {
+            Ok(server_arc) => break server_arc,
+            Err(e) => {
+                warn!("LMS server unavailable: {}. Retrying in {}s...", e, RETRY_INTERVAL_SECS);
+                display_manager.set_warning(
+                    "LMS Not Found",
+                    e.to_string(),
+                    format!("retrying in {}s...", RETRY_INTERVAL_SECS),
+                );
+                // Keep the display alive while waiting to retry
+                let deadline = std::time::Instant::now()
+                    + Duration::from_secs(RETRY_INTERVAL_SECS);
+                while std::time::Instant::now() < deadline {
+                    display_manager.render_frame().await.ok();
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            }
         }
     };
+    display_manager.clear_warning();
 
     // The polling thread is now running in the background if init_server was successful.
     info!("LMS Server communication initialized.");
@@ -1405,6 +1426,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     display::DisplayMode::Clock => "clock",
                     display::DisplayMode::WeatherCurrent => "weather_current",
                     display::DisplayMode::WeatherForecast => "weather_forecast",
+                    display::DisplayMode::Warning => "warning",
                 };
 
                 if is_playing {
@@ -1441,7 +1463,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             lms_guard.sliminfo.album.clone(),
                             lms_guard.sliminfo.title.clone(),
                             lms_guard.sliminfo.artist.clone(),
-                            scroll_mode
+                            lms_guard.sliminfo.year.clone(),
+                            scroll_mode,
+                            &lms_guard.sliminfo.coverid.clone(),
+                            &lms_guard.host.to_string(),
+                            lms_guard.port,
+                            lms_guard.player_mac(),
                         ).await;
 
                         display_manager.set_track_progress_data(

@@ -183,7 +183,7 @@ impl PerformanceMetrics {
 ///
 /// # Features
 ///
-/// - ✅ **Multiple display support**: Works with SSD1306, SSD1309, SSD1322, SH1106
+/// - ✅ **Multiple display support**: Works with SSD1306, SSD1309, SSD1322, SH1106, SH1122, ST7789
 /// - ✅ **Runtime driver selection**: No recompilation needed to switch displays
 /// - ✅ **Zero allocations**: Pre-allocated buffers for rendering
 /// - ✅ **Performance tracking**: Automatic timing and FPS monitoring
@@ -285,6 +285,8 @@ pub struct DisplayManager {
     pub title: String,
     /// Current artist for aio viz & easter eggs (stored separately from scrolling_text)
     pub artist: String,
+    /// Current track year - displayed in specific modes
+    pub year: String,
     /// Performance metrics
     pub metrics: PerformanceMetrics,
     /// Pre-allocated render buffers (zero allocations in render loop!)
@@ -309,6 +311,22 @@ pub struct DisplayManager {
     ttf_font: Option<std::sync::Arc<crate::display::ttf_font::TtfFont>>,
     /// SVG weather glyphs loaded from data/weather_glyphs.zip (Gray4 / Rgb565 only)
     weather_glyphs: Option<crate::weather_glyph::WeatherGlyphSet>,
+    /// SVG moon phase glyphs loaded from data/moonphase.zip (Gray4 / Rgb565 only)
+    moon_phase_glyphs: Option<crate::weather_glyph::MoonPhaseGlyphSet>,
+    /// Warning/error title text
+    warning_title: String,
+    /// Warning/error detail text
+    warning_detail: String,
+    /// Retry countdown text (e.g. "retrying in 30s")
+    warning_retry_text: String,
+    /// Alert SVG bytes loaded from assets/alert.svg
+    alert_svg: Option<Vec<u8>>,
+    /// Cover art cache (Rgb565 displays only)
+    cover_art_cache: Option<crate::coverart::CoverArtCache>,
+    /// Currently displayed cover art (Rgb565 only)
+    cover_art: Option<crate::coverart::CoverArt>,
+    /// LMS coverid for the currently loaded cover art
+    current_coverid: String,
 }
 
 impl DisplayManager {
@@ -404,6 +422,15 @@ impl DisplayManager {
 
         info!("DisplayManager initialized successfully (target: {} FPS)", capabilities.max_fps);
 
+        let cover_art_cache = if capabilities.color_depth == crate::display::traits::ColorDepth::Rgb565 {
+            let cache_dir = dirs_next::cache_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                .join("lymons/coverart");
+            crate::coverart::CoverArtCache::new(cache_dir).ok()
+        } else {
+            None
+        };
+
         Ok(Self {
             driver,
             framebuffer,
@@ -430,6 +457,7 @@ impl DisplayManager {
             album: String::new(),
             title: String::new(),
             artist: String::new(),
+            year: String::new(),
             metrics,
             render_buffers: RenderBuffers::default(),
             weather_temp_units: String::from("C"),
@@ -443,6 +471,14 @@ impl DisplayManager {
             last_brightness_check: None,
             ttf_font: None,
             weather_glyphs: crate::weather_glyph::WeatherGlyphSet::load_from_zip("./data/weather_glyphs.zip"),
+            moon_phase_glyphs: crate::weather_glyph::MoonPhaseGlyphSet::load_from_zip("./data/moonphase.zip"),
+            warning_title: String::new(),
+            warning_detail: String::new(),
+            warning_retry_text: String::new(),
+            alert_svg: std::fs::read("./assets/alert.svg").ok(),
+            cover_art_cache,
+            cover_art: None,
+            current_coverid: String::new(),
             #[cfg(feature = "emulator")]
             emulator_state: None,
         })
@@ -510,6 +546,7 @@ impl DisplayManager {
             DisplayMode::WeatherForecast => self.render_weather_forecast(),
             DisplayMode::Visualizer => self.render_visualizer(),
             DisplayMode::EasterEggs => self.render_easter_eggs(),
+            DisplayMode::Warning => self.render_warning(),
         }?;
 
         let render_time = frame_start.elapsed().as_micros() as u64;
@@ -555,14 +592,22 @@ impl DisplayManager {
         let (m, s) = ((time_secs as u32) / 60, (time_secs as u32) % 60);
         let end = if self.show_remaining { format!("-{}:{:02}", m, s) } else { format!("{}:{:02}", m, s) };
         let mode = self.mode_text.clone();
+        let year = self.year.clone();
 
+        let cover_art = self.cover_art.as_ref();
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) =>
-                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end),
+                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end, &year),
             crate::display::framebuffer::FrameBuffer::Gray4(fb) =>
-                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end),
-            crate::display::framebuffer::FrameBuffer::Rgb565(fb) =>
-                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end),
+                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end, &year),
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                if let (Some(field), Some(art)) = (page.get_field("cover_art"), cover_art) {
+                    let mut clipped = fb.clipped(&field.bounds);
+                    art.draw_to(&mut clipped, field.position())
+                        .map_err(|_| crate::display::error::DisplayError::DrawingError("cover art".to_string()))?;
+                }
+                Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end, &year)
+            },
         }
     }
 
@@ -576,6 +621,7 @@ impl DisplayManager {
         mode_text: &str,
         elapsed_str: &str,
         end_str: &str,
+        year_text: &str,
     ) -> Result<(), DisplayError>
     where
         D: DrawTarget,
@@ -600,8 +646,19 @@ impl DisplayManager {
                         .map_err(|_| DisplayError::DrawingError("Failed to render status bar".to_string()))?;
                 }
                 "album_artist" | "album" | "title" | "artist" => {
+                    //println!("{:>13} ..: {:#?}",field.name.as_str(), field.bounds);
                     scrolling_text.render_field(field, fb)
                         .map_err(|_| DisplayError::DrawingError(format!("Failed to render {}", field.name)))?;
+                }
+                "year" => {
+                    let color: D::Color = field.fg_color.to_color();
+                    let tb_center = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Center).vertical_alignment(VerticalAlignment::Top).build();
+                    let rect = field.bounds;
+                    let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_10X20);
+                    let style = MonoTextStyle::new(font, color);
+                    TextBox::with_textbox_style(year_text, rect, style, tb_center)
+                        .draw(fb).map_err(|_| DisplayError::DrawingError("Failed to draw mode text".to_string()))?;
+
                 }
                 "track_progress_bar" => {
                     if let Some(p) = progress {
@@ -629,7 +686,8 @@ impl DisplayManager {
                     let tb_left   = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Left).vertical_alignment(VerticalAlignment::Top).build();
                     let tb_center = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Center).vertical_alignment(VerticalAlignment::Top).build();
                     let tb_right  = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Right).vertical_alignment(VerticalAlignment::Top).build();
-                    const FIX_W: u32 = 30;
+                    // time strings assume a  maximum of hh:mm:ss - 8 char * the character width
+                    let fixed_width = 8 * font.character_size.width;
 
                     // Center: mode text (full field width)
                     let mut rect = field.bounds;
@@ -639,15 +697,15 @@ impl DisplayManager {
 
                     // Left: elapsed time
                     let mut rect = field.bounds;
-                    rect.size.width = FIX_W;
+                    rect.size.width = fixed_width;
                     rect.size.height += 1;
                     TextBox::with_textbox_style(elapsed_str, rect, style, tb_left)
                         .draw(fb).map_err(|_| DisplayError::DrawingError("Failed to draw elapsed time".to_string()))?;
 
                     // Right: end/remaining time
                     let mut rect = field.bounds;
-                    rect.top_left.x = (rect.size.width - FIX_W) as i32;
-                    rect.size.width = FIX_W;
+                    rect.top_left.x = (rect.size.width - fixed_width) as i32;
+                    rect.size.width = fixed_width;
                     rect.size.height += 1;
                     TextBox::with_textbox_style(end_str, rect, style, tb_right)
                         .draw(fb).map_err(|_| DisplayError::DrawingError("Failed to draw end time".to_string()))?;
@@ -1247,6 +1305,8 @@ impl DisplayManager {
         );
         let precip_text = format!("{}%", weather_data.precipitation_probability_avg.round() as i32);
 
+        let pressure_text = format!("{}{}", weather_data.pressure_sea_level_avg, weather_data.pressure_sea_level_units);
+
         // Wide display fields (sunrise, sunset, moonrise, moonset).
         // For sun times: prefer weather API data; fall back to astral calculations.
         // For moon times: weather API rarely populates these, so astral is primary.
@@ -1280,7 +1340,8 @@ impl DisplayManager {
             .map(|a| a.moon_phase_description())
             .unwrap_or("");
 
-            let weather_glyphs = self.weather_glyphs.as_ref();
+            let weather_glyphs    = self.weather_glyphs.as_ref();
+            let moon_phase_glyphs = self.moon_phase_glyphs.as_ref();
 
         // Dispatch rendering based on framebuffer type
         match &mut self.framebuffer {
@@ -1294,6 +1355,7 @@ impl DisplayManager {
                     &humidity_text,
                     &wind_text,
                     &precip_text,
+                    &pressure_text,
                     &sunrise_text,
                     &sunset_text,
                     &moonrise_text,
@@ -1301,6 +1363,7 @@ impl DisplayManager {
                     moon_phase_index,
                     &moonphase_text,
                     weather_glyphs,
+                    moon_phase_glyphs,
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
@@ -1313,6 +1376,7 @@ impl DisplayManager {
                     &humidity_text,
                     &wind_text,
                     &precip_text,
+                    &pressure_text,
                     &sunrise_text,
                     &sunset_text,
                     &moonrise_text,
@@ -1320,6 +1384,7 @@ impl DisplayManager {
                     moon_phase_index,
                     &moonphase_text,
                     weather_glyphs,
+                    moon_phase_glyphs,
                 )?;
             }
             crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
@@ -1332,6 +1397,7 @@ impl DisplayManager {
                     &humidity_text,
                     &wind_text,
                     &precip_text,
+                    &pressure_text,
                     &sunrise_text,
                     &sunset_text,
                     &moonrise_text,
@@ -1339,6 +1405,7 @@ impl DisplayManager {
                     moon_phase_index,
                     &moonphase_text,
                     weather_glyphs,
+                    moon_phase_glyphs,
                 )?;
             }
         }
@@ -1356,6 +1423,7 @@ impl DisplayManager {
         humidity_text: &str,
         wind_text: &str,
         precip_text: &str,
+        pressure_text: &str,
         sunrise_text: &str,
         sunset_text: &str,
         moonrise_text: &str,
@@ -1363,6 +1431,7 @@ impl DisplayManager {
         moon_phase_index: usize,
         moonphase_text: &str,
         weather_glyphs: Option<&crate::weather_glyph::WeatherGlyphSet>,
+        moon_phase_glyphs: Option<&crate::weather_glyph::MoonPhaseGlyphSet>,
     ) -> Result<(), DisplayError>
     where
         D: DrawTarget,
@@ -1411,7 +1480,7 @@ impl DisplayManager {
                         }
                     }
                 }
-                n @ ("temp_glyph" | "humidity_glyph" | "wind_glyph" | "precip_glyph"
+                n @ ("temp_glyph" | "humidity_glyph" | "wind_glyph" | "precip_glyph" | "pressure_glyph"
                    | "sunrise_glyph" | "sunset_glyph" | "moonrise_glyph" | "moonset_glyph") => {
                     use crate::weather_glyph::glyph_index_for_field;
                     use crate::visualization::SvgColorDepth;
@@ -1460,6 +1529,12 @@ impl DisplayManager {
                         .draw(target)
                         .map_err(|_| DisplayError::DrawingError("Failed to write precipitation text".to_string()))?;
                 }
+                "pressure" => {
+                    let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
+                    TextBox::with_textbox_style(pressure_text, field.bounds, style, tbstyle_left)
+                        .draw(target)
+                        .map_err(|_| DisplayError::DrawingError("Failed to write pressure text".to_string()))?;
+                }
                 "conditions" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_7X14), field.fg_color.to_color());
                     TextBox::with_textbox_style(conditions_text, field.bounds, style, tbstyle_center)
@@ -1491,14 +1566,23 @@ impl DisplayManager {
                         .map_err(|_| DisplayError::DrawingError("Failed to write moonset text".to_string()))?;
                 }
                 "moonphase_svg" => {
-                    Self::draw_moon_phase_glyph(target, moon_phase_index, pos.x, pos.y, D::Color::on())
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw moonphase".to_string()))?;
+                    use crate::visualization::SvgColorDepth;
+                    let mut used_svg = false;
+                    if D::Color::use_svg_glyphs() {
+                        if let Some(svg_data) = moon_phase_glyphs.and_then(|g| g.get(moon_phase_index)) {
+                            Self::draw_svg_weather_glyph(target, svg_data, pos.x, pos.y, field.width(), field.height())?;
+                            used_svg = true;
+                        }
+                    }
+                    if !used_svg {
+                        Self::draw_moon_phase_glyph(target, moon_phase_index, pos.x, pos.y, D::Color::on())
+                            .map_err(|_| DisplayError::DrawingError("Failed to draw moonphase".to_string()))?;
+                    }
                 }
                 "moonphase_text" => {
                     let style = MonoTextStyle::new(field.font.unwrap_or(&FONT_5X8), field.fg_color.to_color());
-                    Text::with_baseline(moonphase_text, Point::new(pos.x, pos.y), style, Baseline::Top)
+                    TextBox::with_textbox_style(moonphase_text, field.bounds, style, tbstyle_center)
                         .draw(target)
-                        .map(|_| ())
                         .map_err(|_| DisplayError::DrawingError("Failed to write moonphase description".to_string()))?;
                 }
                 _ => {}
@@ -1525,12 +1609,19 @@ impl DisplayManager {
         D::Color: crate::visualization::SvgColorDepth + Default,
     {
         use crate::visualization::SvgColorDepth;
-        if let Ok(svg_str) = std::str::from_utf8(svg_data) {
-            if let Ok(renderer) = crate::svgimage::SvgImageRenderer::new(svg_str, width, height) {
-                let mut buf = vec![0u8; D::Color::required_buffer_size(width, height)];
-                if D::Color::render_to_buffer(&renderer, &mut buf).is_ok() {
-                    D::Color::draw_buffer_to_display(&buf, width, Point::new(x, y), target)
-                        .map_err(|_| DisplayError::DrawingError("svg weather glyph".to_string()))?;
+        match std::str::from_utf8(svg_data) {
+            Err(e) => log::warn!("draw_svg_weather_glyph: invalid UTF-8 in svg data: {}", e),
+            Ok(svg_str) => match crate::svgimage::SvgImageRenderer::new(svg_str, width, height) {
+                Err(e) => log::warn!("draw_svg_weather_glyph: renderer init failed ({}x{}): {:?}", width, height, e),
+                Ok(renderer) => {
+                    let mut buf = vec![0u8; D::Color::required_buffer_size(width, height)];
+                    match D::Color::render_to_buffer(&renderer, &mut buf) {
+                        Err(e) => log::warn!("draw_svg_weather_glyph: render_to_buffer failed: {:?}", e),
+                        Ok(_) => {
+                            D::Color::draw_buffer_to_display(&buf, width, Point::new(x, y), target)
+                                .map_err(|_| DisplayError::DrawingError("svg weather glyph".to_string()))?;
+                        }
+                    }
                 }
             }
         }
@@ -2968,6 +3059,111 @@ impl DisplayManager {
         // No-op for non-emulator builds
     }
 
+    /// Display a warning/error page with the given title, detail, and retry text.
+    pub fn set_warning(&mut self, title: impl Into<String>, detail: impl Into<String>, retry_text: impl Into<String>) {
+        self.warning_title = title.into();
+        self.warning_detail = detail.into();
+        self.warning_retry_text = retry_text.into();
+        self.current_mode = crate::display::DisplayMode::Warning;
+    }
+
+    /// Clear the warning state and return to Clock mode.
+    pub fn clear_warning(&mut self) {
+        self.warning_title.clear();
+        self.warning_detail.clear();
+        self.warning_retry_text.clear();
+        self.current_mode = crate::display::DisplayMode::Clock;
+    }
+
+    /// Render the warning/error page.
+    fn render_warning(&mut self) -> Result<(), DisplayError> {
+        let page = self.layout_manager.create_warning_page();
+
+        let title  = self.warning_title.clone();
+        let detail = self.warning_detail.clone();
+        let retry  = self.warning_retry_text.clone();
+        let alert  = self.alert_svg.clone();
+
+        match &mut self.framebuffer {
+            crate::display::framebuffer::FrameBuffer::Mono(fb) => {
+                Self::render_warning_page(fb, &page, &title, &detail, &retry, &alert)
+            }
+            crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
+                Self::render_warning_page(fb, &page, &title, &detail, &retry, &alert)
+            }
+            crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
+                Self::render_warning_page(fb, &page, &title, &detail, &retry, &alert)
+            }
+        }
+    }
+
+    fn render_warning_page<D>(
+        fb: &mut D,
+        page: &crate::display::PageLayout,
+        title: &str,
+        detail: &str,
+        retry: &str,
+        alert_svg: &Option<Vec<u8>>,
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default
+            + crate::display::ttf_font::BlendCoverage,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<D::Color>,
+    {
+        use embedded_graphics::mono_font::{MonoTextStyle, iso_8859_13::FONT_5X8};
+        use embedded_text::{alignment::{HorizontalAlignment, VerticalAlignment}, style::TextBoxStyleBuilder, TextBox};
+        use crate::display::color_proxy::ConvertColor;
+
+        let tb_center = TextBoxStyleBuilder::new()
+            .alignment(HorizontalAlignment::Center)
+            .vertical_alignment(VerticalAlignment::Middle)
+            .build();
+
+        for field in page.fields() {
+            match field.name.as_str() {
+                "warn_icon" => {
+                    use crate::visualization::SvgColorDepth;
+                    if D::Color::use_svg_glyphs() {
+                        if let Some(svg_bytes) = alert_svg {
+                            let _ = Self::draw_svg_weather_glyph(
+                                fb,
+                                svg_bytes,
+                                field.position().x,
+                                field.position().y,
+                                field.width(),
+                                field.height(),
+                            );
+                        }
+                    }
+                }
+                "warn_title" => {
+                    let color: D::Color = field.fg_color.to_color();
+                    let font = field.font.unwrap_or(&FONT_5X8);
+                    let style = MonoTextStyle::new(font, color);
+                    TextBox::with_textbox_style(title, field.bounds, style, tb_center)
+                        .draw(fb).map_err(|_| DisplayError::DrawingError("warn_title".to_string()))?;
+                }
+                "warn_detail" => {
+                    let color: D::Color = field.fg_color.to_color();
+                    let font = field.font.unwrap_or(&FONT_5X8);
+                    let style = MonoTextStyle::new(font, color);
+                    TextBox::with_textbox_style(detail, field.bounds, style, tb_center)
+                        .draw(fb).map_err(|_| DisplayError::DrawingError("warn_detail".to_string()))?;
+                }
+                "retry_info" => {
+                    let color: D::Color = field.fg_color.to_color();
+                    let font = field.font.unwrap_or(&FONT_5X8);
+                    let style = MonoTextStyle::new(font, color);
+                    TextBox::with_textbox_style(retry, field.bounds, style, tb_center)
+                        .draw(fb).map_err(|_| DisplayError::DrawingError("retry_info".to_string()))?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     /// Async update path - fetch data from external sources
     ///
     /// This method handles all async operations (LMS polling, weather updates, etc.)
@@ -3057,13 +3253,19 @@ impl DisplayManager {
         album: String,
         title: String,
         artist: String,
+        year: String,
         _scroll_mode: &str,
+        coverid: &str,
+        lms_host: &str,
+        lms_port: u16,
+        player_mac: &str,
     ) {
         // Store for easter eggs
         self.artist = artist.clone();
         self.title = title.clone();
         self.album_artist = album_artist.clone();
         self.album = album.clone();
+        self.year = year.clone();
 
         // Update scrolling text component
         self.scrolling_text.set_full_track_info(
@@ -3073,6 +3275,21 @@ impl DisplayManager {
             artist
         );
         // Note: update() is called in render_scrolling() on each frame
+
+        // Cover art: fetch if coverid changed (Rgb565 displays only)
+        if !coverid.is_empty() && coverid != self.current_coverid {
+            self.current_coverid = coverid.to_string();
+            self.cover_art = None;
+            if let Some(cache) = &self.cover_art_cache {
+                match cache.get(coverid, lms_host, lms_port, player_mac).await {
+                    Ok(art) => {
+                        log::info!("Cover art loaded for coverid={}", coverid);
+                        self.cover_art = Some(art);
+                    }
+                    Err(e) => log::warn!("Cover art fetch failed: {}", e),
+                }
+            }
+        }
     }
 
     /// Set track progress data (duration, elapsed, remaining, mode)

@@ -45,8 +45,8 @@ use image::{DynamicImage, ImageFormat};
 use log::{debug, info, warn};
 use thiserror::Error;
 
-/// Target cover art dimensions (pixels, square).
-pub const COVER_SIZE: u32 = 160;
+/// Target cover art dimensions (pixels, square) — matches the ST7789 cover_art field size.
+pub const COVER_SIZE: u32 = 120;
 
 /// JPEG quality for cached files (0–100).
 const CACHE_JPEG_QUALITY: u8 = 75;

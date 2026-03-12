@@ -97,6 +97,7 @@ pub enum DisplayMode {
     EasterEggs,      // Easter Eggs - just for fun eye-candy
     WeatherCurrent,  // Current Weather mode
     WeatherForecast, // Weather Forecast mode
+    Warning,         // Warning/error state — server unavailable etc.
 }
 
 // Re-export OledDisplay from the old display module when available

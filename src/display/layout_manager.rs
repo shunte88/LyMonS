@@ -95,6 +95,13 @@ impl LayoutManager {
         })
     }
 
+    pub fn create_warning_page(&self) -> PageLayout {
+        self.resolve("warning").unwrap_or_else(|| {
+            log::error!("layout_manager: failed to resolve 'warning' template");
+            PageLayout::new("warning")
+        })
+    }
+
     pub fn create_splash_page(&self) -> PageLayout {
         self.resolve("splash").unwrap_or_else(|| {
             log::error!("layout_manager: failed to resolve 'splash' template");

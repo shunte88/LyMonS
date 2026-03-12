@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+
+<svg
+   fill="#000000"
+   width="26"
+   height="26"
+   viewBox="0 0 26 26"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <rect
+     style="fill:#ffffff;fill-opacity:1"
+     id="SHREIK"
+     width="7.7384443"
+     height="16.126268"
+     x="9.1307774"
+     y="4.9368658" />
+  <path
+     d="M 13,3 A 10,10 0 1 0 23,13 10,10 0 0 0 13,3 Z m -1,5 a 1,1 0 0 1 2,0 v 6 a 1,1 0 0 1 -2,0 z m 1,12 A 1.5,1.5 0 1 1 14.5,18.5 1.5,1.5 0 0 1 13,20 Z"
+     id="SHIELD"
+     style="fill:#ff3e3e;fill-opacity:1" 
+     />
+</svg>

@@ -134,6 +134,7 @@ struct Track {
     title: Option<String>,
     trackartist: Option<String>,
     year: Option<String>,
+    coverid: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -191,6 +192,7 @@ pub struct SlimInfo {
     pub repeat: u8,
     pub shuffle: u8,
     pub year: String,
+    pub coverid: String,
 }
 
 impl SlimInfo {
@@ -219,7 +221,8 @@ impl SlimInfo {
             playlist_mode: "".to_string(),
             repeat: 0,
             shuffle: 0,
-            year: "".to_string(),      
+            year: "".to_string(),
+            coverid: String::new(),
         }
     }
 
@@ -251,6 +254,7 @@ impl SlimInfo {
                     title: None,
                     trackartist: None,
                     year: None,
+                    coverid: None,
                 })
         };
 
@@ -356,6 +360,7 @@ impl SlimInfo {
             repeat: ps.playlist_repeat as u8,
             shuffle: ps.playlist_shuffle as u8,
             year: s_or(&track.as_ref().and_then(|t| t.year.clone()), ""),
+            coverid: s_or(&track.as_ref().and_then(|t| t.coverid.clone()), ""),
         }
     }
 }

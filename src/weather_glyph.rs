@@ -208,6 +208,73 @@ impl WeatherGlyphSet {
     }
 }
 
+/// SVG moon phase glyphs loaded from `data/moonphase.zip` at startup.
+///
+/// Indexed 0–7 matching the `MoonPhase` enum (New=0 … WaningCrescent=7).
+/// Empty `Vec` means that phase file was not found in the zip; the renderer
+/// falls back to the 1bpp bitmap in that case.
+pub struct MoonPhaseGlyphSet {
+    phases: [Vec<u8>; 8],
+}
+
+impl MoonPhaseGlyphSet {
+    /// Load all 8 phase SVGs from a zip archive.
+    ///
+    /// Files are matched by unique keyword in the filename:
+    ///   `_new`, `waxing_crescent`, `first_quarter`, `waxing_gibbous`,
+    ///   `_full`, `waning_gibbous`, `third_quarter`, `waning_crescent`.
+    /// Returns `None` only if the zip cannot be opened.
+    pub fn load_from_zip(zip_path: &str) -> Option<Self> {
+        use std::io::Read;
+        let file = std::fs::File::open(zip_path)
+            .map_err(|e| log::warn!("moonphase: cannot open {}: {}", zip_path, e))
+            .ok()?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| log::warn!("moonphase: cannot read zip {}: {}", zip_path, e))
+            .ok()?;
+
+        let mut phases: [Vec<u8>; 8] = Default::default();
+
+        for i in 0..archive.len() {
+            let mut entry = match archive.by_index(i) {
+                Ok(e)  => e,
+                Err(_) => continue,
+            };
+            let name = entry.name().to_lowercase();
+
+            let idx: usize =
+                if      name.contains("waxing_crescent") { 1 }
+                else if name.contains("first_quarter")   { 2 }
+                else if name.contains("waxing_gibbous")  { 3 }
+                else if name.contains("waning_gibbous")  { 5 }
+                else if name.contains("third_quarter")||name.contains("final_quarter")   { 6 }
+                else if name.contains("waning_crescent") { 7 }
+                else if name.contains("_full")           { 4 }
+                else if name.contains("_new")            { 0 }
+                else { continue };
+
+            let mut raw = Vec::new();
+            if entry.read_to_end(&mut raw).is_err() {
+                log::warn!("moonphase: failed to read {} from {}", entry.name(), zip_path);
+                continue;
+            }
+            phases[idx] = raw;
+        }
+
+        let loaded = phases.iter().filter(|v| !v.is_empty()).count();
+        log::info!("moonphase: loaded {}/8 phases from {}", loaded, zip_path);
+
+        Some(Self { phases })
+    }
+
+    /// Return SVG bytes for `phase_index` (0–7), or `None` if not loaded.
+    pub fn get(&self, phase_index: usize) -> Option<&[u8]> {
+        self.phases.get(phase_index)
+            .filter(|v| !v.is_empty())
+            .map(|v| v.as_slice())
+    }
+}
+
 // moon phase strings - these need to be translatable
 pub fn get_moon_phase_description(phase: MoonPhase) -> &'static str {
     match phase {

@@ -35,6 +35,7 @@ use crate::textable::{TextScroller, ScrollMode};
 struct ScrollState {
     text: String,
     char_width: usize,
+    scroll_width: u32,
     offset: i32,
     direction: i32, // -1 for left, 1 for right
     pause_counter: u32,
@@ -47,6 +48,7 @@ impl ScrollState {
             text: String::new(),
             offset: 0,
             char_width: 6,
+            scroll_width: 0,
             direction: -1,
             pause_counter: 0,
             log_counter: 0,
@@ -63,7 +65,7 @@ impl ScrollState {
         }
     }
 
-    fn update(&mut self, display_width: u32, scroll_mode: ScrollMode, ttf: Option<&TtfFont>, char_width: usize) {
+    fn update(&mut self, scroll_mode: ScrollMode, ttf: Option<&TtfFont>) {
 
         if self.text.is_empty() {
             return;
@@ -71,13 +73,12 @@ impl ScrollState {
 
         let text_width = match ttf {
             Some(f) => f.measure_text(&self.text),
-            None    => (self.text.len() * char_width) as i32,
+            None    => (self.text.len() * self.char_width) as i32,
         };
-        let display_width = display_width as i32;
 
         // If text fits on screen, no scrolling needed
-        if text_width <= display_width {
-            let cx: i32 = (display_width - text_width) / 2;
+        if text_width <= self.scroll_width as i32{
+            let cx: i32 = (self.scroll_width as i32 - text_width) / 2;
             self.offset = cx;
             return;
         }
@@ -100,7 +101,7 @@ impl ScrollState {
             ScrollMode::ScrollCylon => {
                 // Bounce back and forth
                 self.offset += self.direction;
-                if self.offset <= -(text_width - display_width) {
+                if self.offset <= -(text_width - self.scroll_width as i32) {
                     self.direction = 1;
                     self.pause_counter = 30;
                 } else if self.offset >= 0 {
@@ -110,7 +111,7 @@ impl ScrollState {
             }
             ScrollMode::Static => {
                 // center the text
-                let cx: i32 = if text_width < display_width {(display_width - text_width) / 2} else { 0 };
+                let cx: i32 = if text_width < self.scroll_width as i32 {(self.scroll_width as i32 - text_width) / 2} else { 0 };
                 self.offset = cx;
             }
         }
@@ -231,23 +232,28 @@ impl ScrollingText {
     /// Update scroll position (called on each frame)
     pub fn update(&mut self) {
         let ttf = self.ttf_font.as_deref();
-        self.album_artist_scroll.update(self.display_width, self.scroll_mode, ttf, self.album_artist_scroll.char_width);
-        self.album_scroll.update(self.display_width, self.scroll_mode, ttf, self.album_scroll.char_width);
-        self.title_scroll.update(self.display_width, self.scroll_mode, ttf, self.title_scroll.char_width);
-        self.artist_scroll.update(self.display_width, self.scroll_mode, ttf, self.artist_scroll.char_width);
-        self.combination_scroll.update(self.display_width, self.scroll_mode, ttf, self.combination_scroll.char_width);
+        self.album_artist_scroll.update(self.scroll_mode, ttf);
+        self.album_scroll.update(self.scroll_mode, ttf);
+        self.title_scroll.update(self.scroll_mode, ttf);
+        self.artist_scroll.update(self.scroll_mode, ttf);
+        self.combination_scroll.update(self.scroll_mode, ttf);
     }
 
     /// Update combination scroll position (called on each frame)
     pub fn update_combination(&mut self) {
         let ttf = self.ttf_font.as_deref();
-        self.combination_scroll.update(self.display_width, self.scroll_mode, ttf, self.combination_scroll.char_width);
+        self.combination_scroll.update(self.scroll_mode, ttf);
     }
 
     /// Update combination scroll position using actual field width
     pub fn update_combination_with_field(&mut self, field: &Field) {
         let ttf = self.ttf_font.as_deref();
-        self.combination_scroll.update(field.width(), self.scroll_mode, ttf, self.combination_scroll.char_width);
+        self.combination_scroll.scroll_width = field.width();
+        if let Some(f) = field.font {
+            self.combination_scroll.char_width =
+                f.character_size.width as usize + f.character_spacing as usize;
+        }
+        self.combination_scroll.update(self.scroll_mode, ttf);
     }
 
     /// Update scroll position using field widths
@@ -259,10 +265,34 @@ impl ScrollingText {
         artist_field:       &Field,
     ) {
         let ttf = self.ttf_font.as_deref();
-        self.album_artist_scroll.update(album_artist_field.width(), self.scroll_mode, ttf, self.album_artist_scroll.char_width);
-        self.album_scroll.update(album_field.width(), self.scroll_mode, ttf, self.album_scroll.char_width);
-        self.title_scroll.update(title_field.width(), self.scroll_mode, ttf, self.title_scroll.char_width);
-        self.artist_scroll.update(artist_field.width(), self.scroll_mode, ttf, self.artist_scroll.char_width);
+
+        self.album_artist_scroll.scroll_width = album_artist_field.width();
+        if let Some(f) = album_artist_field.font {
+            self.album_artist_scroll.char_width =
+                f.character_size.width as usize + f.character_spacing as usize;
+        }
+        self.album_artist_scroll.update(self.scroll_mode, ttf);
+
+        self.album_scroll.scroll_width = album_field.width();
+        if let Some(f) = album_field.font {
+            self.album_scroll.char_width =
+                f.character_size.width as usize + f.character_spacing as usize;
+        }
+        self.album_scroll.update(self.scroll_mode, ttf);
+
+        self.title_scroll.scroll_width = title_field.width();
+        if let Some(f) = title_field.font {
+            self.title_scroll.char_width =
+                f.character_size.width as usize + f.character_spacing as usize;
+        }
+        self.title_scroll.update(self.scroll_mode, ttf);
+
+        self.artist_scroll.scroll_width = artist_field.width();
+        if let Some(f) = artist_field.font {
+            self.artist_scroll.char_width =
+                f.character_size.width as usize + f.character_spacing as usize;
+        }
+        self.artist_scroll.update(self.scroll_mode, ttf);
     }
 
     /// Render the scrolling text
@@ -276,59 +306,56 @@ impl ScrollingText {
 
         let font = &FONT_5X8;
         let text_style = MonoTextStyle::new(font, BinaryColor::On);
-        let char_width = font.character_size.width as usize;
-        let word_gap = 2 * char_width as i32;
+        let char_width = font.character_size.width as usize + font.character_spacing as usize;
+        let word_gap = 3 * char_width as i32;
         let mut text_y = 15;
-        let text_height = 9; // need to get this from bounds and font metrics
+        let text_height = font.character_size.height as i32;
+        let last_spacing = font.character_spacing as i32;
 
-        // Album Artist at field 1 (below status bar at y=8)
         if !self.album_artist_scroll.text.is_empty() {
             let x = self.album_artist_scroll.get_offset();
             Text::new(&self.album_artist_scroll.text, Point::new(x, text_y), text_style).draw(target)?;
 
             // For continuous loop mode, draw the text again after a gap
             if self.scroll_mode == ScrollMode::ScrollLeft {
-                let text_width = (self.album_artist_scroll.text.len() * char_width) as i32;
-                let loop_x = x + text_width + word_gap; // 2 char gap
+                let text_width = (self.album_artist_scroll.text.len() * char_width) as i32 - last_spacing;
+                let loop_x = x + text_width + word_gap; // 3 char gap
                 Text::new(&self.album_artist_scroll.text, Point::new(loop_x, text_y), text_style).draw(target)?;
             }
         }
 
         text_y  += text_height;
-        // Album at y=28 (below artist)
         if !self.album_scroll.text.is_empty() {
             let x = self.album_scroll.get_offset();
             Text::new(&self.album_scroll.text, Point::new(x, text_y), text_style).draw(target)?;
 
             if self.scroll_mode == ScrollMode::ScrollLeft {
-                let text_width = (self.album_scroll.text.len() * char_width) as i32;
+                let text_width = (self.album_scroll.text.len() * char_width) as i32 - last_spacing;
                 let loop_x = x + text_width + word_gap;
                 Text::new(&self.album_scroll.text, Point::new(loop_x, text_y), text_style).draw(target)?;
             }
         }
 
         text_y += text_height;
-        // Title at y=38 (below album)
         if !self.title_scroll.text.is_empty() {
             let x = self.title_scroll.get_offset();
             Text::new(&self.title_scroll.text, Point::new(x, text_y), text_style).draw(target)?;
 
             if self.scroll_mode == ScrollMode::ScrollLeft {
-                let text_width = (self.title_scroll.text.len() * char_width) as i32;
+                let text_width = (self.title_scroll.text.len() * char_width) as i32 - last_spacing;
                 let loop_x = x + text_width + word_gap;
                 Text::new(&self.title_scroll.text, Point::new(loop_x, text_y), text_style).draw(target)?;
             }
         }
 
         text_y += text_height;
-        // Artist at y=18 (below status bar at y=8)
         if !self.artist_scroll.text.is_empty() {
             let x = self.artist_scroll.get_offset();
             Text::new(&self.artist_scroll.text, Point::new(x, text_y), text_style).draw(target)?;
 
             // For continuous loop mode, draw the text again after a gap
             if self.scroll_mode == ScrollMode::ScrollLeft {
-                let text_width = (self.artist_scroll.text.len() * char_width) as i32;
+                let text_width = (self.artist_scroll.text.len() * char_width) as i32 - last_spacing;
                 let loop_x = x + text_width + word_gap; // 12px gap
                 Text::new(&self.artist_scroll.text, Point::new(loop_x, text_y), text_style).draw(target)?;
             }
@@ -369,11 +396,11 @@ impl ScrollingText {
 
         if let Some(ttf) = &self.ttf_font {
             // TTF path — vertically centre the text within the field using real metrics.
-            let ascent     = ttf.ascent();
-            let line_h     = ttf.line_height();
-            let field_h    = field.height() as i32;
-            let baseline_y = field_pos.y + (field_h - line_h) / 2 + ascent;
-            let x          = field_pos.x + scroll_state.get_offset();
+            let ascent= ttf.ascent();
+            let line_h= ttf.line_height();
+            let field_h= field.height() as i32;
+            let baseline_y= field_pos.y + (field_h - line_h) / 2 + ascent;
+            let x= field_pos.x + scroll_state.get_offset();
 
             ttf.render_text(&scroll_state.text, x, baseline_y, fg, &mut clipped)?;
 
@@ -392,16 +419,18 @@ impl ScrollingText {
 
             let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_5X8);
             let text_style = MonoTextStyle::new(font, fg);
-            let char_width = font.character_size.width as usize;
-            let word_gap   = 2 * char_width as usize;
-            let baseline_y = field_pos.y + font.baseline as i32;
-            let x          = field_pos.x + scroll_state.get_offset();
+            let char_width = font.character_size.width as usize + font.character_spacing as usize;
+            let word_gap= 3 * char_width as usize;
+            let baseline_y= field_pos.y + font.baseline as i32;
+            let x= field_pos.x + scroll_state.get_offset();
+            let last_spacing = font.character_spacing as i32;
+
 
             Text::new(&scroll_state.text, Point::new(x, baseline_y), text_style)
                 .draw(&mut clipped)?;
 
             if field.scrollable && self.scroll_mode == ScrollMode::ScrollLeft {
-                let text_width = (scroll_state.text.len() * char_width) as i32;
+                let text_width = (scroll_state.text.len() * char_width) as i32 - last_spacing;
                 let loop_x     = x + text_width + word_gap as i32;
                 Text::new(&scroll_state.text, Point::new(loop_x, baseline_y), text_style)
                     .draw(&mut clipped)?;

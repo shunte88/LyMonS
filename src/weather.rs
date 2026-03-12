@@ -66,6 +66,7 @@ pub enum WeatherCondition {
 pub struct WeatherDisplay{
     pub temp_units: String,
     pub wind_speed_units: String,
+    pub pressure_units: String,
     pub sun: sun::SunTimes,
     pub current: WeatherData,
     pub forecasts: Vec<WeatherData>,
@@ -155,6 +156,7 @@ pub struct WeatherData {
     pub wind_direction: String,
     pub wind_speed_avg: f64,
     pub wind_speed_units: String,
+    pub pressure_sea_level_units: String,
 }
 
 // Main weather data struct
@@ -163,7 +165,8 @@ pub struct WeatherConditions {
     location_name: String,
     pub base_folder: String,
     pub temperature_units: String, // "C" or "F"
-    pub wind_speed_units: String, // "km/h" or "mph"
+    pub wind_speed_units: String,  // "km/h" or "mph"
+    pub pressure_units: String,    // "hPa" or "mb" 
     pub lat: f64,
     pub lng: f64,
     pub current: WeatherData,
@@ -197,6 +200,7 @@ impl WeatherConditions {
             base_folder,
             temperature_units: if units == "imperial" { "F" } else { "C" }.to_string(),
             wind_speed_units: if units == "imperial" { "mph" } else { "km/h" }.to_string(),
+            pressure_units: if units == "imperial" { "mb" } else { "hPa" }.to_string(),
             lat,
             lng,
             current: WeatherData::default(),
@@ -227,6 +231,7 @@ impl WeatherConditions {
     pub fn get_weather_display(&self) -> WeatherDisplay {
         let temp_units = self.temperature_units.clone();
         let wind_speed_units = self.wind_speed_units.clone();
+        let pressure_units = self.pressure_units.clone();
         let current = self.current.clone();
         let forecasts = self.forecast.clone();
         let svg = self.get_svg_path(WeatherCondition::Current).clone();
@@ -244,6 +249,7 @@ impl WeatherConditions {
         WeatherDisplay {
             temp_units,
             wind_speed_units,
+            pressure_units,
             sun,
             current,
             forecasts,
@@ -466,6 +472,7 @@ impl Weather {
             wind_direction: wind_dir,
             wind_speed_avg: wind_speed,
             wind_speed_units: wind_speed_units.clone(),
+            pressure_sea_level_units: self.weather_data.pressure_units.clone(),
         };
         Ok(wd)
 
