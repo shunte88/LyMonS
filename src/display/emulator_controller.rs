@@ -259,6 +259,10 @@ impl EmulatorDisplayController {
     /// Render frame (called from main loop)
     pub async fn render_frame(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         match self.current_mode {
+            DisplayMode::Warning => {
+                // TODO: Implement warning
+                self.render_clock()?;
+            },
             DisplayMode::Clock => {
                 self.render_clock()?;
             },
