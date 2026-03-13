@@ -826,6 +826,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg(Arg::new("font")
         .short('F')
         .long("font")
+        .help("Font for text use"))
+        .arg(Arg::new("clock_font")
+        .short('C')
+        .long("clock_font")
         .help("Clock font to use")
         .value_parser(
             ["7seg",
@@ -927,6 +931,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             \n\ttodo.")
         .get_matches();
 
+    let _config_file = matches.get_one::<String>("config").unwrap();
     let skip_splash = matches.get_flag("no-splash");
     let show_splash = !skip_splash; // Show splash by default unless --no-splash is provided
     let show_metrics = matches.get_flag("metrics");
@@ -934,27 +939,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let debug_enabled = matches.get_flag("debug");
     let mut emulated = matches.get_flag("emulated");
     let _driver_override = matches.get_one::<String>("driver").cloned();
-    let _config_file = matches.get_one::<String>("config").unwrap();
+    let scroll_mode = matches.get_one::<String>("scroll").unwrap();
+    let weather_config = matches.get_one::<String>("weather").unwrap();
+    let name_filter = matches.get_one::<String>("name").unwrap();
+    let clock_font = matches.get_one::<String>("clock_font").unwrap();
+    let font = matches.get_one::<String>("font").unwrap();
+    let _i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
+    let easter_egg = matches.get_one::<String>("eggs").unwrap();
+    let viz_type = matches.get_one::<String>("viz").unwrap();
 
-    // Also check config file for emulated setting
-    if !emulated {
-        if let Ok(config_content) = std::fs::read_to_string(_config_file) {
-            if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&config_content) {
-                if let Some(display) = config.get("display") {
+    if let Ok(config_content) = std::fs::read_to_string(_config_file) {
+        if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&config_content) {
+            if let Some(display) = config.get("display") {
                     if let Some(emulated_setting) = display.get("emulated") {
                         emulated = emulated_setting.as_bool().unwrap_or(false);
                     }
                 }
             }
         }
-    }
-    let scroll_mode = matches.get_one::<String>("scroll").unwrap();
-    let weather_config = matches.get_one::<String>("weather").unwrap();
-    let name_filter = matches.get_one::<String>("name").unwrap();
-    let clock_font = matches.get_one::<String>("font").unwrap();
-    let _i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
-    let easter_egg = matches.get_one::<String>("eggs").unwrap();
-    let viz_type = matches.get_one::<String>("viz").unwrap();
     
     // Initialize the logger with the appropriate level based on debug flag
     env_logger::Builder::from_env(Env::default().default_filter_or(if debug_enabled {"debug"}else{"info"}))

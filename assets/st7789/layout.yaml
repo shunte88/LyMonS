@@ -335,7 +335,7 @@ components:
       # with multi-line text below
       - name: moonphase_svg
         type: custom
-        x: "moonphase_text.left - (moonphase_text.width/2 - 21)"
+        x: "moonphase_text.left + 4"
         y: "12"
         width: "42"
         height: "42"

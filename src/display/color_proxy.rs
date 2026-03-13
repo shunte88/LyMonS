@@ -184,7 +184,9 @@ impl ColorProxy for Rgb565Proxy {
 
     fn spectrum_pixel(intensity: u8) -> Rgb565 {
         // Map 0-255 intensity to a blue→cyan→green→yellow→red gradient
-        let i = intensity as u16;
+        // not getting much color spread so attempting to push a tad
+        // not a fill spectrim spread but a little more interesting
+        let i = (intensity as u16 * 6).clamp(0, 255);
         let (r, g, b) = if i < 64 {
             (0u8, 0u8, ((i * 255) / 63) as u8)
         } else if i < 128 {
