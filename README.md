@@ -5,6 +5,8 @@
 [![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red.svg)](https://www.raspberrypi.org/)
 ![version](version.svg)
 
+[![Buy Me A Coffee](assets/github/bmc-brand-icon.svg) Like my work, then Buy Me A Coffee](https://buymeacoffee.com/shunte88)
+
 **An LMS Monitor For The Future**
 
 OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
@@ -63,7 +65,12 @@ Usage: LyMonS [OPTIONS] --name <name>
 Options:
   -v, --debug              Enable debug log level
   -N, --name <name>        LMS player name to monitor
-  -W, --weather <weather>  Weather API key,units,transl,latitude,longitude [default: ]
+  -W, --weather <WEATHER>  Weather: API key,units,lang,latitude,longitude (comma-separated)
+      --weather-api <KEY>  Tomorrow.io API key (overrides -W key field)
+      --weather-units <U>  Weather units: metric or imperial (overrides -W units field)
+      --weather-lang <L>   Weather language/translation code (overrides -W lang field)
+      --lat <LAT>          Latitude (overrides config and GeoIP)
+      --lon <LON>          Longitude (overrides config and GeoIP)
   -z, --scroll <scroll>    Text display scroll mode [default: cylon] [possible values: loop, loopleft, cylon]
   -r, --remain             Display Remaining Time rather than Total Time
   -F, --font <font>        Clock font to use [default: 7seg] [possible values: 7seg, holdeco, holfestus, noto, roboto, soldeco, solfestus, space1999]
@@ -104,6 +111,36 @@ OLED Clock Fonts:
 
 ```
 
+## Screenshots
+
+### Playback Scroller
+
+| SSD1309 (128×64 mono) | SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
+|:---:|:---:|:---:|
+| ![SSD1309 scroller](assets/github/scroller_builtin_font_ssd1309.png) | ![SSD1322 scroller](assets/github/scroller_builtin_font_ssd1322.png) | ![ST7789 scroller](assets/github/scroller_builtin_font_st7789.png) |
+
+TTF font on ST7789:
+
+![ST7789 scroller TTF font](assets/github/scroller_ttf_font_st7789.png)
+
+### Clock — Marvel Font
+
+| SSD1309 (128×64 mono) | SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
+|:---:|:---:|:---:|
+| ![SSD1309 clock](assets/github/clock_ssd1309.png) | ![SSD1322 clock](assets/github/clock_ssd1322.png) | ![ST7789 clock](assets/github/clock_st7789.png) |
+
+### Weather — Current Conditions
+
+| SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
+|:---:|:---:|
+| ![SSD1322 weather current](assets/github/weather_current_ssd1322.png) | ![ST7789 weather current](assets/github/weather_current_st7789.png) |
+
+### Weather — Forecast
+
+| SSD1309 (128×64 mono) | SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
+|:---:|:---:|:---:|
+| ![SSD1309 forecast](assets/github/weather_forecast_ssd1309.png) | ![SSD1322 forecast](assets/github/weather_forecast_ssd1322.png) | ![ST7789 forecast](assets/github/weather_forecast_st7789.png) |
+
 ### Visualizer Modes
 
 Several visualizer modes are supported:
@@ -140,10 +177,19 @@ For **remote visualization** (LyMonS on a separate device), you also need the [v
 
 ## Easter Eggs
 
-<img width="800" src="assets/github/screens.webp" align="center" />
-
-<p>
 There are several "easter egg" modes for setups that can't or don't want to process audio data for visualization. There's nothing stopping you using them as your main display mode either.
+
+#### Cassette
+
+| SSD1309 (128×64 mono) | SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
+|:---:|:---:|:---:|
+| ![SSD1309 cassette](assets/github/egg_cassette_ssd1309.png) | ![SSD1322 cassette](assets/github/egg_cassette_ssd1322.png) | ![ST7789 cassette](assets/github/egg_cassette_st7789.png) |
+
+#### Oscilloscope
+
+| SSD1309 (128×64 mono) | SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
+|:---:|:---:|:---:|
+| ![SSD1309 scope](assets/github/egg_scope_ssd1309.png) | ![SSD1322 scope](assets/github/egg_scope_ssd1322.png) | ![ST7789 scope](assets/github/egg_scope_st7789.png) |
 
 There are currently 10 easter egg modes:
 - <b>[cassette]</b> Compact Cassette, as visually accurate as the OLED allows. Hubs turn and the tape loops from one hub to the other with the tape window showing track progress.
@@ -158,7 +204,6 @@ There are currently 10 easter egg modes:
 - <b>[pipboy]</b> It's Pip-Boy.
 
 Specify `--egg <name>` to display an easter egg during track playback.
-</p>
 
 ## Layout System
 
@@ -351,15 +396,11 @@ WARN  layout: easter_egg_reel2reel/default/time [x="display.widht - 43"]:
               unknown variable 'display.widht' — using 0
 ```
 
----
-
-> **Screenshots wanted** — the following would illustrate the layout section well:
-> - Playback scroller page: SSD1306 (128×64 mono) and SSD1322 (256×64 gray4) side by side
-> - Clock page: same two displays
-> - Weather current + forecast: ST7789 (color) and SSD1306 (mono) side by side
-> - Any easter egg showing track text overlay (e.g. reel2reel or cassette with artist/title visible)
-> - Same easter egg on 128px vs 256px to show how positions adapt
-
 ## Like The App - Git The Shirt
 
 Team Badger shirts and other goodies are available at [shunte88](https://www.zazzle.com/team_badger_t_shirt-235604841593837420)
+
+---
+
+[![Buy Me A Coffee](assets/github/bmc-brand-icon.svg) Like my work, then Buy Me A Coffee](https://buymeacoffee.com/shunte88)
+

@@ -14,8 +14,6 @@ use dirs_next::home_dir;
 use std::{fs, path::{Path, PathBuf}};
 use thiserror::Error;
 
-// ── Errors ────────────────────────────────────────────────────────────────────
-
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("YAML parse error: {0}")]
@@ -25,8 +23,6 @@ pub enum ConfigError {
     #[error("Validation error: {0}")]
     Validation(String),
 }
-
-// ── Weather ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct WeatherConfig {
@@ -51,8 +47,6 @@ impl WeatherConfig {
         }
     }
 }
-
-// ── Display ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct DisplayConfig {
@@ -94,8 +88,6 @@ pub enum DriverKind {
     SharpMemory,
     St7789,
 }
-
-// ── Top-level config (YAML) ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct Config {
@@ -143,8 +135,6 @@ impl Config {
     }
 }
 
-// ── CLI (clap derive) ─────────────────────────────────────────────────────────
-
 #[derive(Debug, Parser, Clone)]
 #[command(
     name    = "LyMonS",
@@ -166,17 +156,19 @@ pub struct Cli {
     #[arg(short = 'N', long)]
     pub name: Option<String>,
 
-    // ── Weather ───────────────────────────────────────────────────────────────
+    /// Weather: API key,units,lang,latitude,longitude (comma-separated)
+    #[arg(short = 'W', long = "weather", value_name = "WEATHER")]
+    pub weather: Option<String>,
 
-    /// Tomorrow.io API key
-    #[arg(short = 'W', long = "weather-api")]
+    /// Tomorrow.io API key (overrides --weather key field)
+    #[arg(long = "weather-api")]
     pub weather_api: Option<String>,
 
-    /// Weather units: metric (default) or imperial
+    /// Weather units: metric (default) or imperial (overrides --weather units field)
     #[arg(long = "weather-units")]
     pub weather_units: Option<String>,
 
-    /// Weather language/translation code
+    /// Weather language/translation code (overrides --weather lang field)
     #[arg(long = "weather-lang")]
     pub weather_lang: Option<String>,
 
@@ -187,8 +179,6 @@ pub struct Cli {
     /// Longitude — overrides config file and GeoIP
     #[arg(long)]
     pub lon: Option<f64>,
-
-    // ── Playback ──────────────────────────────────────────────────────────────
 
     /// Text scroll mode
     #[arg(short = 'z', long, value_parser = ["loop", "loopleft", "cylon"])]
@@ -201,8 +191,6 @@ pub struct Cli {
     /// TTF text font name (must have ./data/{name}-text.zip)
     #[arg(short = 'F', long)]
     pub font: Option<String>,
-
-    // ── Display ───────────────────────────────────────────────────────────────
 
     /// Clock font
     #[arg(short = 'C', long = "clock-font",
@@ -245,8 +233,6 @@ pub struct Cli {
     pub dump_config: bool,
 }
 
-// ── Load ──────────────────────────────────────────────────────────────────────
-
 /// Parse CLI, read YAML config file, merge (CLI wins), validate.
 /// Returns the fully resolved `Config`.
 pub fn load() -> Result<Config, ConfigError> {
@@ -285,8 +271,6 @@ pub fn load() -> Result<Config, ConfigError> {
 
     Ok(cfg)
 }
-
-// ── Private helpers ───────────────────────────────────────────────────────────
 
 fn find_config_file() -> Option<PathBuf> {
     if let Some(home) = home_dir() {
@@ -376,7 +360,21 @@ fn apply_cli_overrides(cfg: &mut Config, cli: &Cli) {
     take_opt!(cli.lat         => cfg.latitude);
     take_opt!(cli.lon         => cfg.longitude);
 
-    // Weather overrides
+    // Weather overrides — comma-separated -W/--weather first, then discrete flags win
+    if let Some(w_str) = &cli.weather {
+        // Format: key,units,lang,latitude,longitude  (any trailing fields may be omitted)
+        let parts: Vec<&str> = w_str.splitn(5, ',').collect();
+        let w = cfg.weather.get_or_insert_with(WeatherConfig::default);
+        if parts.len() >= 1 && !parts[0].is_empty() { w.api       = Some(parts[0].to_string()); }
+        if parts.len() >= 2 && !parts[1].is_empty() { w.units     = Some(parts[1].to_string()); }
+        if parts.len() >= 3 && !parts[2].is_empty() { w.translate = Some(parts[2].to_string()); }
+        if parts.len() >= 4 && !parts[3].is_empty() {
+            if let Ok(lat) = parts[3].parse::<f64>() { w.latitude  = Some(lat); }
+        }
+        if parts.len() >= 5 && !parts[4].is_empty() {
+            if let Ok(lon) = parts[4].parse::<f64>() { w.longitude = Some(lon); }
+        }
+    }
     if cli.weather_api.is_some() || cli.weather_units.is_some() || cli.weather_lang.is_some() {
         let w = cfg.weather.get_or_insert_with(WeatherConfig::default);
         if cli.weather_api.is_some()   { w.api       = cli.weather_api.clone(); }

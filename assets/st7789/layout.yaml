@@ -36,7 +36,6 @@ components:
         width: "parent.width - 4"
         height: "20"
         font: font_10x20
-
       - name: cover_art
         type: custom
         x: "4"
@@ -44,7 +43,6 @@ components:
         width: "120"
         height: "120"
         scrollable: false
-
       - name: album_artist
         type: scrolling_text
         x: "cover_art.right + 4"
@@ -54,7 +52,6 @@ components:
         font: font_7x13
         fg_color: Yellow
         scrollable: true
-
       - name: album
         type: scrolling_text
         x: "album_artist.left"
@@ -64,7 +61,6 @@ components:
         font: font_7x13
         fg_color: Yellow
         scrollable: true
-
       - name: title
         type: scrolling_text
         x: "album_artist.left"
@@ -74,7 +70,6 @@ components:
         font: font_7x13
         fg_color: Yellow
         scrollable: true
-
       - name: artist
         type: scrolling_text
         x: "album_artist.left"
@@ -84,7 +79,6 @@ components:
         font: font_7x13
         fg_color: Yellow
         scrollable: true
-
       - name: year
         type: scrolling_text
         x: "album_artist.left"
@@ -95,7 +89,6 @@ components:
         horizontal_alignment: Center
         fg_color: Yellow
         scrollable: false
-
       # parent.height - 15 = 49 on 64px display (matches: height - 6 - y_height)
       - name: track_progress_bar
         type: track_progress_bar
@@ -103,7 +96,6 @@ components:
         y: "parent.height - 30"
         width: "parent.width - 4"
         height: "8"
-
       # parent.height - 10 = 54 on 64px display (matches: height - 1 - y_height)
       - name: info_line
         type: info_line
@@ -121,7 +113,6 @@ components:
         y: "20"
         width: "60"
         height: "60"
-
       - name: warn_title
         type: label
         x: "10"
@@ -131,7 +122,6 @@ components:
         font: font_10x20
         horizontal_alignment: Center
         fg_color: Yellow
-
       - name: warn_detail
         type: label
         x: "10"
@@ -141,7 +131,6 @@ components:
         font: font_7x13
         horizontal_alignment: Center
         fg_color: White
-
       - name: retry_info
         type: label
         x: "10"
@@ -163,7 +152,6 @@ components:
         y: "15"
         width: "140"
         height: "140"
-
       # Metric rows — 20×20 glyphs, font_7x13_bold text, 26px pitch
       - name: temp_glyph
         type: weather_glyph
@@ -172,7 +160,6 @@ components:
         width: "20"
         height: "20"
         fg_color: Cyan
-
       - name: temperature
         type: label
         x: "temp_glyph.right + 2"
@@ -181,7 +168,6 @@ components:
         height: "14"
         font: font_7x13_bold
         fg_color: Cyan
-
       - name: humidity_glyph
         type: weather_glyph
         x: "temp_glyph.left"
@@ -189,7 +175,6 @@ components:
         width: "20"
         height: "20"
         fg_color: Cyan
-
       - name: humidity
         type: label
         x: "temperature.left"
@@ -198,7 +183,6 @@ components:
         height: "14"
         font: font_7x13
         fg_color: Cyan
-
       - name: wind_glyph
         type: weather_glyph
         x: "temp_glyph.left"
@@ -206,7 +190,6 @@ components:
         width: "20"
         height: "20"
         fg_color: Cyan
-
       - name: wind
         type: label
         x: "temperature.left"
@@ -215,7 +198,6 @@ components:
         height: "14"
         font: font_7x13
         fg_color: Cyan
-
       - name: precip_glyph
         type: weather_glyph
         x: "temp_glyph.left"
@@ -223,7 +205,6 @@ components:
         width: "20"
         height: "20"
         fg_color: Cyan
-
       - name: precipitation
         type: label
         x: "temperature.left"
@@ -232,7 +213,6 @@ components:
         height: "14"
         font: font_7x13
         fg_color: Cyan
-
       - name: pressure_glyph
         type: weather_glyph
         x: "temp_glyph.left"
@@ -240,7 +220,6 @@ components:
         width: "20"
         height: "20"
         fg_color: Cyan
-
       - name: pressure
         type: label
         x: "temperature.left"
@@ -249,7 +228,6 @@ components:
         height: "14"
         font: font_7x13
         fg_color: Cyan
-
       # Astral block — rows chained with no gap, 20x20 glyphs
       - name: sunrise_glyph
         type: weather_glyph
@@ -257,7 +235,6 @@ components:
         y: "pressure_glyph.bottom + 2"
         width: "20"
         height: "20"
-
       - name: sunrise_text
         type: label
         x: "sunrise_glyph.right + 2"
@@ -267,14 +244,12 @@ components:
         font: font_5x8
         horizontal_alignment: Center
         fg_color: Yellow
-
       - name: sunset_glyph
         type: weather_glyph
         x: "sunrise_glyph.left"
         y: "sunrise_glyph.bottom"
         width: "20"
         height: "20"
-
       - name: sunset_text
         type: label
         x: "sunrise_text.left"
@@ -284,14 +259,12 @@ components:
         font: font_5x8
         horizontal_alignment: Center
         fg_color: Yellow
-
       - name: moonrise_glyph
         type: weather_glyph
         x: "sunrise_text.right + 8"
         y: "pressure_glyph.bottom + 3"
         width: "20"
         height: "20"
-
       - name: moonrise_text
         type: label
         x: "moonrise_glyph.right + 2"
@@ -301,14 +274,12 @@ components:
         font: font_5x8
         horizontal_alignment: Center
         fg_color: Cyan
-
       - name: moonset_glyph
         type: weather_glyph
         x: "sunset_text.right + 8"
         y: "sunset_glyph.top"
         width: "20"
         height: "20"
-
       - name: moonset_text
         type: label
         x: "moonset_glyph.right + 2"
@@ -318,7 +289,6 @@ components:
         font: font_5x8
         horizontal_alignment: Center
         fg_color: Cyan
-
       # Moonphase — multi-line text below
       # glyph will be centered above this text
       - name: moonphase_text
@@ -330,7 +300,6 @@ components:
         font: font_5x8
         horizontal_alignment: Center
         fg_color: Yellow
-
       # Moonphase — 42×42 glyph center-justified 
       # with multi-line text below
       - name: moonphase_svg
@@ -339,7 +308,6 @@ components:
         y: "12"
         width: "42"
         height: "42"
-
       # Conditions — full-width strip at the bottom of the display
       - name: conditions
         type: label
@@ -351,311 +319,274 @@ components:
         horizontal_alignment: Center
         fg_color: Green
 
-  # Six forecast columns for ST7789 (300px wide, 50px per column, 40×40 icons).
-  # All 6 days in a single component; field positions chain via name references.
-  weather_forecast_6col_st7789:
+
+  weather_forecast_main:
     fields:
-      # Day 1
       - name: day1_icon
         type: weather_icon
-        x: "5"
-        y: "3"
-        width: "40"
-        height: "40"
-
+        x: "9"
+        y: "6"
+        width: "display.width/6 - 18"
+        height: "display.width/6 - 18"
       - name: day1_name
         type: label
-        x: "0"
-        y: "day1_icon.bottom + 3"
-        width: "50"
-        height: "12"
-        font: font_5x8
-        horizontal_alignment: Center
-        fg_color: Cyan
-        border: 1
-
-      - name: day1_data_box
-        type: custom
-        x: "0"
-        y: "day1_name.bottom"
-        width: "50"
-        height: "24"
-        border: 1
-
-      - name: day1_temp
-        type: label
         x: "1"
-        y: "day1_data_box.top + 3"
-        width: "48"
-        height: "8"
-        font: font_4x6
-        horizontal_alignment: Center
-        fg_color: Cyan
-
-      - name: day1_precip
-        type: label
-        x: "1"
-        y: "day1_temp.bottom + 2"
-        width: "48"
+        y: "day1_icon.bottom + 2"
+        width: "display.width/6"
         height: "10"
         font: font_4x6
         horizontal_alignment: Center
+        vertical_alignment: Middle
+        fg_color: Cyan
+        border: 1
+      - name: day1_data_box
+        type: custom
+        x: "day1_name.left"
+        y: "day1_icon.bottom + 11"
+        width: "day1_name.width"
+        height: "22"
+        border: 1
+      - name: day1_temp
+        type: label
+        x: "day1_name.left + 1"
+        y: "day1_icon.bottom + 14"
+        width: "day1_name.width"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: day1_precip
+        type: label
+        x: "day1_name.left + 1"
+        y: "day1_icon.bottom + 21"
+        width: "day1_name.width"
+        height: "day1_temp.height"
+        font: font_4x6
+        horizontal_alignment: Center
         fg_color: Cyan
 
-      # Day 2
       - name: day2_icon
         type: weather_icon
         x: "day1_name.right + 5"
-        y: "3"
-        width: "40"
-        height: "40"
-
+        y: "day1_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
       - name: day2_name
         type: label
         x: "day1_name.right"
         y: "day1_name.top"
-        width: "50"
-        height: "12"
-        font: font_5x8
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
         horizontal_alignment: Center
+        vertical_alignment: Middle
         fg_color: Cyan
         border: 1
-
       - name: day2_data_box
         type: custom
         x: "day1_data_box.right"
         y: "day1_data_box.top"
-        width: "50"
-        height: "24"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
         border: 1
-
       - name: day2_temp
         type: label
         x: "day1_name.right + 1"
         y: "day1_temp.top"
-        width: "48"
-        height: "8"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
-
       - name: day2_precip
         type: label
         x: "day1_name.right + 1"
         y: "day1_precip.top"
-        width: "48"
-        height: "10"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
 
-      # Day 3
       - name: day3_icon
         type: weather_icon
         x: "day2_name.right + 5"
-        y: "3"
-        width: "40"
-        height: "40"
-
+        y: "day1_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
       - name: day3_name
         type: label
         x: "day2_name.right"
         y: "day1_name.top"
-        width: "50"
-        height: "12"
-        font: font_5x8
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
         horizontal_alignment: Center
+        vertical_alignment: Middle
         fg_color: Cyan
         border: 1
-
       - name: day3_data_box
         type: custom
         x: "day2_data_box.right"
         y: "day1_data_box.top"
-        width: "50"
-        height: "24"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
         border: 1
-
       - name: day3_temp
         type: label
         x: "day2_name.right + 1"
         y: "day1_temp.top"
-        width: "48"
-        height: "8"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
-
       - name: day3_precip
         type: label
         x: "day2_name.right + 1"
         y: "day1_precip.top"
-        width: "48"
-        height: "10"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
 
-      # Day 4
       - name: day4_icon
         type: weather_icon
         x: "day3_name.right + 5"
-        y: "3"
-        width: "40"
-        height: "40"
-
+        y: "day1_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
       - name: day4_name
         type: label
         x: "day3_name.right"
         y: "day1_name.top"
-        width: "50"
-        height: "12"
-        font: font_5x8
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
         horizontal_alignment: Center
+        vertical_alignment: Middle
         fg_color: Cyan
         border: 1
-
       - name: day4_data_box
         type: custom
         x: "day3_data_box.right"
         y: "day1_data_box.top"
-        width: "50"
-        height: "24"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
         border: 1
-
       - name: day4_temp
         type: label
         x: "day3_name.right + 1"
         y: "day1_temp.top"
-        width: "48"
-        height: "8"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
-
       - name: day4_precip
         type: label
         x: "day3_name.right + 1"
         y: "day1_precip.top"
-        width: "48"
-        height: "10"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
 
-      # Day 5
       - name: day5_icon
         type: weather_icon
         x: "day4_name.right + 5"
-        y: "3"
-        width: "40"
-        height: "40"
-
+        y: "day1_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
       - name: day5_name
         type: label
         x: "day4_name.right"
         y: "day1_name.top"
-        width: "50"
-        height: "12"
-        font: font_5x8
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
         horizontal_alignment: Center
+        vertical_alignment: Middle
         fg_color: Cyan
         border: 1
-
       - name: day5_data_box
         type: custom
         x: "day4_data_box.right"
         y: "day1_data_box.top"
-        width: "50"
-        height: "24"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
         border: 1
-
       - name: day5_temp
         type: label
         x: "day4_name.right + 1"
         y: "day1_temp.top"
-        width: "48"
-        height: "8"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
-
       - name: day5_precip
         type: label
         x: "day4_name.right + 1"
         y: "day1_precip.top"
-        width: "48"
-        height: "10"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
 
-      # Day 6
       - name: day6_icon
         type: weather_icon
         x: "day5_name.right + 5"
-        y: "3"
-        width: "40"
-        height: "40"
-
+        y: "day1_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
       - name: day6_name
         type: label
         x: "day5_name.right"
         y: "day1_name.top"
-        width: "50"
-        height: "12"
-        font: font_5x8
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
         horizontal_alignment: Center
+        vertical_alignment: Middle
         fg_color: Cyan
         border: 1
-
       - name: day6_data_box
         type: custom
         x: "day5_data_box.right"
         y: "day1_data_box.top"
-        width: "50"
-        height: "24"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
         border: 1
-
       - name: day6_temp
         type: label
         x: "day5_name.right + 1"
         y: "day1_temp.top"
-        width: "48"
-        height: "8"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
-
       - name: day6_precip
         type: label
         x: "day5_name.right + 1"
         y: "day1_precip.top"
-        width: "48"
-        height: "10"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
         font: font_4x6
         horizontal_alignment: Center
         fg_color: Cyan
 
 templates:
 
-  # Single region — icon left, data right, conditions at bottom.
-  weather_current:
-    variants:
-      - name: default
-        regions:
-          - component: weather_current_main
-            x: "0"
-            y: "0"
-            width: "display.width"
-            height: "display.height"
-
-  # Six forecast tiles (40×40 icons, 50px column width).
   weather_forecast:
     variants:
       - name: default
         regions:
-          - component: weather_forecast_6col_st7789
+          - component: weather_forecast_main
             x: "0"
             y: "0"
             width: "display.width"
@@ -665,6 +596,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "10 + display.width/2"
@@ -715,6 +651,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "10 + display.width/2"
@@ -765,6 +706,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "10 + display.width/2"
@@ -815,6 +761,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "10"
@@ -865,6 +816,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "140"
@@ -915,6 +871,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "display.width/2 + 10"
@@ -965,6 +926,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "display.width/2 - 10"
@@ -1015,6 +981,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "display.width/2 - 10"
@@ -1065,6 +1036,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "display.width/2 - 10"
@@ -1115,6 +1091,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "display.width/2 - 10"
@@ -1165,6 +1146,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "140"
@@ -1215,6 +1201,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "10"
@@ -1265,6 +1256,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "6"
@@ -1315,6 +1311,11 @@ templates:
     variants:
       - name: default
         fields:
+          # combination text is not needed here - move out of bounds
+          - name: combination
+            type: label
+            x: "display.width+10"
+            y: "-10"
           - name: artist
             type: label
             x: "18"

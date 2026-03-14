@@ -267,9 +267,18 @@ impl Weather {
     pub async fn new(cfg: &crate::config::WeatherConfig) -> Result<Self, WeatherApiError> {
         const VERSION: &'static str = concat!("LyMonS ", env!("CARGO_PKG_NAME"), " v", env!("CARGO_PKG_VERSION"));
 
-        let api_key = cfg.api.as_deref().filter(|k| !k.is_empty())
+        let mut api_key = cfg.api.as_deref().filter(|k| !k.is_empty())
             .ok_or_else(|| WeatherApiError::ApiKeyError("no key specified".to_string()))?;
 
+        // bug where we're picking up the commified api string
+        // Q&D patch until we fix root cause
+        if api_key.contains(',') {
+            let keys: Vec<&str> = api_key.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+            if keys.is_empty() {
+                return Err(WeatherApiError::ApiKeyError("api key format error - fix this!!!".to_string()));
+            }
+            api_key = keys[0];
+        }
         let units = cfg.normalised_units();
         let transl = cfg.translate.clone().unwrap_or_default();
         let conditions_units = units.clone();
@@ -515,11 +524,11 @@ impl Weather {
                 .await
                 .map_err(|e| WeatherApiError::HttpRequestError(e))?;
 
-        let the_json: Value = serde_json::from_str(&plain.as_str())
+        let payload: Value = serde_json::from_str(&plain.as_str())
             .map_err(|e| WeatherApiError::DeserializationError(e))?;
 
         let now = Local::now();
-        if let Some(timelines) = the_json.get("timelines") {
+        if let Some(timelines) = payload.get("timelines") {
             // Current weather (next hour)
             if let Some(hours) = timelines.get("hourly").and_then(|i| i.as_array()) {
                 for hour in hours.iter() {
@@ -566,7 +575,7 @@ impl Weather {
         info!("Weather data fetched successfully.");
         self.last_fetch_time = Some(Instant::now()); // Record fetch time
         self.active = true;
-
+        
         // Send update via watch channel if available (no lock!)
         if let Some(tx) = &self.weather_tx {
             let _ = tx.send(self.weather_data.clone());

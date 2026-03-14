@@ -3,7 +3,7 @@
 ## ⚠️ IMPORTANT NOTES
 
 - **LMS Player Name**: `mythy` (use this for testing and development)
-- **Weather API Key**: `-W "pm9iWRnHWowgH7cNOGeWmtgFYa6LLelk,F,,42.36141470379943,-71.1040784239152"`
+- **Weather API Key**: `-W "<YOUR_TOMORROW_IO_API_KEY>,F,,42.36141470379943,-71.1040784239152"`
 - **Font Standard**: Always use `iso_8859_13` fonts for accented character support, never `ascii`
 - **Display Test Modes**: Use emulator keyboard shortcuts:
   - `W` key - Toggle weather mode (Current ⇄ Forecast)
@@ -443,7 +443,7 @@ Build and run emulator:
 ```bash
 cargo build --release --features emulator
 ./target/release/LyMonS --name mythy \
-  -W "pm9iWRnHWowgH7cNOGeWmtgFYa6LLelk,F,,42.36141470379943,-71.1040784239152" \
+  -W "<YOUR_TOMORROW_IO_API_KEY>,F,,42.36141470379943,-71.1040784239152" \
   --config config.yaml
 ```
 
