@@ -33,6 +33,41 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
+/// Scan a YAML text to find which top-level section entry (component or template
+/// name) contains the given 1-based line number.
+///
+/// Top-level section headers (`components:`, `templates:`) are at column 0.
+/// Entry names are at exactly 2-space indent (`  egg_bass:`).
+/// Returns a string like `component 'egg_bass'` or `template 'easter_egg_vcr'`.
+fn yaml_entry_at_line(yaml: &str, error_line: usize) -> Option<String> {
+    let mut section = "";
+    let mut entry   = "";
+
+    for (idx, line) in yaml.lines().enumerate() {
+        let lineno = idx + 1;
+        if lineno > error_line { break; }
+
+        if line.starts_with("components:") {
+            section = "component";
+            entry   = "";
+        } else if line.starts_with("templates:") {
+            section = "template";
+            entry   = "";
+        } else if line.starts_with("  ") && !line.starts_with("   ") {
+            // Exactly 2-space indent — a top-level entry name
+            if let Some(key) = line.trim_end().strip_suffix(':') {
+                entry = key.trim();
+            }
+        }
+    }
+
+    if !section.is_empty() && !entry.is_empty() {
+        Some(format!("{section} '{entry}'"))
+    } else {
+        None
+    }
+}
+
 /// Root type — deserialised from `layout.yaml`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LayoutTemplates {
@@ -112,7 +147,7 @@ impl LayoutTemplates {
     /// and ignored so the base layout is always returned.
     pub fn load_with_driver_override(asset_path: &str) -> Self {
         let mut base = Self::default_layout().unwrap_or_else(|e| {
-            log::error!("layout_template: failed to parse embedded layout: {e}");
+            log::error!("layout: failed to parse embedded assets/layout.yaml: {e}");
             Self { components: HashMap::new(), templates: HashMap::new() }
         });
 
@@ -120,15 +155,28 @@ impl LayoutTemplates {
         match std::fs::read_to_string(&override_path) {
             Ok(yaml) => match Self::from_yaml(&yaml) {
                 Ok(over) => {
-                    log::info!("layout_template: loaded driver override from {override_path}");
+                    log::info!("layout: loaded driver override {override_path}");
                     base.merge(over);
                 }
-                Err(e) => log::warn!("layout_template: failed to parse {override_path}: {e}"),
+                Err(e) => {
+                    log::error!("layout: YAML error in {override_path}:");
+                    for line in e.to_string().lines() {
+                        log::error!("  {line}");
+                    }
+                    // Add structural context: scan the raw text to find which
+                    // component or template the error line falls inside.
+                    if let Some(loc) = e.location() {
+                        if let Some(ctx) = yaml_entry_at_line(&yaml, loc.line()) {
+                            log::error!("  (in {ctx})");
+                        }
+                    }
+                    log::warn!("layout: driver override ignored — using base layout only");
+                }
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // No driver override — use base layout unchanged.
             }
-            Err(e) => log::warn!("layout_template: could not read {override_path}: {e}"),
+            Err(e) => log::warn!("layout: could not read {override_path}: {e}"),
         }
 
         base

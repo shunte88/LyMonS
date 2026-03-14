@@ -160,6 +160,206 @@ There are currently 10 easter egg modes:
 Specify `--egg <name>` to display an easter egg during track playback.
 </p>
 
+## Layout System
+
+LyMonS uses a declarative YAML layout system to define where and how every element appears on screen. All positions, sizes, fonts, colors, and alignment are data — no recompilation needed. Driver-specific overrides let each display have its own tuned layout without touching shared definitions.
+
+### How It Works
+
+Layouts are defined in `assets/layout.yaml` (the base, targeting 128×64 mono displays). Driver-specific overrides are placed alongside the driver in `assets/{driver}/layout.yaml` — for example `assets/ssd1322/layout.yaml` for the 256×64 gray4 display, or `assets/st7789/layout.yaml` for the 320×170 color display.
+
+When LyMonS starts it loads the base layout, then merges the driver override on top. The merge is **additive at the field level** — the override can add new fields or change individual field properties without having to redeclare fields it doesn't touch.
+
+### Layout File Structure
+
+```yaml
+components:
+  my_panel:                     # reusable group of fields
+    fields:
+      - name: status_bar
+        type: status_bar
+        x: "0"
+        y: "2"
+        width: "parent.width"
+        height: "9"
+
+templates:
+  playback:                     # page shown during track playback
+    variants:
+      - name: default           # catch-all variant (no match: rule)
+        regions:
+          - component: my_panel
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+```
+
+Simple pages — like easter egg overlays — can define fields inline directly in the variant, skipping the component indirection entirely:
+
+```yaml
+templates:
+  easter_egg_cassette:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "18"
+            y: "6"
+            width: "90"
+            height: "6"
+            font: font_4x6
+            horizontal_alignment: Center
+```
+
+### Expressions
+
+Position and size values are expression strings, not bare numbers. The following variables are available:
+
+| Variable | Meaning |
+|---|---|
+| `display.width` | Full display width in pixels |
+| `display.height` | Full display height in pixels |
+| `parent.width` | Width of the enclosing region |
+| `parent.height` | Height of the enclosing region |
+| `font_height` | Character height of the field's font |
+| `<name>.top` `.bottom` `.left` `.right` `.width` `.height` | Geometry of any previously defined field |
+
+Arithmetic operators `+` `-` `*` `/` and parentheses are supported. Examples:
+
+```yaml
+x: "display.width / 2"              # centre of display
+y: "status_bar.bottom + 2"          # 2px below the status bar
+width: "display.width - 43"         # fill to near right edge
+height: "parent.height - 16"        # leave room for time at bottom
+```
+
+Because expressions reference `display.width`, the same component definition often adapts correctly to both 128px and 256px displays without a driver override.
+
+### Field Properties
+
+| Property | Values | Default |
+|---|---|---|
+| `type` | `label`, `scrolling_text`, `status_bar`, `track_progress_bar`, `info_line`, `clock_digits`, `weather_icon`, `weather_glyph`, `cover_image`, `custom` | — |
+| `x` / `y` | integer or expression | `"0"` |
+| `width` / `height` | integer or expression | `"parent.width"` / `"0"` |
+| `font` | `font_4x6` `font_5x8` `font_6x10` `font_7x13` `font_7x13_bold` `font_10x20` etc. | type default |
+| `fg_color` | `White` `Yellow` `Cyan` `Red` `Green` `Blue` `Orange` `Magenta` or `{r, g, b}` | `White` |
+| `scrollable` | `true` / `false` | `false` |
+| `horizontal_alignment` | `Left` `Center` `Right` | `Left` |
+| `vertical_alignment` | `Top` `Middle` `Bottom` | `Top` |
+
+### Variant Matching
+
+A template can have multiple variants selected by display characteristics. The first matching variant wins; an entry with no `match:` block is a catch-all.
+
+```yaml
+templates:
+  weather_forecast:
+    variants:
+      - name: color               # matches ST7789 specifically
+        match:
+          color_depth: [Rgb565]
+        regions:
+          - component: weather_forecast_6col_st7789
+            ...
+
+      - name: wide                # matches SSD1322 / SH1122
+        match:
+          category: [Large]
+        regions:
+          - component: weather_forecast_ext_cols
+            ...
+
+      - name: default             # all other displays
+        regions:
+          - component: weather_forecast_3col
+            ...
+```
+
+Match filters:
+
+| Filter | Values |
+|---|---|
+| `category` | `Small` (128px), `Medium` (132px), `Large` (256px), `ExtraLarge` (320px+) |
+| `color_depth` | `Monochrome`, `Gray4`, `Rgb565` |
+
+### Driver Overrides
+
+Place a `layout.yaml` file inside the driver's asset folder. The file uses the same format as the base — it only needs to contain what differs. Components and templates not mentioned in the override are inherited unchanged from the base.
+
+**Example**: add artist and title to the Pip-Boy easter egg on the wide gray4 display, which shows only a clock by default:
+
+```yaml
+# assets/ssd1322/layout.yaml
+templates:
+  easter_egg_pipboy:
+    variants:
+      - name: default
+        fields:
+          - name: artist          # new — not in base template
+            type: label
+            x: "140"
+            y: "3"
+            width: "114"
+            height: "28"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: title           # new — not in base template
+            type: label
+            x: "140"
+            y: "33"
+            width: "114"
+            height: "20"
+            font: font_4x6
+            horizontal_alignment: Center
+          # time field is inherited from base — no need to redeclare it
+```
+
+### Easter Egg Field Names
+
+Each easter egg template supports any combination of the following named fields. Fields not present in the template are simply not rendered — add whichever ones make sense for the available screen space on each display.
+
+| Field name | Content |
+|---|---|
+| `artist` | Track artist |
+| `title` | Track title |
+| `album` | Album name |
+| `album_artist` | Album artist |
+| `combination` | `"Artist — Title"` combined scroller |
+| `year` | Release year |
+| `time` | Elapsed or remaining track time |
+
+Set `scrollable: true` on any of these for a horizontal scroller (text slides when it overflows the field width). Use `type: label` with `scrollable: false` for word-wrapped static text.
+
+### Error Reporting
+
+Layout errors are reported at startup with enough context to find the problem quickly.
+
+**YAML syntax or type error** (e.g. unknown font name, bad indentation):
+```
+ERROR layout: YAML error in ./assets/ssd1322/layout.yaml:
+ERROR   unknown variant `font_4x66`, expected one of `font_4x6`, `font_5x7`, ...
+ERROR   (in template 'easter_egg_pipboy')
+WARN  layout: driver override ignored — using base layout only
+```
+
+**Expression evaluation error** (e.g. typo in a variable name, forward reference):
+```
+WARN  layout: easter_egg_reel2reel/default/time [x="display.widht - 43"]:
+              unknown variable 'display.widht' — using 0
+```
+
+---
+
+> **Screenshots wanted** — the following would illustrate the layout section well:
+> - Playback scroller page: SSD1306 (128×64 mono) and SSD1322 (256×64 gray4) side by side
+> - Clock page: same two displays
+> - Weather current + forecast: ST7789 (color) and SSD1306 (mono) side by side
+> - Any easter egg showing track text overlay (e.g. reel2reel or cassette with artist/title visible)
+> - Same easter egg on 128px vs 256px to show how positions adapt
+
 ## Like The App - Git The Shirt
 
 Team Badger shirts and other goodies are available at [shunte88](https://www.zazzle.com/team_badger_t_shirt-235604841593837420)

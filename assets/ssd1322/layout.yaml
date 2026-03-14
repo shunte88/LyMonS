@@ -132,6 +132,7 @@ templates:
   #  Right-strip x values below are approximately double the 128px originals
   #  (SVG scales to fill the display width).
 
+  # bass guitar - validated
   easter_egg_bass:
     variants:
       - name: default
@@ -140,271 +141,661 @@ templates:
             type: scrolling_text
             x: "4"
             y: "4"
-            width: "248"
+            width: "display.width - 8"
             height: "7"
             font: font_4x6
+            fg_color: Cyan
             scrollable: true
           - name: title
             type: scrolling_text
-            x: "4"
-            y: "13"
-            width: "248"
-            height: "7"
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
             font: font_4x6
+            fg_color: Cyan
             scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_4x6
+            fg_color: Cyan
+            scrollable: true
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_4x6
+            horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "200"
-            y: "52"
-            width: "54"
-            height: "12"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
+            height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # black fly stompbox - validated
   easter_egg_blackfly:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 46"
+            y: "4"
+            width: "display.width/2 + 44"
+            height: "8"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "140"
-            y: "3"
-            width: "114"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "140"
-            y: "52"
-            width: "114"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # cassette tape - validated
   easter_egg_cassette:
     variants:
       - name: default
         fields:
           - name: artist
             type: label
-            x: "36"
+            x: "22"
             y: "6"
-            width: "184"
+            width: "display.width/2 - 44"
             height: "6"
             font: font_4x6
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
-            x: "36"
-            y: "12"
-            width: "184"
-            height: "6"
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
             font: font_4x6
             horizontal_alignment: Center
+            fg_color: Cyan
+          - name: album
+            type: scrolling_text
+            x: "display.width/2 - 6"
+            y: "4"
+            width: "display.width/2 + 4"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
+            type: label
+            x: "album.left"
+            y: "album.bottom"
+            width: "album.width"
+            height: "album.height"
+            font: font_5x8
+            horizontal_alignment: Center
+            fg_color: Cyan
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+            fg_color: Yellow
 
+  # IBM XT PC - validated
   easter_egg_ibmpc:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 66"
+            y: "4"
+            width: "display.width/2 + 64"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "140"
-            y: "3"
-            width: "114"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "140"
-            y: "52"
-            width: "114"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # mini moog - validated
   easter_egg_moog:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 28"
+            y: "4"
+            width: "display.width/2 + 24"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "166"
-            y: "3"
-            width: "88"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "166"
-            y: "52"
-            width: "88"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # pipboy - validated
   easter_egg_pipboy:
     variants:
       - name: default
         fields:
+          - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 6"
+            y: "4"
+            width: "display.width/2 + 4"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "200"
-            y: "52"
-            width: "54"
-            height: "12"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
+            height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # 40's radio - validated
   easter_egg_radio40:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 76"
+            y: "4"
+            width: "display.width/2 + 72"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "128"
-            y: "3"
-            width: "126"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "128"
-            y: "52"
-            width: "126"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # 50's radio - validated
   easter_egg_radio50:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 66"
+            y: "4"
+            width: "display.width/2 + 62"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "148"
-            y: "3"
-            width: "106"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "148"
-            y: "52"
-            width: "106"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # reel to reel - validated
   easter_egg_reel2reel:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 56"
+            y: "4"
+            width: "display.width/2 + 52"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "144"
-            y: "3"
-            width: "110"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "144"
-            y: "52"
-            width: "110"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # osciloscope - validated
   easter_egg_scope:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 66"
+            y: "4"
+            width: "display.width/2 + 62"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "130"
-            y: "3"
-            width: "124"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "130"
-            y: "52"
-            width: "124"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # technics sl-120 deck - validated
   easter_egg_technics:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 40"
+            y: "4"
+            width: "display.width/2 + 38"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "170"
-            y: "3"
-            width: "84"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "170"
-            y: "52"
-            width: "84"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # tube amp - validated
   easter_egg_tubeamp:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 40"
+            y: "4"
+            width: "display.width/2 + 38"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "174"
-            y: "3"
-            width: "80"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "174"
-            y: "52"
-            width: "80"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # TV Funk - validated
   easter_egg_tvtime:
     variants:
       - name: default
         fields:
           - name: artist
+            type: scrolling_text
+            x: "display.width/2 - 40"
+            y: "4"
+            width: "display.width/2 + 38"
+            height: "9"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: album
+            type: scrolling_text
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
+            fg_color: Cyan
+            scrollable: true
+          - name: year
             type: label
-            x: "170"
-            y: "3"
-            width: "84"
-            height: "48"
-            font: font_4x6
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_5x8
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
-            x: "170"
-            y: "52"
-            width: "84"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
             height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
 
+  # VCR clock blinking - validated
   easter_egg_vcr:
     variants:
       - name: default
@@ -413,23 +804,25 @@ templates:
             type: scrolling_text
             x: "4"
             y: "2"
-            width: "248"
-            height: "7"
-            font: font_4x6
+            width: "display.width - 8"
+            height: "11"
+            font: font_6x10
             scrollable: true
           - name: title
             type: scrolling_text
-            x: "4"
-            y: "10"
-            width: "248"
-            height: "7"
-            font: font_4x6
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
             scrollable: true
           - name: time
             type: label
-            x: "200"
-            y: "16"
-            width: "54"
-            height: "12"
+            x: "display.width - 43"
+            y: "display.height - 10"
+            width: "41"
+            height: "11"
             font: font_6x10
             horizontal_alignment: Right
+            fg_color: Yellow
+

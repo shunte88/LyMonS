@@ -60,6 +60,18 @@ pub struct LayoutResolver<'t> {
     templates: &'t LayoutTemplates,
 }
 
+/// Log an expression evaluation error with full location context and return the fallback.
+fn eval_or(expr: &str, ctx: &ExprContext<'_>, fallback: i32,
+           loc: &str, attr: &str) -> i32 {
+    match eval(expr, ctx) {
+        Ok(v)  => v,
+        Err(e) => {
+            log::warn!("layout: {loc} [{attr}={expr:?}]: {e} — using {fallback}");
+            fallback
+        }
+    }
+}
+
 impl<'t> LayoutResolver<'t> {
     pub fn new(templates: &'t LayoutTemplates) -> Self {
         Self { templates }
@@ -93,16 +105,18 @@ impl<'t> LayoutResolver<'t> {
                 font_height: 0,
             };
 
-            let rx = eval(&region.x,      &region_ctx).unwrap_or(0);
-            let ry = eval(&region.y,      &region_ctx).unwrap_or(0);
-            let rw = eval(&region.width,  &region_ctx).unwrap_or(dw);
-            let rh = eval(&region.height, &region_ctx).unwrap_or(dh);
+            let rloc = format!("{template_name}/{}/region({})", variant.name, region.component);
+            let rx = eval_or(&region.x,      &region_ctx, 0,  &rloc, "x");
+            let ry = eval_or(&region.y,      &region_ctx, 0,  &rloc, "y");
+            let rw = eval_or(&region.width,  &region_ctx, dw, &rloc, "width");
+            let rh = eval_or(&region.height, &region_ctx, dh, &rloc, "height");
 
             // Instantiate component fields within region bounds
             let component = match self.templates.components.get(&region.component) {
                 Some(c) => c,
                 None => {
-                    log::warn!("layout_resolver: unknown component '{}'", region.component);
+                    log::warn!("layout: {template_name}/{}: unknown component '{}'",
+                               variant.name, region.component);
                     continue;
                 }
             };
@@ -123,10 +137,11 @@ impl<'t> LayoutResolver<'t> {
                     font_height: font_h,
                 };
 
-                let fx = eval(&field_def.x,      &field_ctx).unwrap_or(0);
-                let fy = eval(&field_def.y,      &field_ctx).unwrap_or(0);
-                let fw = eval(&field_def.width,  &field_ctx).unwrap_or(rw);
-                let fh = eval(&field_def.height, &field_ctx).unwrap_or(0);
+                let floc = format!("{template_name}/{}/{}.{}", variant.name, region.component, field_def.name);
+                let fx = eval_or(&field_def.x,      &field_ctx, 0,  &floc, "x");
+                let fy = eval_or(&field_def.y,      &field_ctx, 0,  &floc, "y");
+                let fw = eval_or(&field_def.width,  &field_ctx, rw, &floc, "width");
+                let fh = eval_or(&field_def.height, &field_ctx, 0,  &floc, "height");
 
                 // Clamp to non-negative sizes
                 let fw = fw.max(0) as u32;
@@ -186,10 +201,11 @@ impl<'t> LayoutResolver<'t> {
                     font_height: font_h,
                 };
 
-                let fx = eval(&field_def.x,      &field_ctx).unwrap_or(0);
-                let fy = eval(&field_def.y,      &field_ctx).unwrap_or(0);
-                let fw = eval(&field_def.width,  &field_ctx).unwrap_or(dw).max(0) as u32;
-                let fh = eval(&field_def.height, &field_ctx).unwrap_or(0).max(0) as u32;
+                let floc = format!("{template_name}/{}/{}", variant.name, field_def.name);
+                let fx = eval_or(&field_def.x,      &field_ctx, 0,  &floc, "x");
+                let fy = eval_or(&field_def.y,      &field_ctx, 0,  &floc, "y");
+                let fw = eval_or(&field_def.width,  &field_ctx, dw, &floc, "width").max(0) as u32;
+                let fh = eval_or(&field_def.height, &field_ctx, 0,  &floc, "height").max(0) as u32;
 
                 field_geoms.insert(field_def.name.clone(), FieldGeom {
                     x: fx, y: fy, w: fw as i32, h: fh as i32,

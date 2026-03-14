@@ -673,30 +673,34 @@ templates:
             height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
             y: "artist.bottom"
             width: "artist.width"
-            height: "27"
+            height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
             y: "title.bottom"
             width: "artist.width"
-            height: "37"
+            height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "14"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -705,6 +709,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_tvtime:
     variants:
@@ -718,6 +723,7 @@ templates:
             height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -726,6 +732,7 @@ templates:
             height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -734,6 +741,7 @@ templates:
             height: "37"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
@@ -742,6 +750,7 @@ templates:
             height: "14"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -750,6 +759,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_tubeamp:
     variants:
@@ -760,33 +770,37 @@ templates:
             x: "10 + display.width/2"
             y: "13"
             width: "display.width/2 - 10"
-            height: "27"
+            height: "26"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
             y: "artist.bottom"
             width: "artist.width"
-            height: "27"
+            height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
             y: "title.bottom"
             width: "artist.width"
-            height: "37"
+            height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "14"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -795,6 +809,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_vcr:
     variants:
@@ -808,6 +823,7 @@ templates:
             height: "11"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -816,6 +832,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -824,6 +841,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
@@ -832,6 +850,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -840,6 +859,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_scope:
     variants:
@@ -850,9 +870,10 @@ templates:
             x: "140"
             y: "6"
             width: "display.width - 150"
-            height: "28"
+            height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -861,6 +882,7 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -869,14 +891,16 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "artist.height"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -885,51 +909,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
-
-  easter_egg_pctime:
-    variants:
-      - name: default
-        fields:
-          - name: artist
-            type: label
-            x: "140"
-            y: "6"
-            width: "display.width - 150"
-            height: "28"
-            font: font_7x13
-            horizontal_alignment: Center
-          - name: title
-            type: label
-            x: "artist.left"
-            y: "artist.bottom"
-            width: "artist.width"
-            height: "artist.height"
-            font: font_7x13
-            horizontal_alignment: Center
-          - name: album
-            type: label
-            x: "artist.left"
-            y: "title.bottom"
-            width: "artist.width"
-            height: "artist.height"
-            font: font_7x13
-            horizontal_alignment: Center
-          - name: year
-            type: label
-            x: "artist.left"
-            y: "album.bottom"
-            width: "artist.width"
-            height: "artist.height"
-            font: font_7x13
-            horizontal_alignment: Center
-          - name: time
-            type: label
-            x: "display.width - 43"
-            y: "display.height - 14"
-            width: "41"
-            height: "13"
-            font: font_7x13
-            horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_moog:
     variants:
@@ -940,9 +920,10 @@ templates:
             x: "display.width/2 + 10"
             y: "6"
             width: "display.width/2 - 20"
-            height: "28"
+            height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -951,6 +932,7 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -959,14 +941,16 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "artist.height"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -975,6 +959,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_ibmpc:
     variants:
@@ -985,9 +970,10 @@ templates:
             x: "display.width/2 - 10"
             y: "6"
             width: "display.width/2 - 10"
-            height: "28"
+            height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -996,6 +982,7 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -1004,14 +991,16 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "artist.height"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1020,6 +1009,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_radio40:
     variants:
@@ -1030,9 +1020,10 @@ templates:
             x: "display.width/2 - 10"
             y: "6"
             width: "display.width/2 - 10"
-            height: "28"
+            height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -1041,6 +1032,7 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -1049,14 +1041,16 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "artist.height"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1065,6 +1059,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_radio50:
     variants:
@@ -1075,9 +1070,10 @@ templates:
             x: "display.width/2 - 10"
             y: "6"
             width: "display.width/2 - 10"
-            height: "28"
+            height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -1086,6 +1082,7 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -1094,14 +1091,16 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "artist.height"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1110,6 +1109,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_blackfly:
     variants:
@@ -1120,9 +1120,10 @@ templates:
             x: "display.width/2 - 10"
             y: "6"
             width: "display.width/2 - 10"
-            height: "28"
+            height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -1131,6 +1132,7 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -1139,14 +1141,16 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "artist.height"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1155,6 +1159,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_reel2reel:
     variants:
@@ -1165,9 +1170,10 @@ templates:
             x: "140"
             y: "6"
             width: "display.width - 150"
-            height: "28"
+            height: "27"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -1176,6 +1182,7 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -1184,14 +1191,16 @@ templates:
             height: "artist.height"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
             y: "album.bottom"
             width: "artist.width"
-            height: "artist.height"
+            height: "artist.height/2"
             font: font_7x13
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1200,6 +1209,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_bass:
     variants:
@@ -1213,6 +1223,7 @@ templates:
             height: "11"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -1221,6 +1232,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -1229,6 +1241,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
@@ -1237,6 +1250,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1245,6 +1259,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_pipboy:
     variants:
@@ -1253,11 +1268,12 @@ templates:
           - name: artist
             type: label
             x: "6"
-            y: "display.width - 50"
+            y: "display.height - 50"
             width: "display.width - 12"
             height: "11"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
             x: "artist.left"
@@ -1266,6 +1282,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: album
             type: label
             x: "artist.left"
@@ -1274,6 +1291,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
@@ -1282,6 +1300,7 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1290,6 +1309,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
 
   easter_egg_cassette:
     variants:
@@ -1298,19 +1318,21 @@ templates:
           - name: artist
             type: label
             x: "18"
-            y: "20"
-            width: "180"
-            height: "27"
-            font: font_7x13
+            y: "12"
+            width: "220"
+            height: "10"
+            font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: title
             type: label
-            x: "artist.right"
+            x: "artist.left"
             y: "artist.bottom"
             width: "artist.width"
-            height: "artist.height"
-            font: font_7x13
+            height: "2*artist.height"
+            font: font_6x10
             horizontal_alignment: Center
+            fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1319,3 +1341,4 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
+            fg_color: Yellow
