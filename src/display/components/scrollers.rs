@@ -135,6 +135,7 @@ pub struct ScrollingText {
     title_scroll: ScrollState,
     artist_scroll: ScrollState,
     combination_scroll: ScrollState,
+    year_scroll: ScrollState,
     scroll_mode: ScrollMode,
     layout: LayoutConfig,
     display_width: u32,
@@ -157,6 +158,7 @@ impl ScrollingText {
             title_scroll: ScrollState::new(),
             artist_scroll: ScrollState::new(),
             combination_scroll: ScrollState::new(),
+            year_scroll: ScrollState::new(),
             scroll_mode,
             layout,
             display_width,
@@ -193,6 +195,11 @@ impl ScrollingText {
     /// Update combination text
     pub fn set_combination(&mut self, combination: String) {
         self.combination_scroll.set_text(combination);
+    }
+
+    /// Update year text
+    pub fn set_year(&mut self, year: String) {
+        self.year_scroll.set_text(year);
     }
 
     /// Update both artist and title
@@ -237,6 +244,7 @@ impl ScrollingText {
         self.title_scroll.update(self.scroll_mode, ttf);
         self.artist_scroll.update(self.scroll_mode, ttf);
         self.combination_scroll.update(self.scroll_mode, ttf);
+        self.year_scroll.update(self.scroll_mode, ttf);
     }
 
     /// Update combination scroll position (called on each frame)
@@ -293,6 +301,28 @@ impl ScrollingText {
                 f.character_size.width as usize + f.character_spacing as usize;
         }
         self.artist_scroll.update(self.scroll_mode, ttf);
+    }
+
+    /// Update scroll width + advance one tick for a single named field.
+    ///
+    /// Call this before `render_field()` for each scrollable egg overlay field so
+    /// the scroller knows the field width (for centering / overflow detection).
+    pub fn update_field_scroll(&mut self, field: &Field) {
+        let ttf = self.ttf_font.as_deref();
+        let state = match field.name.as_str() {
+            "album_artist" => &mut self.album_artist_scroll,
+            "artist"       => &mut self.artist_scroll,
+            "album"        => &mut self.album_scroll,
+            "title"        => &mut self.title_scroll,
+            "combination"  => &mut self.combination_scroll,
+            "year"         => &mut self.year_scroll,
+            _              => return,
+        };
+        state.scroll_width = field.width();
+        if let Some(f) = field.font {
+            state.char_width = f.character_size.width as usize + f.character_spacing as usize;
+        }
+        state.update(self.scroll_mode, ttf);
     }
 
     /// Render the scrolling text
@@ -383,6 +413,7 @@ impl ScrollingText {
             "album"        => &self.album_scroll,
             "title"        => &self.title_scroll,
             "combination"  => &self.combination_scroll,
+            "year"         => &self.year_scroll,
             _              => return Ok(()),
         };
 

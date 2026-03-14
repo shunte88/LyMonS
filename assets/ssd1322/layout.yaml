@@ -1,0 +1,435 @@
+#
+#  assets/layout.yaml
+#
+#  LyMonS — Declarative layout templates
+#
+#  Defines reusable components and page templates evaluated at runtime by
+#  layout_resolver::LayoutResolver against a concrete DisplayProfile.
+#
+#  Expression variables available in component fields:
+#    display.width  display.height   — full display dimensions
+#    parent.width   parent.height    — region dimensions allocated by the template
+#    font_height                     — character_size.height of the field's font (0 if none)
+#    <name>.top  .bottom  .left  .right  .width  .height  — prior field geometry
+#
+#  Arithmetic: + - * / with integer truncation; parentheses; unary minus.
+#
+#  Geometry notes (base profile: 128×64 monochrome):
+#    y_height = 9, border_adj = 2
+#    status_bar occupies y=2..11; first scroller row at y=12 (1px gap)
+#    progress bar at y=49 (parent.height - 15), info_line at y=54 (parent.height - 10)
+#
+
+components:
+
+  # Astral panel — right side of wide displays only (placed at x=0 full width so
+  # expressions can use display.width for anchoring).
+  # All x positions are anchored from (display.width / 2) - 8 -- (120 on 256px).
+  weather_astral_panel:
+    fields:
+      - name: sunrise_glyph
+        type: weather_glyph
+        x: "(display.width / 2) - 8"
+        y: "2"
+        width: "12"
+        height: "12"
+        fg_color: Yellow
+
+      - name: sunrise_text
+        type: label
+        x: "sunrise_glyph.right + 2"
+        y: "3"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      - name: sunset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "16"
+        width: "12"
+        height: "12"
+        fg_color: Yellow
+
+      - name: sunset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "17"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      - name: moonrise_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.right + 36"
+        y: "2"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+
+      - name: moonrise_text
+        type: label
+        x: "moonrise_glyph.right + 2"
+        y: "3"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: moonset_glyph
+        type: weather_glyph
+        x: "moonrise_glyph.left"
+        y: "sunset_glyph.top"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+
+      - name: moonset_text
+        type: label
+        x: "moonrise_text.left"
+        y: "moonset_glyph.top + 1"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      # Moonphase — multi-line text below
+      # glyph will be centered above this text
+      - name: moonphase_text
+        type: label
+        x: "parent.width - 50"
+        y: "moonrise_glyph.bottom + 26"
+        width: "50"
+        height: "22"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      # Moonphase — 34x34 glyph center-justified 
+      # with multi-line text below
+      - name: moonphase_svg
+        type: custom
+        x: "moonphase_text.left"
+        y: "moonrise_glyph.top"
+        width: "34"
+        height: "34"
+
+
+
+templates:
+
+  # ── Easter egg layout overrides for SSD1322 / SH1122 (256×64) ────────────────
+  #
+  #  Each entry replaces the 128×64 base template entirely.  Adjust x / y /
+  #  width / height to match the actual artwork once tested on hardware.
+  #
+  #  Right-strip x values below are approximately double the 128px originals
+  #  (SVG scales to fill the display width).
+
+  easter_egg_bass:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: scrolling_text
+            x: "4"
+            y: "4"
+            width: "248"
+            height: "7"
+            font: font_4x6
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "4"
+            y: "13"
+            width: "248"
+            height: "7"
+            font: font_4x6
+            scrollable: true
+          - name: time
+            type: label
+            x: "200"
+            y: "52"
+            width: "54"
+            height: "12"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_blackfly:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "140"
+            y: "3"
+            width: "114"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "140"
+            y: "52"
+            width: "114"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_cassette:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "36"
+            y: "6"
+            width: "184"
+            height: "6"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "36"
+            y: "12"
+            width: "184"
+            height: "6"
+            font: font_4x6
+            horizontal_alignment: Center
+
+  easter_egg_ibmpc:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "140"
+            y: "3"
+            width: "114"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "140"
+            y: "52"
+            width: "114"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_moog:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "166"
+            y: "3"
+            width: "88"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "166"
+            y: "52"
+            width: "88"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_pipboy:
+    variants:
+      - name: default
+        fields:
+          - name: time
+            type: label
+            x: "200"
+            y: "52"
+            width: "54"
+            height: "12"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_radio40:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "128"
+            y: "3"
+            width: "126"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "128"
+            y: "52"
+            width: "126"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_radio50:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "148"
+            y: "3"
+            width: "106"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "148"
+            y: "52"
+            width: "106"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_reel2reel:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "144"
+            y: "3"
+            width: "110"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "144"
+            y: "52"
+            width: "110"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_scope:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "130"
+            y: "3"
+            width: "124"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "130"
+            y: "52"
+            width: "124"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_technics:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "170"
+            y: "3"
+            width: "84"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "170"
+            y: "52"
+            width: "84"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_tubeamp:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "174"
+            y: "3"
+            width: "80"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "174"
+            y: "52"
+            width: "80"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_tvtime:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "170"
+            y: "3"
+            width: "84"
+            height: "48"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "170"
+            y: "52"
+            width: "84"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+
+  easter_egg_vcr:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: scrolling_text
+            x: "4"
+            y: "2"
+            width: "248"
+            height: "7"
+            font: font_4x6
+            scrollable: true
+          - name: title
+            type: scrolling_text
+            x: "4"
+            y: "10"
+            width: "248"
+            height: "7"
+            font: font_4x6
+            scrollable: true
+          - name: time
+            type: label
+            x: "200"
+            y: "16"
+            width: "54"
+            height: "12"
+            font: font_6x10
+            horizontal_alignment: Right

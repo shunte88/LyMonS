@@ -660,3 +660,662 @@ templates:
             y: "0"
             width: "display.width"
             height: "display.height"
+
+  easter_egg_technics:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "10 + display.width/2"
+            y: "13"
+            width: "display.width/2 - 14"
+            height: "27"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "27"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "37"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "14"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_tvtime:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "10 + display.width/2"
+            y: "13"
+            width: "display.width/2 - 14"
+            height: "27"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "27"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "37"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "14"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_tubeamp:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "10 + display.width/2"
+            y: "13"
+            width: "display.width/2 - 10"
+            height: "27"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "27"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "37"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "14"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_vcr:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "10"
+            y: "6"
+            width: "display.width - 20"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_scope:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "140"
+            y: "6"
+            width: "display.width - 150"
+            height: "28"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_pctime:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "140"
+            y: "6"
+            width: "display.width - 150"
+            height: "28"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_moog:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "display.width/2 + 10"
+            y: "6"
+            width: "display.width/2 - 20"
+            height: "28"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_ibmpc:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "display.width/2 - 10"
+            y: "6"
+            width: "display.width/2 - 10"
+            height: "28"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_radio40:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "display.width/2 - 10"
+            y: "6"
+            width: "display.width/2 - 10"
+            height: "28"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_radio50:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "display.width/2 - 10"
+            y: "6"
+            width: "display.width/2 - 10"
+            height: "28"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_blackfly:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "display.width/2 - 10"
+            y: "6"
+            width: "display.width/2 - 10"
+            height: "28"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_reel2reel:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "140"
+            y: "6"
+            width: "display.width - 150"
+            height: "28"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_bass:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "10"
+            y: "6"
+            width: "display.width - 20"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_pipboy:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "6"
+            y: "display.width - 50"
+            width: "display.width - 12"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.left"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: album
+            type: label
+            x: "artist.left"
+            y: "title.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: year
+            type: label
+            x: "artist.left"
+            y: "album.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_6x10
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right
+
+  easter_egg_cassette:
+    variants:
+      - name: default
+        fields:
+          - name: artist
+            type: label
+            x: "18"
+            y: "20"
+            width: "180"
+            height: "27"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: title
+            type: label
+            x: "artist.right"
+            y: "artist.bottom"
+            width: "artist.width"
+            height: "artist.height"
+            font: font_7x13
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 14"
+            width: "41"
+            height: "13"
+            font: font_7x13
+            horizontal_alignment: Right

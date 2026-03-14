@@ -641,6 +641,28 @@ impl Eggs {
         Ok(())
     }
 
+    /// Return the snake_case name used as the layout template suffix
+    /// (e.g. `"bass"` → resolves template `"easter_egg_bass"`).
+    pub fn egg_type_name(&self) -> &str {
+        match self.egg_type {
+            EGGS_TYPE_BASS      => "bass",
+            EGGS_TYPE_BLACKFLY  => "blackfly",
+            EGGS_TYPE_CASSETTE  => "cassette",
+            EGGS_TYPE_IBMPC     => "ibmpc",
+            EGGS_TYPE_MOOG      => "moog",
+            EGGS_TYPE_PIPBOY    => "pipboy",
+            EGGS_TYPE_RADIO40   => "radio40",
+            EGGS_TYPE_RADIO50   => "radio50",
+            EGGS_TYPE_REEL2REEL => "reel2reel",
+            EGGS_TYPE_SCOPE     => "scope",
+            EGGS_TYPE_TECHNICS  => "technics",
+            EGGS_TYPE_TUBEAMP   => "tubeamp",
+            EGGS_TYPE_TVTIME    => "tvtime",
+            EGGS_TYPE_VCR       => "vcr",
+            _                   => "none",
+        }
+    }
+
     pub fn get_svg_data(&self) -> &str {
         &self.modified_svg_data
     }

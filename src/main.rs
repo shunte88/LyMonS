@@ -30,55 +30,18 @@ compile_error!("LyMonS currently requires the 'driver-ssd1306' feature. Use --fe
 use std::{time::Duration};
 use log::{info, error, warn};
 use env_logger::Env;
-use clap::{Arg, ArgAction, Command};
 use local_ip_address::{local_ip};
 
 #[cfg(unix)] // Only compile this block on Unix-like systems
 use tokio::signal::unix::{signal, SignalKind}; // Import specific Unix signals
 
-// move these to mod.rs
-//mod singles;
-mod config;
-//mod trig; // pure-Rust trig utilities; zero external refs currently; may re-activate for no_std VU physics
-//mod pacer;
-mod dbfs;
-mod draw;
-mod drawsvg;
-mod display;
-mod mac_addr;
-mod metrics;
-mod const_oled;
-mod constants;
-mod glyphs;
-mod clock_font_svg;
-mod deutils;
-mod httprpc;
-mod sliminfo;
-mod weather;
-mod textable;
-mod weather_glyph;
-mod geoloc;
-mod location;
-mod astral;
-mod translate;
-mod eggs;
-mod spectrum;
-mod vframebuf;
-mod vision;
-mod visualization;
-mod visualizer;
-mod sse_client;
-mod visionon;
-mod vuphysics_new;
-mod svgimage;
-mod shm_path;
-mod sun;
-mod coverart;
-
-use sliminfo::LMSServer;
-use mac_addr::{get_mac_addr,get_mac_addr_for};
+use lymons::{config, display, location, astral, glyphs};
+#[cfg(feature = "emulator")]
+use lymons::visualizer;
+use lymons::sliminfo::LMSServer;
+use lymons::mac_addr::{get_mac_addr, get_mac_addr_for};
+use lymons::BUILD_DATE;
 //use singles::SingleInstance;
-include!(concat!(env!("OUT_DIR"), "/build_info.rs"));
 
 /// Asynchronously waits for a SIGINT, SIGTERM, or SIGHUP signal.
 /// always unix so forget the cfg 
@@ -92,10 +55,9 @@ async fn unified_display_loop(
     display: std::sync::Arc<tokio::sync::Mutex<display::DisplayManager>>,
     player_name: &str,
     show_remaining: bool,
-    weather_config: &str,
+    weather: Option<config::WeatherConfig>,
     viz_type: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::sliminfo::LMSServer;
     use std::time::Duration;
 
     info!("Starting unified display loop with DisplayManager");
@@ -115,10 +77,10 @@ async fn unified_display_loop(
     info!("LMS Server communication initialized");
 
     // Setup weather if configured
-    if !weather_config.is_empty() {
-        info!("Setting up weather with config...");
+    if let Some(ref wc) = weather {
+        info!("Setting up weather...");
         let mut display_lock = display.lock().await;
-        display_lock.setup_weather(weather_config).await?;
+        display_lock.setup_weather(wc).await?;
         drop(display_lock);
         info!("Weather setup complete");
     }
@@ -136,7 +98,7 @@ async fn unified_display_loop(
             String::new()
         };
         let sse_config = if !player_ip.is_empty() {
-            Some(crate::visualizer::SseConfig { host: player_ip.clone(), port: 8022 })
+            Some(visualizer::SseConfig { host: player_ip.clone(), port: 8022 })
         } else {
             None
         };
@@ -165,7 +127,7 @@ async fn unified_display_loop(
 
     // Create display mode controller
     let mode_config = display::ModeControllerConfig {
-        weather_config: weather_config.to_string(),
+        weather_config: weather.as_ref().and_then(|w| w.api.clone()).unwrap_or_default(),
         visualizer_type: viz_type.to_string(),
         egg_type,
         weather_interval_mins: 20,
@@ -256,16 +218,16 @@ async fn unified_display_loop(
                 let current_is_muted = current_volume_percent == 0;
 
                 let repeat_mode = match lms_guard.sliminfo.repeat {
-                    0 => crate::glyphs::RepeatMode::Off,
-                    1 => crate::glyphs::RepeatMode::RepeatAll,
-                    2 => crate::glyphs::RepeatMode::RepeatOne,
-                    _ => crate::glyphs::RepeatMode::Off,
+                    0 => glyphs::RepeatMode::Off,
+                    1 => glyphs::RepeatMode::RepeatAll,
+                    2 => glyphs::RepeatMode::RepeatOne,
+                    _ => glyphs::RepeatMode::Off,
                 };
                 let shuffle_mode = match lms_guard.sliminfo.shuffle {
-                    0 => crate::glyphs::ShuffleMode::Off,
-                    1 => crate::glyphs::ShuffleMode::ByTracks,
-                    2 => crate::glyphs::ShuffleMode::ByAlbums,
-                    _ => crate::glyphs::ShuffleMode::Off,
+                    0 => glyphs::ShuffleMode::Off,
+                    1 => glyphs::ShuffleMode::ByTracks,
+                    2 => glyphs::ShuffleMode::ByAlbums,
+                    _ => glyphs::ShuffleMode::Off,
                 };
 
                 display_lock.set_status_line_data(
@@ -787,177 +749,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //        Err(e) => ,
 //    }
 
-    // Parse command line arguments
-    let matches = Command::new(env!("CARGO_PKG_NAME")) // Use Cargo.toml name
-        .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS"))
-        .about(env!("CARGO_PKG_DESCRIPTION")) // also want build date
-        .arg(Arg::new("debug")
-        .action(ArgAction::SetTrue)
-        .long("debug")
-        .short('v')
-        .alias("verbose") 
-        .help("Enable debug log level")
-        .required(false))
-        .arg(Arg::new("name")
-        .short('N')
-        .long("name")
-        .help("LMS player name to monitor")
-        .required(true))
-        .arg(Arg::new("weather")
-        .short('W')
-        .long("weather")
-        .help("Weather API key,units,transl,latitude,longitude")
-        .default_value("")
-        .required(false))
-        .arg(Arg::new("scroll")
-        .short('z')
-        .long("scroll")
-        .help("Text display scroll mode")
-        .value_parser(["loop", "loopleft", "cylon"])
-        .default_value("cylon")
-        .required(false))
-        .arg(Arg::new("remain")
-        .action(ArgAction::SetTrue)
-        .short('r')
-        .long("remain")
-        .help("Display Remaining Time rather than Total Time")
-        .required(false))
-        .arg(Arg::new("font")
-        .short('F')
-        .long("font")
-        .help("Font for text use"))
-        .arg(Arg::new("clock_font")
-        .short('C')
-        .long("clock_font")
-        .help("Clock font to use")
-        .value_parser(
-            ["7seg",
-            "dejavu",
-            "dotty",
-            "gawker",
-            "ledreal",
-            "marvel",
-            "moomy",
-            "noto",
-            "poppins",
-            "roboto"]
-            )
-        .default_value("7seg")
-        .required(false))
-        .arg(Arg::new("eggs")
-        .short('E')
-        .long("eggs")
-        .help("Easter Egg Animation")
-        .value_parser(
-            ["bass",
-            "blackfly",
-            "cassette",
-            "ibmpc",
-            "moog",
-            "pipboy",
-            "radio40",
-            "radio50",
-            "reel2reel",
-            "scope",
-            "technics",
-            "tubeamp",
-            "tvtime",
-            "vcr",
-            "none"]
-            )
-        .default_value("none")
-        .required(false))
-        .arg(Arg::new("no-splash")
-        .long("no-splash")
-        .help("Skip splash screen (shown by default)")
-        .action(ArgAction::SetTrue)
-        .required(false))
-        .arg(Arg::new("metrics")
-        .short('k')
-        .long("metrics")
-        .help("Display device metrics")
-        .action(ArgAction::SetTrue)
-        .required(false))
-        .arg(Arg::new("config")
-        .short('c')
-        .long("config")
-        .default_value("config.toml")
-        .help("monitor config file")
-        .required(false)) // false as defaulted
-        .arg(Arg::new("i2c-bus")
-        .long("i2c-bus")
-        .default_value("/dev/i2c-1") // Default I2C bus path for Raspberry Pi
-        .help("I2C bus device path for OLED display (e.g., /dev/i2c-1)")
-        .required(false))
-        .arg(Arg::new("emulated")
-        .long("emulated")
-        .help("[Internal] Emulation mode for development/testing")
-        .action(ArgAction::SetTrue)
-        .hide(true)
-        .required(false))
-        .arg(Arg::new("driver")
-        .short('d')
-        .long("driver")
-        .help("Display driver type for emulator, overrides config (ssd1306, ssd1309, ssd1322, sh1106, sh1122, sharpmemory, st7789)")
-        .value_parser(["ssd1306", "ssd1309", "ssd1322", "sh1106", "sh1122", "sharpmemory", "st7789"])
-        .required(false))
-        .arg(Arg::new("viz")
-        .short('a')
-        .long("viz")
-        .help("Visualization, meters, VU, Peak, Histograms, and more")
-        .value_parser(
-            [
-            "combination",       // L/R VU with a central mono peak meter
-            "hist_aio",          // All In One with downmix histogram
-            "hist_mono",         // mono freq. histogram "bars" (downmix)
-            "hist_stereo",       // stereo freq. histogram "bars" (L/R)
-            "peak_mono",         // mono (rms downmix) peak meter with hold/decay
-            "peak_stereo",       // stereo peak meter with hold/decay
-            "vu_aio",            // All In One with downmix VU
-            "vu_mono",           // downmix to mono VU
-            "vu_stereo",         // twstereoo VU meters (L/R)
-            "waveform_spectrum", // oscilloscope waveform + spectrogram waterfall
-            "no_viz"                                                                                                               ]
-        )
-        .default_value("no_viz")
-        .required(false))
-        .after_help("LyMonS:\
-            \nLMS monitor\
-            \n\n\tDisplay LMS details and animations\
-            \n\tClock, Weather, Meters, and more\
-            \n\n\
-            CONTROLS:\
-            \n\ttodo.")
-        .get_matches();
+    // Load config (CLI + YAML file, merged and validated)
+    let cfg = config::load().map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
-    let _config_file = matches.get_one::<String>("config").unwrap();
-    let skip_splash = matches.get_flag("no-splash");
-    let show_splash = !skip_splash; // Show splash by default unless --no-splash is provided
-    let show_metrics = matches.get_flag("metrics");
-    let show_remaining = matches.get_flag("remain");
-    let debug_enabled = matches.get_flag("debug");
-    let mut emulated = matches.get_flag("emulated");
-    let _driver_override = matches.get_one::<String>("driver").cloned();
-    let scroll_mode = matches.get_one::<String>("scroll").unwrap();
-    let weather_config = matches.get_one::<String>("weather").unwrap();
-    let name_filter = matches.get_one::<String>("name").unwrap();
-    let clock_font = matches.get_one::<String>("clock_font").unwrap();
-    let font = matches.get_one::<String>("font").unwrap();
-    let _i2c_bus_path = matches.get_one::<String>("i2c-bus").unwrap();
-    let easter_egg = matches.get_one::<String>("eggs").unwrap();
-    let viz_type = matches.get_one::<String>("viz").unwrap();
+    let name_filter  = cfg.player.as_deref().unwrap_or("-");
+    let scroll_mode  = cfg.scroll_mode.as_deref().unwrap_or("cylon");
+    let clock_font   = cfg.clock_font.as_deref().unwrap_or("7seg");
+    let font         = cfg.text_font.as_deref().unwrap_or("").to_string();
+    let easter_egg   = cfg.easter_egg.as_deref().unwrap_or("none");
+    let viz_type     = cfg.visualizer.as_deref().unwrap_or("no_viz");
+    let show_splash  = cfg.show_splash.unwrap_or(true);
+    let show_metrics = cfg.show_metrics.unwrap_or(false);
+    let show_remaining = cfg.show_remaining.unwrap_or(false);
+    let debug_enabled  = cfg.log_level.as_deref().map(|l| l == "debug").unwrap_or(false);
+    let emulated       = cfg.display.as_ref().and_then(|d| d.emulated).unwrap_or(false);
+    let mac_addr       = get_mac_addr();
+    let effective_weather = cfg.effective_weather();
+    let (astral_lat, astral_lon) = cfg.effective_lat_lng();
 
-    if let Ok(config_content) = std::fs::read_to_string(_config_file) {
-        if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&config_content) {
-            if let Some(display) = config.get("display") {
-                    if let Some(emulated_setting) = display.get("emulated") {
-                        emulated = emulated_setting.as_bool().unwrap_or(false);
-                    }
-                }
-            }
-        }
-    
     // Initialize the logger with the appropriate level based on debug flag
     env_logger::Builder::from_env(Env::default().default_filter_or(if debug_enabled {"debug"}else{"info"}))
         .format_timestamp_secs()
@@ -975,52 +784,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         use display::emulator_window::{EmulatorWindow, EmulatorWindowConfig};
         use display::traits::DisplayDriver;
         use display::DisplayManager;
-        use crate::config::DisplayConfig;
+        use config::DisplayConfig;
 
-        // Load config to get display specifications
-        let mut display_config = DisplayConfig::default();
-
-        // Try to load from config file
-        if let Ok(config_content) = std::fs::read_to_string(_config_file) {
-            if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&config_content) {
-                if let Some(display) = config.get("display") {
-                    display_config = serde_yaml::from_value(display.clone())
-                        .unwrap_or_default();
-                }
-            }
-        }
-
-        // Allow --driver CLI arg to override config
-        if let Some(ref d) = _driver_override {
-            display_config.driver = Some(match d.as_str() {
-                "ssd1306"     => crate::config::DriverKind::Ssd1306,
-                "ssd1309"     => crate::config::DriverKind::Ssd1309,
-                "ssd1322"     => crate::config::DriverKind::Ssd1322,
-                "sh1106"      => crate::config::DriverKind::Sh1106,
-                "sh1122"      => crate::config::DriverKind::Sh1122,
-                "sharpmemory" => crate::config::DriverKind::SharpMemory,
-                "st7789"      => crate::config::DriverKind::St7789,
-                _ => unreachable!(), // value_parser enforces valid values
-            });
-            info!("Driver overridden by CLI: {}", d);
-        }
+        // Load display config from merged cfg (driver already resolved by config::load())
+        let display_config = cfg.display.clone().unwrap_or_default();
 
         // For emulator: create EmulatorDriver with specs from config
         info!("Creating emulator with DisplayManager (unified approach)");
 
         // Determine display specs from config (for emulation)
         let (width, height, is_grayscale, display_name) = match display_config.driver {
-            Some(crate::config::DriverKind::Ssd1306) => (128, 64, false, "SSD1306"),
-            Some(crate::config::DriverKind::Ssd1309) => (128, 64, false, "SSD1309"),
-            Some(crate::config::DriverKind::Sh1106) => (132, 64, false, "SH1106"),
-            Some(crate::config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"), // Grayscale (Gray4)
-            Some(crate::config::DriverKind::Sh1122)  => (256, 64, true, "SH1122"),  // Grayscale (Gray4)
-            Some(crate::config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
-            Some(crate::config::DriverKind::St7789) => (320, 170, true, "ST7789"),
+            Some(config::DriverKind::Ssd1306) => (128, 64, false, "SSD1306"),
+            Some(config::DriverKind::Ssd1309) => (128, 64, false, "SSD1309"),
+            Some(config::DriverKind::Sh1106) => (132, 64, false, "SH1106"),
+            Some(config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"), // Grayscale (Gray4)
+            Some(config::DriverKind::Sh1122)  => (256, 64, true, "SH1122"),  // Grayscale (Gray4)
+            Some(config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
+            Some(config::DriverKind::St7789) => (320, 170, true, "ST7789"),
             None => (256, 64, true, "SSD1322"), // default when no driver in config
         };
 
-        let is_rgb565 = matches!(display_config.driver, Some(crate::config::DriverKind::St7789));
+        let is_rgb565 = matches!(display_config.driver, Some(config::DriverKind::St7789));
 
         // Create EmulatorDriver (not the actual hardware driver!)
         let mut emulator_driver: display::BoxedDriver = if is_rgb565 {
@@ -1065,13 +849,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         info!("DisplayManager created - using unified display loop");
 
-        // Load full config for location settings
-        let full_config = if let Ok(config_content) = std::fs::read_to_string(_config_file) {
-            serde_yaml::from_str::<config::Config>(&config_content).ok()
-        } else {
-            None
-        };
-
         // === INITIALIZATION SEQUENCE WITH SPLASH SCREEN ===
         // Show splash screen during initialization (unless user opted out)
         display_manager.splash(
@@ -1082,8 +859,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Initialize location service
         let location = {
-            let lat = full_config.as_ref().and_then(|c| c.latitude);
-            let lng = full_config.as_ref().and_then(|c| c.longitude);
+            let lat = astral_lat;
+            let lng = astral_lon;
 
             if show_splash {
                 display_manager.update_splash_status("Determining location...")?;
@@ -1134,16 +911,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Load TTF text font (graceful — MonoFont used if zip not found)
         {
-            let text_font_name = if let Ok(cfg_content) = std::fs::read_to_string(_config_file) {
-                serde_yaml::from_str::<serde_yaml::Value>(&cfg_content).ok()
-                    .and_then(|v| v.get("text_font").and_then(|f| f.as_str()).map(String::from))
-                    .unwrap_or_else(|| clock_font.clone())
-            } else {
-                clock_font.clone()
-            };
+            let text_font_name = font.clone();
             let zip_path = format!("./data/{}-text.zip", text_font_name);
-            if let Some(font) = display::ttf_font::TtfFont::load_from_zip(&zip_path, 9.0) {
-                display_manager.set_text_font(font);
+            if let Some(ttf) = display::ttf_font::TtfFont::load_from_zip(&zip_path, 9.0) {
+                display_manager.set_text_font(ttf);
             }
         }
 
@@ -1160,7 +931,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Clone parameters for the unified loop
         let name_filter_clone = name_filter.to_string();
-        let weather_clone = weather_config.to_string();
+        let weather_clone = effective_weather.clone();
         let viz_clone = viz_type.to_string();
 
         // Spawn unified display loop in background (SAME AS HARDWARE!)
@@ -1169,7 +940,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 display_clone,
                 &name_filter_clone,
                 show_remaining,
-                &weather_clone,
+                weather_clone,
                 &viz_clone,
             ).await {
                 error!("Unified display loop error: {}", e);
@@ -1177,11 +948,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
         info!("═══════════════════════════════════════════════════");
-        info!("  LyMonS Emulator - DisplayManager Mode");
+        info!("      LyMonS Emulator - DisplayManager Mode");
         info!("═══════════════════════════════════════════════════");
         info!("  Using: Unified display loop (same as hardware)");
-        info!("  Driver: {} ({}x{})", caps.width, caps.height,
-            if caps.color_depth == display::ColorDepth::Monochrome { "mono" } else { "gray" });
+        info!("  Driver: {} ({}x{})", 
+            caps.width, caps.height,
+            if caps.color_depth == display::ColorDepth::Monochrome { "Mono" } 
+            else if caps.color_depth == display::ColorDepth::Gray4 { "Gray" }
+            else if caps.color_depth == display::ColorDepth::Rgb565 { "Color" }
+            else { "unknown color depth" }
+            );
         info!("  Layout: Adaptive based on display capabilities");
         info!("  Connecting to LMS server...");
         info!("  Close window or press Ctrl+C to exit");
@@ -1190,6 +966,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Run window on main thread (required by winit)
         let window = EmulatorWindow::new(emulator_state, EmulatorWindowConfig::default());
         return window.run().map_err(|e| e.into());
+
     }
 
     #[cfg(not(feature = "emulator"))]
@@ -1201,16 +978,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create DisplayManager (works with any driver from config)
     info!("Creating DisplayManager with dynamic driver loading");
 
-    // Load display config
-    let mut display_config = crate::config::DisplayConfig::default();
-    if let Ok(config_content) = std::fs::read_to_string(_config_file) {
-        if let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&config_content) {
-            if let Some(display) = config.get("display") {
-                display_config = serde_yaml::from_value(display.clone())
-                    .unwrap_or_default();
-            }
-        }
-    }
+    // Load display config from merged cfg
+    let display_config = cfg.display.clone().unwrap_or_default();
 
     let mut display_manager = display::DisplayManager::new(
         &display_config,
@@ -1221,7 +990,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     let inet =  local_ip().unwrap();
-    let mac_addr = get_mac_addr();
     // specific to Pi nomenclature
     let eth0_mac_addr = get_mac_addr_for("eth0").unwrap_or_else(|_| "00:00:00:00:00:00".to_string());
     let wlan0_mac_addr = get_mac_addr_for("wlan0").unwrap_or_else(|_| "00:00:00:00:00:00".to_string());
@@ -1232,14 +1000,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         wlan0_mac_addr.clone().as_str()
     );
 
-    // === INITIALIZATION SEQUENCE (HARDWARE PATH) ===
-    // Load full config for location settings
-    let full_config = if let Ok(config_content) = std::fs::read_to_string(_config_file) {
-        serde_yaml::from_str::<config::Config>(&config_content).ok()
-    } else {
-        None
-    };
-
     // Show splash screen during initialization (unless user opted out)
     display_manager.splash(
         show_splash,
@@ -1249,8 +1009,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize location service
     let location = {
-        let lat = full_config.as_ref().and_then(|c| c.latitude);
-        let lng = full_config.as_ref().and_then(|c| c.longitude);
+        let lat = astral_lat;
+        let lng = astral_lon;
 
         if show_splash {
             display_manager.update_splash_status("Determining location...")?;
@@ -1301,16 +1061,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load TTF text font (graceful — MonoFont used if zip not found)
     {
-        let text_font_name = if let Ok(cfg_content) = std::fs::read_to_string(_config_file) {
-            serde_yaml::from_str::<serde_yaml::Value>(&cfg_content).ok()
-                .and_then(|v| v.get("text_font").and_then(|f| f.as_str()).map(String::from))
-                .unwrap_or_else(|| clock_font.clone())
-        } else {
-            clock_font.clone()
-        };
+        let text_font_name = font.clone();
         let zip_path = format!("./data/{}-text.zip", text_font_name);
-        if let Some(font) = display::ttf_font::TtfFont::load_from_zip(&zip_path, 9.0) {
-            display_manager.set_text_font(font);
+        if let Some(ttf) = display::ttf_font::TtfFont::load_from_zip(&zip_path, 9.0) {
+            display_manager.set_text_font(ttf);
         }
     }
 
@@ -1321,14 +1075,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Initialization complete");
     }
 
-    if weather_config != "" {
+    if let Some(ref wc) = effective_weather {
         if show_splash {
             display_manager.update_splash_status("Weather setup...")?;
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-        } else{
+        } else {
             info!("Weather setup...");
         }
-        display_manager.setup_weather(weather_config).await?;
+        display_manager.setup_weather(wc).await?;
     }
 
     display_manager.test(false).await;
@@ -1397,7 +1150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Create display mode controller for hardware
             let mode_config = display::ModeControllerConfig {
-                weather_config: weather_config.to_string(),
+                weather_config: effective_weather.as_ref().and_then(|w| w.api.clone()).unwrap_or_default(),
                 visualizer_type: viz_type.to_string(),
                 egg_type,
                 weather_interval_mins: 20,
@@ -1439,16 +1192,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let current_is_muted = current_volume_percent == 0;
 
                         let repeat_mode = match lms_guard.sliminfo.repeat {
-                            0 => crate::glyphs::RepeatMode::Off,
-                            1 => crate::glyphs::RepeatMode::RepeatAll,
-                            2 => crate::glyphs::RepeatMode::RepeatOne,
-                            _ => crate::glyphs::RepeatMode::Off,
+                            0 => glyphs::RepeatMode::Off,
+                            1 => glyphs::RepeatMode::RepeatAll,
+                            2 => glyphs::RepeatMode::RepeatOne,
+                            _ => glyphs::RepeatMode::Off,
                         };
                         let shuffle_mode = match lms_guard.sliminfo.shuffle {
-                            0 => crate::glyphs::ShuffleMode::Off,
-                            1 => crate::glyphs::ShuffleMode::ByTracks,
-                            2 => crate::glyphs::ShuffleMode::ByAlbums,
-                            _ => crate::glyphs::ShuffleMode::Off,
+                            0 => glyphs::ShuffleMode::Off,
+                            1 => glyphs::ShuffleMode::ByTracks,
+                            2 => glyphs::ShuffleMode::ByAlbums,
+                            _ => glyphs::ShuffleMode::Off,
                         };
 
                         display_manager.set_status_line_data(

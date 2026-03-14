@@ -1,34 +1,21 @@
 /*
  *  config.rs
- * 
+ *
  *  LyMonS - worth the squeeze
- *	(c) 2020-26 Stuart Hunter
+ *  (c) 2020-26 Stuart Hunter
  *
- *	TODO:
- *
- *	This program is free software: you can redistribute it and/or modify
- *	it under the terms of the GNU General Public License as published by
- *	the Free Software Foundation, either version 3 of the License, or
- *	(at your option) any later version.
- *
- *	This program is distributed in the hope that it will be useful,
- *	but WITHOUT ANY WARRANTY; without even the implied warranty of
- *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *	GNU General Public License for more details.
- *
- *	See <http://www.gnu.org/licenses/> to get a copy of the GNU General
- *	Public License.
+ *  Single source of truth for all CLI arguments and config-file settings.
+ *  Priority (highest wins): CLI flags → config file → defaults
  *
  */
 
-#![allow(dead_code)] // config loading and validation helpers; written for future config-file support
-
- use clap::{ArgAction, Parser, ValueHint};
+use clap::{ArgAction, Parser, ValueHint};
 use dirs_next::home_dir;
 use std::{fs, path::{Path, PathBuf}};
 use thiserror::Error;
 
-/// Error type for config loading/validation.
+// ── Errors ────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("YAML parse error: {0}")]
@@ -39,198 +26,60 @@ pub enum ConfigError {
     Validation(String),
 }
 
-/// Top-level app configuration. Extend to mirror your current fields.
+// ── Weather ───────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
-pub struct Config {
-    /// General options
-    pub log_level: Option<String>,     // e.g., "info" | "debug"
-    pub sample_rate_hz: Option<u32>,   // audio sample rate, etc.
-    /// display-specific geometry & behavior
-    pub display: Option<DisplayConfig>,
-
-    /// Location for astronomical calculations (optional, uses GeoIP if not specified)
-    pub latitude: Option<f64>,         // -90.0 to 90.0
-    pub longitude: Option<f64>,        // -180.0 to 180.0
-
-    // Any other groups you already have can go here
-    // pub network: Option<NetConfig>,
-    // pub theme: Option<ThemeConfig>,
+pub struct WeatherConfig {
+    pub api:       Option<String>,  // Tomorrow.io API key
+    pub units:     Option<String>,  // "metric" | "imperial"
+    pub translate: Option<String>,  // language/translation code
+    pub latitude:  Option<f64>,
+    pub longitude: Option<f64>,
 }
+
+impl WeatherConfig {
+    /// True when an API key is present and non-empty.
+    pub fn is_active(&self) -> bool {
+        self.api.as_deref().map(|k| !k.is_empty()).unwrap_or(false)
+    }
+
+    /// Normalise units to the string Tomorrow.io expects.
+    pub fn normalised_units(&self) -> String {
+        match self.units.as_deref().unwrap_or("metric").to_lowercase().as_str() {
+            "f" | "fahrenheit" | "imperial" => "imperial".to_string(),
+            _ => "metric".to_string(),
+        }
+    }
+}
+
+// ── Display ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct DisplayConfig {
-    pub width: Option<u32>,
-    pub height: Option<u32>,
+    pub width:      Option<u32>,
+    pub height:     Option<u32>,
     pub rotate_deg: Option<u16>,
-    pub invert: Option<bool>,
-    pub brightness: Option<u8>,     // 0-255
-    pub driver: Option<DriverKind>, // <- strongly-typed driver selection
-    pub bus: Option<BusConfig>,     // <- i2c or spi wiring
-    pub emulated: Option<bool>,     // <- enable emulation mode (desktop window)
-}
-
-/// CLI overrides. All fields are Options so we can layer them over YAML.
-#[derive(Debug, Parser, Clone)]
-#[command(name = "LyMonS", about = "LyMonS Monitor", disable_help_flag = false)]
-pub struct Cli {
-    /// Path to a YAML config file (overrides search)
-    #[arg(long, value_hint = ValueHint::FilePath)]
-    pub config: Option<PathBuf>,
-    #[arg(long)]
-    pub log_level: Option<String>,
-    #[arg(long)]
-    pub sample_rate_hz: Option<u32>,
-    #[arg(long)]
-    pub device_name: Option<String>,
-    #[arg(long)]
-    pub display_width: Option<u32>,
-    #[arg(long)]
-    pub display_height: Option<u32>,
-    #[arg(long)]
-    pub display_rotate_deg: Option<u16>,
-    #[arg(long, action = ArgAction::Set)]
-    pub display_invert: Option<bool>,
-    /// dump fully merged config (after overrides) and exit
-    #[arg(long, action = ArgAction::SetTrue)]
-    pub dump_config: bool,
-}
-
-/// Public entry point: parse CLI, read YAML, merge, validate.
-pub fn load() -> Result<Config, ConfigError> {
-    let cli = Cli::parse();
-
-    // 1) defaults (from `Default` impl)
-    let mut cfg = Config::default();
-
-    // 2) YAML file (explicit path or search)
-    if let Some(p) = cli.config.as_ref() {
-        if p.exists() {
-            let y = read_yaml(p)?;
-            merge(&mut cfg, y);
-        } else {
-            return Err(ConfigError::Validation(format!(
-                "Config file not found: {}",
-                p.display()
-            )));
-        }
-    } else if let Some(p) = find_config_file() {
-        let y = read_yaml(&p)?;
-        merge(&mut cfg, y);
-    }
-
-    // 3) CLI overrides (highest precedence)
-    apply_cli_overrides(&mut cfg, &cli);
-
-    // 4) Validate
-    validate(&cfg)?;
-
-    if cli.dump_config {
-        // Pretty YAML of effective config (nice for debugging)
-        let s = serde_yaml::to_string(&cfg)?;
-        println!("{s}");
-        std::process::exit(0);
-    }
-
-    Ok(cfg)
-}
-
-/// Try common locations in order (first hit wins).
-fn find_config_file() -> Option<PathBuf> {
-    // XDG-style: ~/.config/lymons/config.yaml
-    if let Some(home) = home_dir() {
-        let p = home.join(".config/lymons/config.yaml");
-        if p.exists() { return Some(p) }
-        let p = home.join(".config/lymons.yaml");
-        if p.exists() { return Some(p) }
-    }
-    // project local
-    for candidate in &["lymons.yaml", "config.yaml", "config/lymons.yaml"] {
-        let p = PathBuf::from(candidate);
-        if p.exists() { return Some(p) }
-    }
-    None
-}
-
-fn read_yaml(path: &Path) -> Result<Config, ConfigError> {
-    let s = fs::read_to_string(path)?;
-    let cfg: Config = serde_yaml::from_str(&s)?;
-    Ok(cfg)
-}
-
-/// Shallow merge `src` into `dst`, Option-by-Option.
-fn merge(dst: &mut Config, src: Config) {
-    // top-level
-    if src.log_level.is_some()      { dst.log_level = src.log_level; }
-    // display
-    match (&mut dst.display, src.display) {
-        (None, Some(c)) => dst.display = Some(c),
-        (Some(d), Some(s)) => merge_display(d, s),
-        _ => {}
-    }
-}
-
-fn merge_display(dst: &mut DisplayConfig, src: DisplayConfig) {
-    if src.width.is_some()       { dst.width = src.width; }
-    if src.height.is_some()      { dst.height = src.height; }
-    if src.rotate_deg.is_some()  { dst.rotate_deg = src.rotate_deg; }
-    if src.invert.is_some()      { dst.invert = src.invert; }
-    if src.brightness.is_some()  { dst.brightness = src.brightness; }
-    if src.driver.is_some()      { dst.driver = src.driver; }
-    if src.bus.is_some()         { dst.bus = src.bus; }
-}
-
-fn apply_cli_overrides(cfg: &mut Config, cli: &Cli) {
-    if cli.log_level.is_some()       { cfg.log_level = cli.log_level.clone(); }
-    let any_case = cli.display_width.is_some()
-        || cli.display_height.is_some()
-        || cli.display_rotate_deg.is_some()
-        || cli.display_invert.is_some();
-
-    if any_case && cfg.display.is_none() {
-        cfg.display = Some(DisplayConfig::default());
-    }
-    if let Some(display) = cfg.display.as_mut() {
-        if cli.display_width.is_some()       { display.width = cli.display_width; }
-        if cli.display_height.is_some()      { display.height = cli.display_height; }
-        if cli.display_rotate_deg.is_some()  { display.rotate_deg = cli.display_rotate_deg; }
-        if cli.display_invert.is_some()      { display.invert = cli.display_invert; }
-    }
-}
-
-/// Put any invariants here (required fields, ranges, etc.)
-fn validate(cfg: &Config) -> Result<(), ConfigError> {
-    if let Some(display) = cfg.display.as_ref() {
-        if let (Some(w), Some(h)) = (display.width, display.height) {
-            if w == 0 || h == 0 {
-                return Err(ConfigError::Validation("display width/height must be > 0".into()));
-            }
-        }
-        if let Some(rot) = display.rotate_deg {
-            match rot {
-                0 | 90 | 180 | 270 => {},
-                _ => return Err(ConfigError::Validation("display rotate_deg must be 0|90|180|270".into()))
-            }
-        }
-        //let Some(b) = display.brightness;
-        
-    }
-    Ok(())
+    pub invert:     Option<bool>,
+    pub brightness: Option<u8>,
+    pub driver:     Option<DriverKind>,
+    pub bus:        Option<BusConfig>,
+    pub emulated:   Option<bool>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum BusConfig {
     I2c {
-        bus: String,        // e.g. "/dev/i2c-1"
-        address: u8,        // e.g. 0x3C (I2C addresses are 7-bit, stored in u8)
-        speed_hz: Option<u32>,
+        bus:       String,
+        address:   u8,
+        speed_hz:  Option<u32>,
     },
     Spi {
-        bus: String,        // e.g. "/dev/spidev0.0"
+        bus:      String,
         speed_hz: Option<u32>,
-        dc_pin: u32,        // BCM numbering (or however your HAL maps)
-        rst_pin: Option<u32>,
-        cs_pin: Option<u32>, // optional if part of /dev/spidevX.Y
+        dc_pin:   u32,
+        rst_pin:  Option<u32>,
+        cs_pin:   Option<u32>,
     },
 }
 
@@ -241,7 +90,341 @@ pub enum DriverKind {
     Ssd1309,
     Ssd1322,
     Sh1106,
-    Sh1122,      // 256x64 grayscale 4-wire SPI (Gray4)
-    SharpMemory, // Future implementation - 400x240 memory LCD
-    St7789,      // Full-colour 320x170 (Rgb565)
+    Sh1122,
+    SharpMemory,
+    St7789,
+}
+
+// ── Top-level config (YAML) ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct Config {
+    pub log_level:      Option<String>,  // "info" | "debug"
+    pub player:         Option<String>,  // LMS player name to monitor
+    pub text_font:      Option<String>,  // TTF font name (zip in ./data/)
+    pub scroll_mode:    Option<String>,  // "cylon" | "loop" | "loopleft"
+    pub show_remaining: Option<bool>,
+    pub clock_font:     Option<String>,
+    pub easter_egg:     Option<String>,
+    pub visualizer:     Option<String>,
+    pub show_metrics:   Option<bool>,
+    pub show_splash:    Option<bool>,
+    pub i2c_bus:        Option<String>,
+    /// Standalone lat/lon — fallback for astral when weather is not configured.
+    pub latitude:       Option<f64>,
+    pub longitude:      Option<f64>,
+    pub display:        Option<DisplayConfig>,
+    pub weather:        Option<WeatherConfig>,
+}
+
+impl Config {
+    /// Resolve lat/lon: weather config first, standalone fallback second.
+    /// Returns `(None, None)` when neither is set — callers should GeoIP.
+    pub fn effective_lat_lng(&self) -> (Option<f64>, Option<f64>) {
+        let wlat = self.weather.as_ref().and_then(|w| w.latitude);
+        let wlon = self.weather.as_ref().and_then(|w| w.longitude);
+        (wlat.or(self.latitude), wlon.or(self.longitude))
+    }
+
+    /// Return a WeatherConfig suitable for Weather::new(), with lat/lon
+    /// back-populated from the standalone fields if the weather block omits them.
+    /// Returns None if no API key is configured.
+    pub fn effective_weather(&self) -> Option<WeatherConfig> {
+        let mut wc = self.weather.clone()?;
+        if !wc.is_active() {
+            return None;
+        }
+        if wc.latitude.is_none() || wc.longitude.is_none() {
+            let (lat, lon) = self.effective_lat_lng();
+            if wc.latitude.is_none()  { wc.latitude  = lat; }
+            if wc.longitude.is_none() { wc.longitude = lon; }
+        }
+        Some(wc)
+    }
+}
+
+// ── CLI (clap derive) ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Parser, Clone)]
+#[command(
+    name    = "LyMonS",
+    about   = "LMS monitor — worth the squeeze",
+    version,
+    author,
+    after_help = ""
+)]
+pub struct Cli {
+    /// Path to YAML config file (overrides default search)
+    #[arg(short = 'c', long, value_hint = ValueHint::FilePath)]
+    pub config: Option<PathBuf>,
+
+    /// Enable debug logging
+    #[arg(short = 'v', long, alias = "verbose", action = ArgAction::SetTrue)]
+    pub debug: bool,
+
+    /// LMS player name to monitor (required unless set in config file)
+    #[arg(short = 'N', long)]
+    pub name: Option<String>,
+
+    // ── Weather ───────────────────────────────────────────────────────────────
+
+    /// Tomorrow.io API key
+    #[arg(short = 'W', long = "weather-api")]
+    pub weather_api: Option<String>,
+
+    /// Weather units: metric (default) or imperial
+    #[arg(long = "weather-units")]
+    pub weather_units: Option<String>,
+
+    /// Weather language/translation code
+    #[arg(long = "weather-lang")]
+    pub weather_lang: Option<String>,
+
+    /// Latitude — overrides config file and GeoIP
+    #[arg(long)]
+    pub lat: Option<f64>,
+
+    /// Longitude — overrides config file and GeoIP
+    #[arg(long)]
+    pub lon: Option<f64>,
+
+    // ── Playback ──────────────────────────────────────────────────────────────
+
+    /// Text scroll mode
+    #[arg(short = 'z', long, value_parser = ["loop", "loopleft", "cylon"])]
+    pub scroll: Option<String>,
+
+    /// Show remaining time instead of total duration
+    #[arg(short = 'r', long, action = ArgAction::SetTrue)]
+    pub remain: bool,
+
+    /// TTF text font name (must have ./data/{name}-text.zip)
+    #[arg(short = 'F', long)]
+    pub font: Option<String>,
+
+    // ── Display ───────────────────────────────────────────────────────────────
+
+    /// Clock font
+    #[arg(short = 'C', long = "clock-font",
+          value_parser = ["7seg","dejavu","dotty","gawker","ledreal","marvel","moomy","noto","poppins","roboto"])]
+    pub clock_font: Option<String>,
+
+    /// Easter egg animation
+    #[arg(short = 'E', long,
+          value_parser = ["bass","blackfly","cassette","ibmpc","moog","pipboy","radio40","radio50","reel2reel","scope","technics","tubeamp","tvtime","vcr","none"])]
+    pub eggs: Option<String>,
+
+    /// Skip splash screen
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub no_splash: bool,
+
+    /// Show device metrics overlay
+    #[arg(short = 'k', long, action = ArgAction::SetTrue)]
+    pub metrics: bool,
+
+    /// I2C bus device path
+    #[arg(long, default_value = "/dev/i2c-1")]
+    pub i2c_bus: Option<String>,
+
+    /// [Internal] emulation mode
+    #[arg(long, hide = true, action = ArgAction::SetTrue)]
+    pub emulated: bool,
+
+    /// Display driver (emulator / config override)
+    #[arg(short = 'd', long,
+          value_parser = ["ssd1306","ssd1309","ssd1322","sh1106","sh1122","sharpmemory","st7789"])]
+    pub driver: Option<String>,
+
+    /// Visualizer type
+    #[arg(short = 'a', long = "viz",
+          value_parser = ["combination","hist_aio","hist_mono","hist_stereo","peak_mono","peak_stereo","vu_aio","vu_mono","vu_stereo","waveform_spectrum","no_viz"])]
+    pub viz: Option<String>,
+
+    /// Print fully merged config and exit
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub dump_config: bool,
+}
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+
+/// Parse CLI, read YAML config file, merge (CLI wins), validate.
+/// Returns the fully resolved `Config`.
+pub fn load() -> Result<Config, ConfigError> {
+    let cli = Cli::parse();
+
+    // 1. Defaults
+    let mut cfg = Config::default();
+
+    // 2. YAML file
+    let config_path = cli.config.clone()
+        .or_else(find_config_file);
+
+    if let Some(ref p) = config_path {
+        if p.exists() {
+            let y = read_yaml(p)?;
+            merge(&mut cfg, y);
+        } else if cli.config.is_some() {
+            // Explicit path was given but doesn't exist — that's an error
+            return Err(ConfigError::Validation(format!(
+                "Config file not found: {}", p.display()
+            )));
+        }
+    }
+
+    // 3. CLI overrides (highest precedence)
+    apply_cli_overrides(&mut cfg, &cli);
+
+    // 4. Validate
+    validate(&cfg)?;
+
+    if cli.dump_config {
+        let s = serde_yaml::to_string(&cfg)?;
+        println!("{s}");
+        std::process::exit(0);
+    }
+
+    Ok(cfg)
+}
+
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+fn find_config_file() -> Option<PathBuf> {
+    if let Some(home) = home_dir() {
+        for name in &["config.yaml", "config.yml"] {
+            let p = home.join(".config/lymons").join(name);
+            if p.exists() { return Some(p); }
+        }
+        let p = home.join(".config/lymons.yaml");
+        if p.exists() { return Some(p); }
+    }
+    for candidate in &["lymons.yaml", "config.yaml", "config.yml", "config/lymons.yaml"] {
+        let p = PathBuf::from(candidate);
+        if p.exists() { return Some(p); }
+    }
+    None
+}
+
+fn read_yaml(path: &Path) -> Result<Config, ConfigError> {
+    let s = fs::read_to_string(path)?;
+    Ok(serde_yaml::from_str(&s)?)
+}
+
+fn merge(dst: &mut Config, src: Config) {
+    macro_rules! take {
+        ($field:ident) => { if src.$field.is_some() { dst.$field = src.$field; } };
+    }
+    take!(log_level);
+    take!(player);
+    take!(text_font);
+    take!(scroll_mode);
+    take!(show_remaining);
+    take!(clock_font);
+    take!(easter_egg);
+    take!(visualizer);
+    take!(show_metrics);
+    take!(show_splash);
+    take!(i2c_bus);
+    take!(latitude);
+    take!(longitude);
+
+    match (&mut dst.display, src.display) {
+        (None, Some(c)) => dst.display = Some(c),
+        (Some(d), Some(s)) => merge_display(d, s),
+        _ => {}
+    }
+    match (&mut dst.weather, src.weather) {
+        (None, Some(c)) => dst.weather = Some(c),
+        (Some(d), Some(s)) => merge_weather(d, s),
+        _ => {}
+    }
+}
+
+fn merge_display(dst: &mut DisplayConfig, src: DisplayConfig) {
+    macro_rules! take {
+        ($field:ident) => { if src.$field.is_some() { dst.$field = src.$field; } };
+    }
+    take!(width); take!(height); take!(rotate_deg); take!(invert);
+    take!(brightness); take!(driver); take!(bus); take!(emulated);
+}
+
+fn merge_weather(dst: &mut WeatherConfig, src: WeatherConfig) {
+    macro_rules! take {
+        ($field:ident) => { if src.$field.is_some() { dst.$field = src.$field; } };
+    }
+    take!(api); take!(units); take!(translate); take!(latitude); take!(longitude);
+}
+
+fn apply_cli_overrides(cfg: &mut Config, cli: &Cli) {
+    if cli.debug        { cfg.log_level = Some("debug".to_string()); }
+    if cli.remain       { cfg.show_remaining = Some(true); }
+    if cli.no_splash    { cfg.show_splash = Some(false); }
+    if cli.metrics      { cfg.show_metrics = Some(true); }
+    if cli.emulated {
+        cfg.display.get_or_insert_with(DisplayConfig::default).emulated = Some(true);
+    }
+
+    macro_rules! take_opt {
+        ($src:expr => $dst:expr) => { if $src.is_some() { $dst = $src.clone(); } };
+    }
+    take_opt!(cli.name        => cfg.player);
+    take_opt!(cli.font        => cfg.text_font);
+    take_opt!(cli.scroll      => cfg.scroll_mode);
+    take_opt!(cli.clock_font  => cfg.clock_font);
+    take_opt!(cli.eggs        => cfg.easter_egg);
+    take_opt!(cli.viz         => cfg.visualizer);
+    take_opt!(cli.i2c_bus     => cfg.i2c_bus);
+    take_opt!(cli.lat         => cfg.latitude);
+    take_opt!(cli.lon         => cfg.longitude);
+
+    // Weather overrides
+    if cli.weather_api.is_some() || cli.weather_units.is_some() || cli.weather_lang.is_some() {
+        let w = cfg.weather.get_or_insert_with(WeatherConfig::default);
+        if cli.weather_api.is_some()   { w.api       = cli.weather_api.clone(); }
+        if cli.weather_units.is_some() { w.units     = cli.weather_units.clone(); }
+        if cli.weather_lang.is_some()  { w.translate = cli.weather_lang.clone(); }
+    }
+    // lat/lon also back-fill into weather if not already set there
+    if let (Some(lat), Some(lon)) = (cli.lat, cli.lon) {
+        let w = cfg.weather.get_or_insert_with(WeatherConfig::default);
+        if w.latitude.is_none()  { w.latitude  = Some(lat); }
+        if w.longitude.is_none() { w.longitude = Some(lon); }
+    }
+
+    // Driver override
+    if let Some(d) = &cli.driver {
+        let driver = match d.as_str() {
+            "ssd1306"     => DriverKind::Ssd1306,
+            "ssd1309"     => DriverKind::Ssd1309,
+            "ssd1322"     => DriverKind::Ssd1322,
+            "sh1106"      => DriverKind::Sh1106,
+            "sh1122"      => DriverKind::Sh1122,
+            "sharpmemory" => DriverKind::SharpMemory,
+            "st7789"      => DriverKind::St7789,
+            _             => unreachable!(),
+        };
+        cfg.display.get_or_insert_with(DisplayConfig::default).driver = Some(driver);
+    }
+}
+
+fn validate(cfg: &Config) -> Result<(), ConfigError> {
+    if cfg.player.as_ref().map(|p| p.is_empty()).unwrap_or(true) {
+        return Err(ConfigError::Validation(
+            "Player name is required: set 'player' in config file or use -N / --name".into()
+        ));
+    }
+    if let Some(display) = cfg.display.as_ref() {
+        if let (Some(w), Some(h)) = (display.width, display.height) {
+            if w == 0 || h == 0 {
+                return Err(ConfigError::Validation("display width/height must be > 0".into()));
+            }
+        }
+        if let Some(rot) = display.rotate_deg {
+            if !matches!(rot, 0 | 90 | 180 | 270) {
+                return Err(ConfigError::Validation(
+                    "display rotate_deg must be 0|90|180|270".into()
+                ));
+            }
+        }
+    }
+    Ok(())
 }

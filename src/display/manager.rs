@@ -2717,44 +2717,6 @@ impl DisplayManager {
             0.0
         };
 
-        // Check if display is wide (256+ pixels)
-        let is_wide = self.capabilities.width >= 256;
-        let can_widen = self.easter_egg.can_widen();
-
-        // Get position and rectangles
-        let _position = self.easter_egg.get_top_left();
-        let mut artist_rect = self.easter_egg.get_artist_rect();
-        let mut title_rect = self.easter_egg.get_title_rect();
-        let mut time_rect = self.easter_egg.get_time_rect();
-        let is_combined = self.easter_egg.is_combined();
-
-        // For wide displays, extend text block widths by 128 pixels
-        // can_widen attribute refines the rule - cassette for example 
-        // uses text overlay for artist and track so widen is not applicable
-        if is_wide {
-            if can_widen {
-                if artist_rect.size.width != 0 {
-                    artist_rect.size.width += self.capabilities.width / 2;
-                    if artist_rect.top_left.x+artist_rect.size.width as i32 > self.capabilities.width  as i32{
-                        artist_rect.size.width = self.capabilities.width - (artist_rect.top_left.x - 4) as u32 
-                    }
-                }
-                if title_rect.size.width != 0 {
-                    title_rect.size.width += self.capabilities.width / 2;
-                    if title_rect.top_left.x+title_rect.size.width as i32 > self.capabilities.width  as i32{
-                        title_rect.size.width = self.capabilities.width - (title_rect.top_left.x - 4) as u32 
-                    }
-                }
-            }
-            // does not fall umder can_widen rule
-            time_rect.size.width += self.capabilities.width / 2;
-            if time_rect.top_left.x+time_rect.size.width as i32 > self.capabilities.width  as i32{
-                time_rect.size.width = self.capabilities.width - (time_rect.top_left.x - 4) as u32 
-            }
-            // and pin it to the bottom
-            time_rect.top_left.y = self.capabilities.height.saturating_sub(11) as i32;
-        }
-
         // Render and draw the easter egg SVG; color depth is inferred from the framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
@@ -2777,50 +2739,116 @@ impl DisplayManager {
             }
         }
 
-        // Now draw text overlays (borrow of self.easter_egg is free)
-        let artist_text = self.easter_egg.get_artist().to_string();
-        let title_text = self.easter_egg.get_title().to_string();
-        let track_time = self.easter_egg.get_track_time();
-        let show_remaining = self.show_remaining;
-        let remaining_time = self.remaining_time_secs;
+        // Layout-driven text overlay — resolve per-egg template from layout.yaml
+        let egg_name = self.easter_egg.egg_type_name().to_string();
+        let page = self.layout_manager.create_egg_page(&egg_name);
 
-        // Combined mode horizontal alignment: wide displays center, narrow displays left-align
-        use embedded_text::alignment::HorizontalAlignment;
-        let combined_h_align = if is_wide { HorizontalAlignment::Center } else { HorizontalAlignment::Left };
+        // Advance scroll states for every scrollable field in the egg layout
+        for field in page.fields() {
+            if field.scrollable {
+                self.scrolling_text.update_field_scroll(field);
+            }
+        }
 
+        // Gather display data (must be done before the framebuffer borrow below)
+        let artist       = self.artist.clone();
+        let title        = self.title.clone();
+        let album        = self.album.clone();
+        let album_artist = self.album_artist.clone();
+        let year         = self.year.clone();
+        let combination  = match (artist.is_empty(), title.is_empty()) {
+            (false, false) => format!("{} - {}", artist, title),
+            (false, true)  => artist.clone(),
+            (true,  false) => title.clone(),
+            _              => String::new(),
+        };
+        let time_str = if self.show_remaining {
+            format!("-{}", crate::deutils::seconds_to_hms(self.remaining_time_secs))
+        } else {
+            crate::deutils::seconds_to_hms(self.current_track_time_secs)
+        };
+
+        // Render — scrolling_text is borrowed immutably; framebuffer mutably.
+        // Rust allows these as disjoint field borrows on self.
+        let st = &self.scrolling_text;
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                if !artist_rect.is_zero_sized() {
-                    Self::draw_egg_artist_text(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen, combined_h_align)?;
-                }
-                if !is_combined && !title_rect.is_zero_sized() {
-                    Self::draw_egg_title_text(fb, &title_rect, &title_text, is_wide, can_widen)?;
-                }
-                if !time_rect.is_zero_sized() {
-                    Self::draw_egg_time_text(fb, &time_rect, track_time, show_remaining, remaining_time)?;
-                }
+                Self::render_egg_overlay_inner(fb, &page, st,
+                    &artist, &title, &album, &album_artist, &combination, &year, &time_str)?;
             }
             crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                if !artist_rect.is_zero_sized() {
-                    Self::draw_egg_artist_text(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen, combined_h_align)?;
-                }
-                if !is_combined && !title_rect.is_zero_sized() {
-                    Self::draw_egg_title_text(fb, &title_rect, &title_text, is_wide, can_widen)?;
-                }
-                if !time_rect.is_zero_sized() {
-                    Self::draw_egg_time_text(fb, &time_rect, track_time, show_remaining, remaining_time)?;
-                }
+                Self::render_egg_overlay_inner(fb, &page, st,
+                    &artist, &title, &album, &album_artist, &combination, &year, &time_str)?;
             }
             crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
-                if !artist_rect.is_zero_sized() {
-                    Self::draw_egg_artist_text(fb, &artist_rect, &artist_text, is_combined, is_wide, can_widen, combined_h_align)?;
-                }
-                if !is_combined && !title_rect.is_zero_sized() {
-                    Self::draw_egg_title_text(fb, &title_rect, &title_text, is_wide, can_widen)?;
-                }
-                if !time_rect.is_zero_sized() {
-                    Self::draw_egg_time_text(fb, &time_rect, track_time, show_remaining, remaining_time)?;
-                }
+                Self::render_egg_overlay_inner(fb, &page, st,
+                    &artist, &title, &album, &album_artist, &combination, &year, &time_str)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Render layout-driven text overlay fields on top of an easter egg SVG.
+    ///
+    /// Iterates the known bindable field names; for each one present in `page`:
+    ///   - `scrollable: true`  → horizontal scroller via `ScrollingText::render_field`
+    ///   - `scrollable: false` → word-wrapped `TextBox`
+    fn render_egg_overlay_inner<D>(
+        display: &mut D,
+        page: &crate::display::page::PageLayout,
+        scrolling_text: &crate::display::components::scrollers::ScrollingText,
+        artist: &str,
+        title: &str,
+        album: &str,
+        album_artist: &str,
+        combination: &str,
+        year: &str,
+        time_str: &str,
+    ) -> Result<(), DisplayError>
+    where
+        D: DrawTarget,
+        D::Color: crate::visualization::SvgColorDepth + Default + crate::display::ttf_font::BlendCoverage,
+        crate::display::color::Color: crate::display::color_proxy::ConvertColor<D::Color>,
+    {
+        use embedded_text::{style::TextBoxStyleBuilder, TextBox};
+        use embedded_graphics::mono_font::MonoTextStyle;
+        use crate::display::color_proxy::ConvertColor;
+
+        const FIELDS: &[&str] = &[
+            "artist", "title", "album", "album_artist", "combination", "year", "time",
+        ];
+
+        for &name in FIELDS {
+            let Some(field) = page.get_field(name) else { continue };
+
+            let text = match name {
+                "artist"       => artist,
+                "title"        => title,
+                "album"        => album,
+                "album_artist" => album_artist,
+                "combination"  => combination,
+                "year"         => year,
+                "time"         => time_str,
+                _              => continue,
+            };
+            if text.is_empty() { continue; }
+
+            if field.scrollable {
+                scrolling_text.render_field(field, display)
+                    .map_err(|_| DisplayError::DrawingError(format!("egg scroller: {name}")))?;
+            } else {
+                let font = field.font
+                    .unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_4X6);
+                let color: D::Color = field.fg_color.to_color();
+                let char_style = MonoTextStyle::new(font, color);
+                let style = TextBoxStyleBuilder::new()
+                    .alignment(field.horizontal_alignment)
+                    .vertical_alignment(field.vertical_alignment)
+                    .build();
+                TextBox::with_textbox_style(text, field.bounds, char_style, style)
+                    .draw(display)
+                    .map_err(|_| DisplayError::DrawingError(format!("egg label: {name}")))?;
             }
         }
 
@@ -2971,9 +2999,9 @@ impl DisplayManager {
     /// the MonoFont bitmaps.  Text-width measurement (for scroll loop gaps and
     /// centering) will also use TTF metrics, giving correct results for CJK and
     /// other variable-width scripts.
-    pub fn set_text_font(&mut self, font: std::sync::Arc<crate::display::ttf_font::TtfFont>) {
-        self.scrolling_text.set_ttf_font(std::sync::Arc::clone(&font));
-        self.ttf_font = Some(font);
+    pub fn set_text_font(&mut self, text_font: std::sync::Arc<crate::display::ttf_font::TtfFont>) {
+        self.scrolling_text.set_ttf_font(std::sync::Arc::clone(&text_font));
+        self.ttf_font = Some(text_font);
     }
 
     /// Apply auto-brightness based on local sunrise/sunset.
@@ -3269,11 +3297,12 @@ impl DisplayManager {
 
         // Update scrolling text component
         self.scrolling_text.set_full_track_info(
-            album_artist, 
-            album, 
-            title, 
+            album_artist,
+            album,
+            title,
             artist
         );
+        self.scrolling_text.set_year(year.clone());
         // Note: update() is called in render_scrolling() on each frame
 
         // Cover art: fetch if coverid changed (Rgb565 displays only)
@@ -3386,47 +3415,38 @@ impl DisplayManager {
     }
 
     /// Setup weather service with background polling
-    pub async fn setup_weather(&mut self, config: &str) -> Result<(), DisplayError> {
+    pub async fn setup_weather(&mut self, cfg: &crate::config::WeatherConfig) -> Result<(), DisplayError> {
         use crate::weather::Weather;
         use log::{info, error};
 
-        if config.is_empty() {
-            info!("Weather config is empty, skipping weather setup");
+        if !cfg.is_active() {
+            info!("No weather API key configured, skipping weather setup");
             return Ok(());
         }
 
-        info!("Setting up weather with config: {}", config);
+        info!("Setting up weather (api configured, lat={:?}, lon={:?})", cfg.latitude, cfg.longitude);
 
-        // Create Weather instance
-        let mut weather = Weather::new(config).await
+        let mut weather = Weather::new(cfg).await
             .map_err(|e| DisplayError::InitializationFailed(format!("Failed to create Weather: {}", e)))?;
 
-        // Initial fetch
         match weather.fetch_weather_data().await {
             Ok(_) => info!("Initial weather data fetched successfully"),
             Err(e) => error!("Failed initial weather data fetch: {}", e),
         }
 
-        // Extract initial data to populate display manager fields
         let weather_display = weather.weather_data.get_weather_display();
         self.weather_temp_units = weather_display.temp_units.clone();
         self.weather_wind_speed_units = weather_display.wind_speed_units.clone();
-        // Location name could be fetched from coordinates if needed
-        // For now, just set a placeholder
         self.weather_location_name = "Local".to_string();
 
-        // Prepare initial weather data for component
         let mut weather_vec = vec![weather_display.current.clone()];
         weather_vec.extend(weather_display.forecasts.clone());
         self.weather_display.update(weather_vec);
 
-        // Start polling with watch channel (lock-free!)
         let (_poll_handle, weather_rx) = weather.start_polling_with_watch().await
             .map_err(|e| DisplayError::InitializationFailed(format!("Failed to start weather polling: {}", e)))?;
 
-        // Store the receiver for updates
         self.weather_rx = Some(weather_rx);
-
         info!("Weather setup complete, background polling started");
         Ok(())
     }

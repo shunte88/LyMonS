@@ -102,6 +102,16 @@ impl LayoutManager {
         })
     }
 
+    /// Resolve the overlay layout for a named easter egg.
+    ///
+    /// Looks up `easter_egg_{egg_name}` in the loaded templates.  Returns an
+    /// empty PageLayout (no overlay) when the template is missing, so unknown
+    /// or "none" egg types produce no text overlay without error.
+    pub fn create_egg_page(&self, egg_name: &str) -> PageLayout {
+        let template = format!("easter_egg_{egg_name}");
+        self.resolve(&template).unwrap_or_else(|| PageLayout::new(&template))
+    }
+
     pub fn create_splash_page(&self) -> PageLayout {
         self.resolve("splash").unwrap_or_else(|| {
             log::error!("layout_manager: failed to resolve 'splash' template");

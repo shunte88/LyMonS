@@ -264,43 +264,18 @@ impl WeatherConditions {
 #[allow(irrefutable_let_patterns)]
 impl Weather {
     /// Creates a new `Weather` instance. Performs IP lookup if lat/lng are not provided.
-    pub async fn new(weather_config:&str) -> Result<Self, WeatherApiError> {
-
+    pub async fn new(cfg: &crate::config::WeatherConfig) -> Result<Self, WeatherApiError> {
         const VERSION: &'static str = concat!("LyMonS ", env!("CARGO_PKG_NAME"), " v", env!("CARGO_PKG_VERSION"));
 
-        let parts: Vec<&str> = weather_config.split(',').collect();
-        let api_key = parts.get(0).ok_or(WeatherApiError::ApiKeyError("no key specified".to_string()))?;
-        let mut lat_str: Option<String> = None;
-        let mut lng_str: Option<String> = None;
-        let mut transl: String = "".to_string();
-        // if US - imperial else metric
-        let mut units: String = "imperial".to_string(); // Default units
-        let mut icons: i32 = 1;
+        let api_key = cfg.api.as_deref().filter(|k| !k.is_empty())
+            .ok_or_else(|| WeatherApiError::ApiKeyError("no key specified".to_string()))?;
 
-        for part in parts.iter().skip(1) {
-            if part.starts_with("lat=") {
-                lat_str = Some(part.trim_start_matches("lat=").to_string());
-            } else if part.starts_with("lng="){
-                lng_str = Some(part.trim_start_matches("lng=").to_string());
-            } else if part.starts_with("long="){
-                lng_str = Some(part.trim_start_matches("long=").to_string());
-            } else if part.starts_with("lang=") {
-                transl = part.trim_start_matches("lang=").to_string();
-            } else if part.starts_with("units=") {
-                units = part.trim_start_matches("units=").to_string();
-            } else if part.starts_with("icons=") {
-                icons = part.trim_start_matches("icons=").to_string().parse().map_err(|_| WeatherApiError::InvalidInput("Invalid icons format".to_string()))?;
-            }
-        }
-
-        // Normalize units to API format (Tomorrow.io expects "metric" or "imperial")
-        units = match units.to_lowercase().as_str() {
-            "f" | "fahrenheit" | "imperial" => "imperial".to_string(),
-            "c" | "celsius" | "metric" => "metric".to_string(),
-            _ => units, // Keep as-is if already correct or unknown
-        };
-
+        let units = cfg.normalised_units();
+        let transl = cfg.translate.clone().unwrap_or_default();
         let conditions_units = units.clone();
+
+        // icons: default 1 (mono), could be extended via config later
+        let icons: i32 = 1;
 
         let mut headers = header::HeaderMap::new();
         headers.insert("User-Agent", header::HeaderValue::from_static(VERSION));
@@ -314,43 +289,24 @@ impl Weather {
             .timeout(Duration::from_millis(800))
             .build()
             .unwrap();
-     
-        let mut lat: Option<f64> = None;
-        let mut lng: Option<f64> = None;
-        let mut location_name = "Unknown Location".to_string(); // Initialize location name
 
-        if let (Some(l), Some(g)) = (lat_str, lng_str) {
-            lat = Some(l.parse().map_err(|_| WeatherApiError::InvalidInput("Invalid latitude format".to_string()))?);
-            lng = Some(g.parse().map_err(|_| WeatherApiError::InvalidInput("Invalid longitude format".to_string()))?);
-            location_name = format!("{:.4}, {:.4}", lat.unwrap(), lng.unwrap()); // Default name if manually provided
-        }
-
-        // If lat/lng are still None, perform IP lookup
-        if lat.is_none() || lng.is_none() {
+        let (final_lat, final_lng, location_name) = if let (Some(la), Some(lo)) = (cfg.latitude, cfg.longitude) {
+            (la, lo, format!("{:.4}, {:.4}", la, lo))
+        } else {
             info!("Latitude or longitude not provided. Attempting IP-based geolocation...");
             let geo_data = fetch_location().await?;
-
-            lat = Some(geo_data.latitude);
-            lng = Some(geo_data.longitude);
-            
-            // Populate location_name from geolocation data
-            location_name = if let (city, region_code) = (geo_data.city, geo_data.region_code) {
-                format!("{} {}", city, region_code)
-            } else {
-                "Unknown Location (GeoIP Failed)".to_string()
-            };
-            info!("Geolocation successful: {}", location_name);
-        }
-
-        let final_lat = lat.ok_or(WeatherApiError::GeolocationError("Could not determine latitude".to_string()))?;
-        let final_lng = lng.ok_or(WeatherApiError::GeolocationError("Could not determine longitude".to_string()))?;
+            let name = format!("{} {}", geo_data.city, geo_data.region_code);
+            info!("Geolocation successful: {}", name);
+            (geo_data.latitude, geo_data.longitude, name)
+        };
 
         let base_folder = match icons {
             1 => "./assets/mono/".to_string(),
             2 => "./assets/basic/".to_string(),
             3 => "./assets/color/".to_string(),
-            _ => "./assets/basic/".to_string()
+            _ => "./assets/basic/".to_string(),
         };
+
         Ok(Weather {
             active: false,
             base_url: "https://api.tomorrow.io/v4/weather/forecast".to_string(),
@@ -358,10 +314,12 @@ impl Weather {
             lat: final_lat,
             lng: final_lng,
             units,
-            translate: transl.to_string(),
+            translate: transl,
             client,
             icons,
-            weather_data: WeatherConditions::new(location_name, conditions_units, base_folder, final_lat, final_lng),
+            weather_data: WeatherConditions::new(
+                location_name, conditions_units, base_folder, final_lat, final_lng,
+            ),
             weather_tx: None,
             stop_sender: None,
             poll_handle: None,

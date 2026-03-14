@@ -169,6 +169,53 @@ impl<'t> LayoutResolver<'t> {
             }
         }
 
+        // Process inline fields (display dims serve as both display and parent)
+        if !variant.fields.is_empty() {
+            let mut field_geoms: HashMap<String, FieldGeom> = HashMap::new();
+            for field_def in &variant.fields {
+                let font_h = field_def.font.as_ref()
+                    .map(|f| f.to_mono_font().character_size.height as i32)
+                    .unwrap_or(0);
+
+                let field_ctx = ExprContext {
+                    display_width:  dw,
+                    display_height: dh,
+                    parent_width:   dw,
+                    parent_height:  dh,
+                    fields: &field_geoms,
+                    font_height: font_h,
+                };
+
+                let fx = eval(&field_def.x,      &field_ctx).unwrap_or(0);
+                let fy = eval(&field_def.y,      &field_ctx).unwrap_or(0);
+                let fw = eval(&field_def.width,  &field_ctx).unwrap_or(dw).max(0) as u32;
+                let fh = eval(&field_def.height, &field_ctx).unwrap_or(0).max(0) as u32;
+
+                field_geoms.insert(field_def.name.clone(), FieldGeom {
+                    x: fx, y: fy, w: fw as i32, h: fh as i32,
+                });
+
+                let bounds = Rectangle::new(Point::new(fx, fy), Size::new(fw, fh));
+                let field_type = kind_to_field_type(&field_def.field_type);
+                let fg = crate::display::color::Color::from(&field_def.fg_color);
+                let bg = field_def.bg_color.as_ref().map(crate::display::color::Color::from);
+                let font = field_def.font.as_ref().map(|f| f.to_mono_font());
+
+                all_fields.push(Field {
+                    name:                 field_def.name.clone(),
+                    field_type,
+                    bounds,
+                    border:               field_def.border,
+                    scrollable:           field_def.scrollable,
+                    font,
+                    fg_color:             fg,
+                    bg_color:             bg,
+                    horizontal_alignment: field_def.horizontal_alignment.clone().into(),
+                    vertical_alignment:   field_def.vertical_alignment.clone().into(),
+                });
+            }
+        }
+
         Some(PageLayout::new(format!("{}:{}", template_name, variant.name))
             .add_fields(all_fields))
     }

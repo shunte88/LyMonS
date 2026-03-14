@@ -57,12 +57,51 @@ impl LayoutTemplates {
         Self::from_yaml(include_str!("../../assets/layout.yaml"))
     }
 
-    /// Merge `other` into `self`.  Any component or template whose name exists
-    /// in `other` replaces the corresponding entry in `self`; new names are added.
-    /// This is called to apply a driver-specific override on top of the base.
+    /// Merge `other` into `self`.
+    ///
+    /// **Components** — full replacement: any component in `other` replaces the
+    /// same-named component in `self`; new names are added.
+    ///
+    /// **Templates** — field-level merge within each matching variant:
+    ///   - If a template name exists in both, variants are matched by name.
+    ///   - Within a matched variant, each field in `other` is upserted by name:
+    ///     existing fields are replaced, new fields are appended.  Base-only fields
+    ///     survive unchanged.  This lets a driver override add a single field (e.g.
+    ///     add `artist` to `easter_egg_pipboy`) without having to redeclare all the
+    ///     other fields from the base template.
+    ///   - Variants present in `other` but not in `self` are appended wholesale.
+    ///   - Template names that appear only in `other` are added as-is.
     pub fn merge(&mut self, other: LayoutTemplates) {
         self.components.extend(other.components);
-        self.templates.extend(other.templates);
+
+        for (name, other_tmpl) in other.templates {
+            match self.templates.get_mut(&name) {
+                None => { self.templates.insert(name, other_tmpl); }
+                Some(base_tmpl) => {
+                    for other_variant in other_tmpl.variants {
+                        match base_tmpl.variants.iter_mut().find(|v| v.name == other_variant.name) {
+                            None => base_tmpl.variants.push(other_variant),
+                            Some(base_variant) => {
+                                // Upsert each field by name
+                                for other_field in other_variant.fields {
+                                    match base_variant.fields.iter_mut().find(|f| f.name == other_field.name) {
+                                        Some(base_field) => *base_field = other_field,
+                                        None => base_variant.fields.push(other_field),
+                                    }
+                                }
+                                // Regions in the override also replace their base counterparts
+                                for other_region in other_variant.regions {
+                                    match base_variant.regions.iter_mut().find(|r| r.component == other_region.component) {
+                                        Some(base_region) => *base_region = other_region,
+                                        None => base_variant.regions.push(other_region),
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Load the base layout and, if `{asset_path}layout.yaml` exists on disk,
@@ -225,7 +264,16 @@ pub struct Variant {
     pub match_rule: MatchRule,
 
     /// Component placements that make up this page.
+    #[serde(default)]
     pub regions: Vec<Region>,
+
+    /// Inline field definitions — an alternative to `regions` for simple
+    /// layouts that don't need a reusable component.  Fields here are
+    /// resolved with `display.*` as both display and parent dimensions,
+    /// and may reference each other by name (same rules as component fields).
+    /// Both `regions` and `fields` may be present; regions are processed first.
+    #[serde(default)]
+    pub fields: Vec<FieldDef>,
 }
 
 /// Display characteristic filters.  Each field is `None` → wildcard.
