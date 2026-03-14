@@ -1,0 +1,32 @@
+# your display device - see the README for detail configuration requirements
+device: ssd1322
+
+# your player name - on pCP this will automatically be picked up
+player: mythy
+
+visualization:
+  vumeter
+  histogram
+
+# the main clock display - big ol' character font
+clock_font: roboto
+# use this font in scrollers, support for CJK and cyrillic text via your choice of font
+text_font: roboto
+
+# tommorow.io weather service - get you free API key and configure your location
+# specify your language, e.g fr, de, pl, etc for inline translation
+weather:
+  key:
+  units:
+  translate:
+  latitude:
+  longitude:
+
+# if not using weather, specify your location for sunrise / sunset determination
+# if these aren't specified then your internet provider location will be used
+# no WAN connection - no worries - LyMonS won't complain
+
+latitude:
+longitude:
+
+
