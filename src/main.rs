@@ -752,18 +752,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load config (CLI + YAML file, merged and validated)
     let cfg = config::load().map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
-    let name_filter  = cfg.player.as_deref().unwrap_or("-");
-    let scroll_mode  = cfg.scroll_mode.as_deref().unwrap_or("cylon");
-    let clock_font   = cfg.clock_font.as_deref().unwrap_or("7seg");
-    let font         = cfg.text_font.as_deref().unwrap_or("").to_string();
-    let easter_egg   = cfg.easter_egg.as_deref().unwrap_or("none");
-    let viz_type     = cfg.visualizer.as_deref().unwrap_or("no_viz");
-    let show_splash  = cfg.show_splash.unwrap_or(true);
-    let show_metrics = cfg.show_metrics.unwrap_or(false);
-    let show_remaining = cfg.show_remaining.unwrap_or(false);
-    let debug_enabled  = cfg.log_level.as_deref().map(|l| l == "debug").unwrap_or(false);
-    let emulated       = cfg.display.as_ref().and_then(|d| d.emulated).unwrap_or(false);
-    let mac_addr       = get_mac_addr();
+    let name_filter     = cfg.player.as_deref().unwrap_or("-");
+    let scroll_mode     = cfg.scroll_mode.as_deref().unwrap_or("cylon");
+    let clock_font      = cfg.clock_font.as_deref().unwrap_or("7seg");
+    let text_font     = cfg.text_font.as_deref().unwrap_or("").to_string();
+    let text_font_size   = cfg.text_font_size.unwrap_or(9.0_f32);
+    let easter_egg      = cfg.easter_egg.as_deref().unwrap_or("none");
+    let viz_type        = cfg.visualizer.as_deref().unwrap_or("no_viz");
+    let hist_scheme     = cfg.hist_scheme.as_deref().unwrap_or("classic");
+    let show_splash     = cfg.show_splash.unwrap_or(true);
+    let show_metrics    = cfg.show_metrics.unwrap_or(false);
+    let show_remaining  = cfg.show_remaining.unwrap_or(false);
+    let debug_enabled   = cfg.log_level.as_deref().map(|l| l == "debug").unwrap_or(false);
+    let emulated        = cfg.display.as_ref().and_then(|d| d.emulated).unwrap_or(false);
+    let mac_addr      = get_mac_addr();
     let effective_weather = cfg.effective_weather();
     let (astral_lat, astral_lon) = cfg.effective_lat_lng();
 
@@ -792,17 +794,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // For emulator: create EmulatorDriver with specs from config
         info!("Creating emulator with DisplayManager (unified approach)");
 
-        // Determine display specs from config (for emulation)
-        let (width, height, is_grayscale, display_name) = match display_config.driver {
-            Some(config::DriverKind::Ssd1306) => (128, 64, false, "SSD1306"),
-            Some(config::DriverKind::Ssd1309) => (128, 64, false, "SSD1309"),
-            Some(config::DriverKind::Sh1106) => (132, 64, false, "SH1106"),
-            Some(config::DriverKind::Ssd1322) => (256, 64, true, "SSD1322"), // Grayscale (Gray4)
-            Some(config::DriverKind::Sh1122)  => (256, 64, true, "SH1122"),  // Grayscale (Gray4)
+        // Determine display specs: driver defaults, overridden by config width/height.
+        // Useful for displays that ship in multiple sizes (ST7789: 320×170, 300×170, 240×240…)
+        let (default_w, default_h, is_grayscale, display_name) = match display_config.driver {
+            Some(config::DriverKind::Ssd1306)     => (128, 64,  false, "SSD1306"),
+            Some(config::DriverKind::Ssd1309)     => (128, 64,  false, "SSD1309"),
+            Some(config::DriverKind::Sh1106)      => (132, 64,  false, "SH1106"),
+            Some(config::DriverKind::Ssd1322)     => (256, 64,  true,  "SSD1322"),
+            Some(config::DriverKind::Sh1122)      => (256, 64,  true,  "SH1122"),
             Some(config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
-            Some(config::DriverKind::St7789) => (320, 170, true, "ST7789"),
-            None => (256, 64, true, "SSD1322"), // default when no driver in config
+            Some(config::DriverKind::St7789)      => (320, 170, true,  "ST7789"),
+            None                                  => (128, 64,  false, "SSD1306"),
         };
+        let width  = display_config.width .unwrap_or(default_w);
+        let height = display_config.height.unwrap_or(default_h);
 
         let is_rgb565 = matches!(display_config.driver, Some(config::DriverKind::St7789));
 
@@ -842,6 +847,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             clock_font,
             show_metrics,
             easter_egg,
+            hist_scheme,
         )?;
 
         // Set emulator state for keyboard shortcuts
@@ -909,13 +915,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             display_manager.set_astral_service(astral);
         }
 
-        // Load TTF text font (graceful — MonoFont used if zip not found)
-        {
-            let text_font_name = font.clone();
-            let zip_path = format!("./data/{}-text.zip", text_font_name);
-            if let Some(ttf) = display::ttf_font::TtfFont::load_from_zip(&zip_path, 9.0) {
-                display_manager.set_text_font(ttf);
-            }
+        // Load TTF text_font (graceful — MonoFont used if zip not found)
+        let text_font_name = text_font.clone();
+        let font_size = text_font_size.clamp(9.0, 30.0);
+        let zip_path = format!("./data/{}-text.zip", text_font_name);
+        if let Some(ttf) = display::ttf_font::TtfFont::load_from_zip(&zip_path, font_size) {
+            display_manager.set_text_font(ttf);
         }
 
         if show_splash {
@@ -987,6 +992,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         clock_font,
         show_metrics,
         easter_egg,
+        hist_scheme,
     )?;
 
     let inet =  local_ip().unwrap();
@@ -1060,12 +1066,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Load TTF text font (graceful — MonoFont used if zip not found)
-    {
-        let text_font_name = font.clone();
-        let zip_path = format!("./data/{}-text.zip", text_font_name);
-        if let Some(ttf) = display::ttf_font::TtfFont::load_from_zip(&zip_path, 9.0) {
-            display_manager.set_text_font(ttf);
-        }
+    let text_font_name = text_font.clone();
+    let font_size = text_font_size.clamp(9.0, 30.0);
+    let zip_path = format!("./data/{}-text.zip", text_font_name);
+    if let Some(ttf) = display::ttf_font::TtfFont::load_from_zip(&zip_path, font_size) {
+        display_manager.set_text_font(ttf);
     }
 
     if show_splash {

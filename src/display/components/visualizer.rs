@@ -27,7 +27,7 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::mono_font::iso_8859_13::FONT_5X8;
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
-use crate::display::color_proxy::{ColorProxy, Pal16};
+use crate::display::color_proxy::{ColorProxy, GradientLut, HistColorScheme, Pal16};
 use crate::display::layout::LayoutConfig;
 use crate::visualizer::Visualizer;
 use crate::visualization::{Visualization, Visual, SvgColorDepth};
@@ -95,17 +95,26 @@ pub struct VisualizerComponent {
     visualization_type: Visualization,
     /// Visualizer panel bounds for AIO modes — set from YAML layout before each render.
     aio_viz_rect: Option<Rectangle>,
+    /// Pre-computed gradient LUT for Rgb565 histogram fills. Built once at construction.
+    hist_lut: GradientLut,
 }
 
 impl VisualizerComponent {
     /// Create a new visualizer component
-    pub fn new(layout: LayoutConfig, visualization_type: Visualization) -> Self {
+    pub fn new(layout: LayoutConfig, visualization_type: Visualization, hist_scheme: &str) -> Self {
         let mut viz_state = crate::vision::LastVizState::default();
         // Set wide flag based on layout - critical for correct SVG loading
         viz_state.wide = layout.visualizer.is_wide;
         // Set spectrum history buffer size to match display width
         viz_state.spectrum_max_cols = layout.width as usize;
         let viz = crate::visualization::get_visual(visualization_type, viz_state.wide, layout.clone());
+        let scheme = match hist_scheme {
+            "ocean"  => HistColorScheme::Ocean,
+            "fire"   => HistColorScheme::Fire,
+            "neon"   => HistColorScheme::Neon,
+            _        => HistColorScheme::Classic,
+        };
+        let hist_lut = GradientLut::build(scheme, layout.height as u32);
         Self {
             visualizer: None,
             state: VisualizerState::default(),
@@ -114,6 +123,7 @@ impl VisualizerComponent {
             layout,
             visualization_type,
             aio_viz_rect: None,
+            hist_lut,
         }
     }
 
@@ -190,10 +200,10 @@ impl VisualizerComponent {
                 Self::draw_peak_stereo(target, viz_mut, s.this.db_l, s.this.db_r, s.this.hold_l, s.this.hold_r, s)
             }
             Visualization::HistMono => {
-                Self::draw_hist_mono::<D, P>(target, viz_mut, s.last_bands_m.clone(), s)
+                Self::draw_hist_mono::<D, P>(target, viz_mut, s.last_bands_m.clone(), s, &self.hist_lut)
             }
             Visualization::HistStereo => {
-                Self::draw_hist_pair::<D, P>(target, viz_mut, s.last_bands_l.clone(), s.last_bands_r.clone(), s)
+                Self::draw_hist_pair::<D, P>(target, viz_mut, s.last_bands_l.clone(), s.last_bands_r.clone(), s, &self.hist_lut)
             }
             Visualization::VuMono => {
                 Self::draw_vu_mono(target, viz_mut, s.this.db_m, s)
@@ -209,7 +219,7 @@ impl VisualizerComponent {
             Visualization::HistAio => {
                 let (bands, bands_l, bands_r) = (s.last_bands_m.clone(), s.last_bands_l.clone(), s.last_bands_r.clone());
                 let rect = self.aio_viz_rect;
-                Self::draw_aio_hist::<D, P>(target, viz_mut, rect, bands, bands_l, bands_r, s)
+                Self::draw_aio_hist::<D, P>(target, viz_mut, rect, bands, bands_l, bands_r, s, &self.hist_lut)
             }
             Visualization::WaveformSpectrum => {
                 Self::draw_waveform_spectrum::<D, P>(target, s.last_waveform_l.clone(), s.last_waveform_r.clone(), Vec::new(), s, &self.layout)
@@ -409,6 +419,7 @@ impl VisualizerComponent {
         panel_size: Size,
         bars: &[u8],
         caps: &[u8],
+        lut: &GradientLut,
     ) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = P::Output> + OriginDimensions,
@@ -440,24 +451,38 @@ impl VisualizerComponent {
         let max_level = PEAK_METER_LEVELS_MAX as u32;
         let h_u = (panel_size.height as u32).saturating_sub(2);
 
-        let bar_color = P::proxy(Pal16::LightCyan);
-        let cap_color = P::on();
+        let cap_color = P::on(); // caps are always max brightness — distinct from the gradient
+        let h_f = (h_u as f32 - 1.0).max(1.0);
 
         for (i, (&lvl, &cap)) in bars.iter().zip(caps.iter()).enumerate() {
-            if i > n as usize - 1  { break; }
+            if i > n as usize - 1 { break; }
             let x = origin.x + (i as i32) * stride;
             let level_u = (lvl as u32).min(max_level);
             let bar_h = ((level_u * h_u) / max_level) as i32;
             let cap_level_u = (cap as u32).min(max_level);
             let cap_h = ((cap_level_u * h_u) / max_level) as i32;
+
             if bar_h > 0 {
-                let y = origin.y + (h - bar_h);
-                Rectangle::new(Point::new(x, y), Size::new(bar_w as u32, bar_h as u32)).into_styled(PrimitiveStyle::with_fill(bar_color)).draw(display)?;
+                // draw_iter: single call, driver batches all pixels — colour computed per row.
+                // pct = 0.0 at panel bottom (quiet), 1.0 at panel top (peak).
+                let bar_top_y = origin.y + (h - bar_h);
+                let bar_rect = Rectangle::new(
+                    Point::new(x, bar_top_y),
+                    Size::new(bar_w as u32, bar_h as u32),
+                );
+                display.draw_iter(bar_rect.points().map(|pt| {
+                    let panel_y = (pt.y - origin.y) as usize;
+                    let pct = 1.0 - panel_y as f32 / h_f;
+                    Pixel(pt, P::bar_color_at_y(pct.clamp(0.0, 1.0), lut, panel_y))
+                }))?;
             }
+
             if cap_h > 0 {
                 let mut cy = origin.y + (h - cap_h) - (Self::CAP_THICKNESS_PX as i32 - 1);
                 if cy < origin.y { cy = origin.y; }
-                Rectangle::new(Point::new(x, cy), Size::new(bar_w as u32, Self::CAP_THICKNESS_PX)).into_styled(PrimitiveStyle::with_fill(cap_color)).draw(display)?;
+                Rectangle::new(Point::new(x, cy), Size::new(bar_w as u32, Self::CAP_THICKNESS_PX))
+                    .into_styled(PrimitiveStyle::with_fill(cap_color))
+                    .draw(display)?;
             }
         }
 
@@ -469,7 +494,8 @@ impl VisualizerComponent {
         viz: &mut Visual,
         bands_l: Vec<u8>,
         bands_r: Vec<u8>,
-        state: &mut crate::vision::LastVizState
+        state: &mut crate::vision::LastVizState,
+        lut: &GradientLut,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = P::Output> + OriginDimensions,
@@ -505,8 +531,8 @@ impl VisualizerComponent {
         let title_pos = h - title_base; 
         let pane_w = (inner_w - gap) / 2;
 
-        Self::draw_hist_panel::<D, P>(display, "Left",  title_base as u32, title_pos, Point::new(mx, my),              Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_l, &state.cap_l)?;
-        Self::draw_hist_panel::<D, P>(display, "Right", title_base as u32, title_pos, Point::new(mx + pane_w + gap, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_r, &state.cap_r)?;
+        Self::draw_hist_panel::<D, P>(display, "Left",  title_base as u32, title_pos, Point::new(mx, my),              Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_l, &state.cap_l, lut)?;
+        Self::draw_hist_panel::<D, P>(display, "Right", title_base as u32, title_pos, Point::new(mx + pane_w + gap, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_r, &state.cap_r, lut)?;
 
         Ok(true)
     }
@@ -515,7 +541,8 @@ impl VisualizerComponent {
         display: &mut D,
         viz: &mut Visual,
         bands: Vec<u8>,
-        state: &mut crate::vision::LastVizState
+        state: &mut crate::vision::LastVizState,
+        lut: &GradientLut,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = P::Output> + OriginDimensions,
@@ -547,7 +574,7 @@ impl VisualizerComponent {
         let title_pos = h - title_base; 
         let pane_w = inner_w;
 
-        Self::draw_hist_panel::<D, P>(display, "Downmix", title_base as u32, title_pos, Point::new(mx, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_m, &state.cap_m)?;
+        Self::draw_hist_panel::<D, P>(display, "Downmix", title_base as u32, title_pos, Point::new(mx, my), Size::new(pane_w as u32, inner_h as u32), &state.draw_bands_m, &state.cap_m, lut)?;
 
         Ok(true)
     }
@@ -694,6 +721,7 @@ impl VisualizerComponent {
         bands_l: Vec<u8>,
         bands_r: Vec<u8>,
         state: &mut crate::vision::LastVizState,
+        lut: &GradientLut,
     ) -> Result<bool, D::Error>
     where
         D: DrawTarget<Color = P::Output> + OriginDimensions,
@@ -737,13 +765,13 @@ impl VisualizerComponent {
                 display, "L", title_base as u32, panel_h - title_base,
                 Point::new(meter_x + mx, my),
                 Size::new(pane_w as u32, inner_h as u32),
-                &state.draw_bands_l, &state.cap_l,
+                &state.draw_bands_l, &state.cap_l, lut,
             )?;
             Self::draw_hist_panel::<D, P>(
                 display, "R", title_base as u32, panel_h - title_base,
                 Point::new(meter_x + mx + pane_w + gap, my),
                 Size::new(pane_w as u32, inner_h as u32),
-                &state.draw_bands_r, &state.cap_r,
+                &state.draw_bands_r, &state.cap_r, lut,
             )?;
 
         } else {
@@ -761,7 +789,7 @@ impl VisualizerComponent {
                 title_base as u32, panel_h - title_base,
                 Point::new(meter_x + mx, my),
                 Size::new(inner_w as u32, meter_h as u32),
-                &state.draw_bands_m, &state.cap_m,
+                &state.draw_bands_m, &state.cap_m, lut,
             )?;
 
         }

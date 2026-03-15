@@ -97,6 +97,8 @@ impl TtfFont {
     /// Returns `None` if the file cannot be opened, the zip is unreadable,
     /// or no font entry is found inside.  Logs warnings in all error cases.
     pub fn load_from_zip(zip_path: &str, pixel_size: f32) -> Option<Arc<Self>> {
+
+        info!("ttf_font: load font {} and render @ {}px", zip_path, pixel_size);
         let file = match std::fs::File::open(zip_path) {
             Ok(f) => f,
             Err(e) => {

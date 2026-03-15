@@ -99,6 +99,7 @@ impl PluginLoader {
         if let Some(home) = dirs_next::home_dir() {
             paths.push(home.join(".local/lib/lymons/drivers"));
             paths.push(home.join(".lymons/drivers"));
+            paths.push(home.join(".drivers"));
         }
 
         // 4. System directories

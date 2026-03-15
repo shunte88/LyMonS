@@ -23,7 +23,8 @@
  */
 
 #![allow(dead_code)] // color proxy helpers; some conversion methods reserved
-
+#[allow(unused_imports)]
+use log::info;
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4, GrayColor, Rgb565, RgbColor};
 use embedded_graphics::prelude::PixelColor;
 
@@ -116,7 +117,116 @@ pub trait ColorProxy {
     /// Map a 0-255 intensity value to a pixel color.
     /// For monochrome: threshold at 128. For Gray4: map to 0-15.
     fn spectrum_pixel(intensity: u8) -> Self::Output;
+
+    /// Color for a histogram bar segment at the given level percentage.
+    ///
+    /// `pct`: 0.0 = quiet/bottom of range, 1.0 = peak/top of range.
+    ///
+    /// - Monochrome: flat on-color (unchanged from current).
+    /// - Gray4: subtle dim→bright gradient.
+    /// - Rgb565: smooth green → yellow → red gradient.
+    fn bar_color(pct: f32) -> Self::Output;
+
+    /// Like `bar_color` but uses a pre-computed `GradientLut` when available.
+    ///
+    /// Default falls back to `bar_color(pct)`.  `Rgb565Proxy` overrides this
+    /// to look up the user-selected colour scheme from the LUT.
+    ///
+    /// `panel_y`: rows from panel top (0 = top/loudest, panel_height-1 = bottom/quietest).
+    #[inline]
+    fn bar_color_at_y(pct: f32, _lut: &GradientLut, _panel_y: usize) -> Self::Output {
+        Self::bar_color(pct)
+    }
 }
+
+/// Named colour scheme for histogram bar gradients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HistColorScheme {
+    /// Green (quiet) → yellow → red (loud).  Default.
+    #[default]
+    Classic,
+    /// Dark blue (quiet) → cyan → white (loud).
+    Ocean,
+    /// Dark red (quiet) → orange → yellow (loud).
+    Fire,
+    /// Purple (quiet) → magenta → hot-pink (loud).
+    Neon,
+}
+
+/// Pre-computed Rgb565 gradient look-up table.
+///
+/// Stores one colour per pixel row of the panel height.  Index 0 is the top
+/// of the panel (loudest / highest level); index `height-1` is the bottom
+/// (quietest).  Use [`color_at_panel_y`](Self::color_at_panel_y) to look up
+/// the colour for an absolute pixel offset within the panel.
+pub struct GradientLut {
+    colors: Vec<Rgb565>,
+}
+
+impl GradientLut {
+    /// Build a gradient LUT for the given scheme and panel height.
+    pub fn build(scheme: HistColorScheme, height: u32) -> Self {
+        let h = height.max(1);
+        info!("Build histo-gradient LUT {:?} @{}", scheme, height);
+        let colors = (0..h).map(|y| {
+            // y=0 is panel top (loudest), y=h-1 is panel bottom (quietest).
+            let pct = 1.0 - y as f32 / (h - 1) as f32;
+            Self::scheme_color(scheme, pct)
+        }).collect();
+        Self { colors }
+    }
+
+    fn scheme_color(scheme: HistColorScheme, pct: f32) -> Rgb565 {
+        let p = pct.clamp(0.0, 1.0);
+        match scheme {
+            HistColorScheme::Classic => Rgb565Proxy::bar_color(p),
+            HistColorScheme::Ocean => {
+                if p >= 0.8 { Rgb565::WHITE }
+                else if p >= 0.4 {
+                    let t = (p - 0.4) / 0.4;
+                    Rgb565::new(lerp5(0, 31, t), lerp6(48, 63, t), lerp5(24, 31, t))
+                } else {
+                    let t = p / 0.4;
+                    Rgb565::new(0, lerp6(16, 48, t), lerp5(12, 24, t))
+                }
+            }
+            HistColorScheme::Fire => {
+                if p >= 0.8 {
+                    let t = (p - 0.8) / 0.2;
+                    Rgb565::new(31, lerp6(50, 63, t), 0)  // orange → yellow
+                } else if p >= 0.4 {
+                    let t = (p - 0.4) / 0.4;
+                    Rgb565::new(lerp5(18, 31, t), lerp6(20, 50, t), 0)  // dark red → orange
+                } else {
+                    let t = p / 0.4;
+                    Rgb565::new(lerp5(6, 18, t), lerp6(0, 20, t), 0)    // ember → dark red
+                }
+            }
+            HistColorScheme::Neon => {
+                if p >= 0.8 {
+                    let t = (p - 0.8) / 0.2;
+                    Rgb565::new(31, lerp6(10, 20, t), lerp5(28, 20, t)) // hot-pink
+                } else if p >= 0.4 {
+                    let t = (p - 0.4) / 0.4;
+                    Rgb565::new(lerp5(16, 31, t), 0, lerp5(28, 28, t))  // purple → magenta
+                } else {
+                    let t = p / 0.4;
+                    Rgb565::new(lerp5(8, 16, t), 0, lerp5(24, 28, t))   // deep purple
+                }
+            }
+        }
+    }
+
+    /// Look up the gradient colour for a pixel at `panel_y` rows from the
+    /// top of the panel (0 = panel top / loudest).
+    pub fn color_at_panel_y(&self, panel_y: usize) -> Rgb565 {
+        self.colors.get(panel_y).copied().unwrap_or(Rgb565::GREEN)
+    }
+}
+
+// Component-wise linear interpolation helpers for 5-bit and 6-bit channels.
+#[inline] fn lerp5(a: u8, b: u8, t: f32) -> u8 { (a as f32 + (b as f32 - a as f32) * t).round() as u8 }
+#[inline] fn lerp6(a: u8, b: u8, t: f32) -> u8 { (a as f32 + (b as f32 - a as f32) * t).round() as u8 }
 
 /// Color proxy for monochrome displays
 pub struct MonoProxy;
@@ -138,6 +248,10 @@ impl ColorProxy for MonoProxy {
 
     fn spectrum_pixel(intensity: u8) -> BinaryColor {
         if intensity > 128 { BinaryColor::On } else { BinaryColor::Off }
+    }
+
+    fn bar_color(_pct: f32) -> BinaryColor {
+        BinaryColor::On
     }
 }
 
@@ -161,6 +275,24 @@ impl ColorProxy for Gray4Proxy {
 
     fn spectrum_pixel(intensity: u8) -> Gray4 {
         Gray4::new((intensity as u32 * 15 / 255) as u8)
+    }
+
+    fn bar_color(pct: f32) -> Gray4 {
+        // dim (level 4) at quiet end → bright (level 15) at peak
+        Gray4::new((4 + (pct.clamp(0.0, 1.0) * 11.0) as u8).min(15))
+    }
+
+    #[inline]
+    fn bar_color_at_y(_pct: f32, lut: &GradientLut, panel_y: usize) -> Gray4 {
+        // Derive perceptual luminance from the scheme's Rgb565 LUT colour.
+        // Rec.601 weights (integer-friendly): 0.299 R + 0.587 G + 0.114 B
+        // Rgb565: r∈0..31, g∈0..63, b∈0..31 → normalise to 0..1 before weighting.
+        let c = lut.color_at_panel_y(panel_y);
+        let luma = (c.r() as f32 / 31.0) * 0.299
+                 + (c.g() as f32 / 63.0) * 0.587
+                 + (c.b() as f32 / 31.0) * 0.114;
+        // Map luma 0.0–1.0 → Gray4 level 4–15 (floor keeps bars visible at low levels)
+        Gray4::new((4 + (luma * 11.0) as u8).min(15))
     }
 }
 
@@ -197,6 +329,28 @@ impl ColorProxy for Rgb565Proxy {
             ((((i - 192) * 255) / 63) as u8, 255u8, 0u8)
         };
         Rgb565::new(r >> 3, g >> 2, b >> 3)
+    }
+
+    fn bar_color(pct: f32) -> Rgb565 {
+        let p = pct.clamp(0.0, 1.0);
+        if p >= 0.8 {
+            // 80–100%: yellow → red
+            let t = (p - 0.8) / 0.2;
+            Rgb565::new(31, lerp6(50, 0, t), 0)
+        } else if p >= 0.6 {
+            // 60–80%: green → yellow
+            let t = (p - 0.6) / 0.2;
+            Rgb565::new(lerp5(0, 31, t), 63, 0)
+        } else {
+            // 0–60%: dark green → bright green
+            let t = p / 0.6;
+            Rgb565::new(0, lerp6(20, 63, t), 0)
+        }
+    }
+
+    #[inline]
+    fn bar_color_at_y(_pct: f32, lut: &GradientLut, panel_y: usize) -> Rgb565 {
+        lut.color_at_panel_y(panel_y)
     }
 }
 

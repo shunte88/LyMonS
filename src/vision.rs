@@ -55,8 +55,9 @@ pub const LEVEL_DECAY_STEPS_PER_FRAME: u8 = 1;  // visual fall rate (levels / fr
 const LOCK_TRY_WINDOW_MS: u32 = 5;              // total budget for try-loop
 
 // Timings
-pub const POLL_ENABLED: Duration = Duration::from_millis(16); // ~60 FPS
-pub const POLL_IDLE: Duration    = Duration::from_millis(48); // chill when idle
+pub const POLL_ENABLED: Duration     = Duration::from_millis(16); // ~60 FPS
+pub const POLL_IDLE: Duration        = Duration::from_millis(48); // chill when idle
+pub const STALE_THRESHOLD: Duration  = Duration::from_secs(3);    // shmem writer silence → stale
 
 /// simple state carried across calls (last metrics + peak-hold)
 #[derive(Debug, PartialEq, Clone)]
@@ -601,6 +602,11 @@ impl VisReader {
         } else {
             Ok(false)
         }
+    }
+
+    /// True when the shmem writer (squeezelite) has stopped pushing new frames.
+    pub fn is_stale(&self) -> bool {
+        self.last_progress.elapsed() > STALE_THRESHOLD
     }
 
     /// Optional: re-scan and remap when the writer has likely restarted and data have gone stale.

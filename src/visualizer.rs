@@ -121,6 +121,8 @@ pub enum VizPayload {
         spectrum_column: Vec<u8>, // Current FFT frequency bands for this frame
     },
     NoVisualization {},
+    /// Squeezelite has stopped writing to shmem — warn the user.
+    ShmemStale,
 }
 
 /// Commands sent to the background worker.
@@ -260,6 +262,7 @@ async fn visualizer_shm_loop(
     // State
     let mut enabled = false;
     let mut kind = Visualization::VuStereo;
+    let mut shmem_stale_sent = false; // avoid re-spamming ShmemStale every poll cycle
 
     // Peak-hold (for peak meters & center peak). Units: 0..=PEAK_METER_LEVELS_MAX
     let _peak_hold_l: u8 = 0;
@@ -441,11 +444,23 @@ async fn visualizer_shm_loop(
                 Visualization::NoVisualization => {}
             }
         }) {
-            Ok(true)  => { /* published */ }
+            Ok(true)  => {
+                // Fresh frame received — clear any prior stale warning
+                if shmem_stale_sent {
+                    shmem_stale_sent = false;
+                    // Signal manager that data is live again (re-use NoVisualization as a clear)
+                    // We don't have a "live again" variant; manager clears on any real payload.
+                }
+            }
             Ok(false) => {
-                // nothing new; keep CPU low and try remap if stale
+                // Nothing new; keep CPU low and try remap if stale
                 sleep(POLL_ENABLED).await;
                 let _ = reader.reopen_if_stale();
+                // Warn once when squeezelite stops writing audio data to shmem
+                if reader.is_stale() && !shmem_stale_sent {
+                    shmem_stale_sent = true;
+                    publish(&mut out_tx, 0, false, 0, kind, VizPayload::ShmemStale);
+                }
             }
             Err(e) => {
                 error!("visualizer: snapshot error: {e}");

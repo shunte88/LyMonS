@@ -1,4 +1,4 @@
-# your display device - see the README for detail configuration requirements
+# your display device - see the README for detailed configuration requirements
 device: ssd1322
 
 # your player name - on pCP this will automatically be picked up

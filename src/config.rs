@@ -70,10 +70,10 @@ pub enum BusConfig {
     },
     Spi {
         bus:      String,
-        speed_hz: Option<u32>,
         dc_pin:   u32,
         rst_pin:  Option<u32>,
         cs_pin:   Option<u32>,
+        speed_hz: Option<u32>,
     },
 }
 
@@ -94,11 +94,13 @@ pub struct Config {
     pub log_level:      Option<String>,  // "info" | "debug"
     pub player:         Option<String>,  // LMS player name to monitor
     pub text_font:      Option<String>,  // TTF font name (zip in ./data/)
+    pub text_font_size: Option<f32>,     // TTF font size in points - defaults to 9.0
     pub scroll_mode:    Option<String>,  // "cylon" | "loop" | "loopleft"
     pub show_remaining: Option<bool>,
     pub clock_font:     Option<String>,
     pub easter_egg:     Option<String>,
     pub visualizer:     Option<String>,
+    pub hist_scheme:    Option<String>,  // "classic" | "ocean" | "fire" | "neon"
     pub show_metrics:   Option<bool>,
     pub show_splash:    Option<bool>,
     pub i2c_bus:        Option<String>,
@@ -145,7 +147,7 @@ impl Config {
 )]
 pub struct Cli {
     /// Path to YAML config file (overrides default search)
-    #[arg(short = 'c', long, value_hint = ValueHint::FilePath)]
+    #[arg(short = 'c', long="config", value_hint = ValueHint::FilePath)]
     pub config: Option<PathBuf>,
 
     /// Enable debug logging
@@ -189,11 +191,15 @@ pub struct Cli {
     pub remain: bool,
 
     /// TTF text font name (must have ./data/{name}-text.zip)
-    #[arg(short = 'F', long)]
-    pub font: Option<String>,
+    #[arg(short = 'F', long = "text_font")]
+    pub text_font: Option<String>,
+
+    /// TTF text font size (must have ./data/{name}-text.zip)
+    #[arg(short = 'f', long = "text_font_size")]
+    pub text_font_size: Option<f32>,
 
     /// Clock font
-    #[arg(short = 'C', long = "clock-font",
+    #[arg(short = 'C', long = "clock_font",
           value_parser = ["7seg","dejavu","dotty","gawker","ledreal","marvel","moomy","noto","poppins","roboto"])]
     pub clock_font: Option<String>,
 
@@ -219,7 +225,7 @@ pub struct Cli {
     pub emulated: bool,
 
     /// Display driver (emulator / config override)
-    #[arg(short = 'd', long,
+    #[arg(short = 'd', long = "driver",
           value_parser = ["ssd1306","ssd1309","ssd1322","sh1106","sh1122","sharpmemory","st7789"])]
     pub driver: Option<String>,
 
@@ -227,6 +233,10 @@ pub struct Cli {
     #[arg(short = 'a', long = "viz",
           value_parser = ["combination","hist_aio","hist_mono","hist_stereo","peak_mono","peak_stereo","vu_aio","vu_mono","vu_stereo","waveform_spectrum","no_viz"])]
     pub viz: Option<String>,
+
+    /// Histogram colour scheme
+    #[arg(long = "hist-scheme", value_parser = ["classic","ocean","fire","neon"])]
+    pub hist_scheme: Option<String>,
 
     /// Print fully merged config and exit
     #[arg(long, action = ArgAction::SetTrue)]
@@ -300,14 +310,16 @@ fn merge(dst: &mut Config, src: Config) {
     take!(log_level);
     take!(player);
     take!(text_font);
+    take!(text_font_size);
     take!(scroll_mode);
     take!(show_remaining);
     take!(clock_font);
     take!(easter_egg);
     take!(visualizer);
+    take!(hist_scheme);
     take!(show_metrics);
     take!(show_splash);
-    take!(i2c_bus);
+    take!(i2c_bus);     // need to retire this and fold any code under display.bus.bus
     take!(latitude);
     take!(longitude);
 
@@ -350,15 +362,17 @@ fn apply_cli_overrides(cfg: &mut Config, cli: &Cli) {
     macro_rules! take_opt {
         ($src:expr => $dst:expr) => { if $src.is_some() { $dst = $src.clone(); } };
     }
-    take_opt!(cli.name        => cfg.player);
-    take_opt!(cli.font        => cfg.text_font);
-    take_opt!(cli.scroll      => cfg.scroll_mode);
-    take_opt!(cli.clock_font  => cfg.clock_font);
-    take_opt!(cli.eggs        => cfg.easter_egg);
-    take_opt!(cli.viz         => cfg.visualizer);
-    take_opt!(cli.i2c_bus     => cfg.i2c_bus);
-    take_opt!(cli.lat         => cfg.latitude);
-    take_opt!(cli.lon         => cfg.longitude);
+    take_opt!(cli.name           => cfg.player);
+    take_opt!(cli.text_font      => cfg.text_font);
+    take_opt!(cli.text_font_size => cfg.text_font_size);
+    take_opt!(cli.scroll         => cfg.scroll_mode);
+    take_opt!(cli.clock_font     => cfg.clock_font);
+    take_opt!(cli.eggs           => cfg.easter_egg);
+    take_opt!(cli.viz            => cfg.visualizer);
+    take_opt!(cli.hist_scheme    => cfg.hist_scheme);
+    take_opt!(cli.i2c_bus        => cfg.i2c_bus);
+    take_opt!(cli.lat            => cfg.latitude);
+    take_opt!(cli.lon            => cfg.longitude);
 
     // Weather overrides — comma-separated -W/--weather first, then discrete flags win
     if let Some(w_str) = &cli.weather {
@@ -426,3 +440,4 @@ fn validate(cfg: &Config) -> Result<(), ConfigError> {
     }
     Ok(())
 }
+

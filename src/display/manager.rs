@@ -349,6 +349,7 @@ impl DisplayManager {
         clock_font: &str,
         show_metrics: bool,
         egg_name: &str,
+        hist_scheme: &str,
     ) -> Result<Self, DisplayError> {
         info!("Initializing DisplayManager with new modular architecture");
 
@@ -356,7 +357,7 @@ impl DisplayManager {
         let mut driver = DisplayDriverFactory::create_from_config(config)?;
         driver.init()?;
 
-        Self::new_with_driver(driver, scroll_mode, clock_font, show_metrics, egg_name)
+        Self::new_with_driver(driver, scroll_mode, clock_font, show_metrics, egg_name, hist_scheme)
     }
 
     /// Create a new display manager with an existing driver
@@ -381,6 +382,7 @@ impl DisplayManager {
         clock_font: &str,
         show_metrics: bool,
         egg_name: &str,
+        hist_scheme: &str,
     ) -> Result<Self, DisplayError> {
         // Get capabilities and create layout
         let capabilities = driver.capabilities().clone();
@@ -413,6 +415,7 @@ impl DisplayManager {
         let visualizer = VisualizerComponent::new(
             layout.clone(),
             crate::visualization::Visualization::NoVisualization,
+            hist_scheme,
         );
 
         let easter_egg = set_easter_egg(egg_name);
@@ -687,7 +690,7 @@ impl DisplayManager {
                     let tb_center = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Center).vertical_alignment(VerticalAlignment::Top).build();
                     let tb_right  = TextBoxStyleBuilder::new().alignment(HorizontalAlignment::Right).vertical_alignment(VerticalAlignment::Top).build();
                     // time strings assume a  maximum of hh:mm:ss - 8 char * the character width
-                    let fixed_width = 8 * font.character_size.width;
+                    let fixed_width = 12 * font.character_size.width;
 
                     // Center: mode text (full field width)
                     let mut rect = field.bounds;
@@ -2064,6 +2067,17 @@ impl DisplayManager {
 
             // If we got a frame, update component state based on payload
             if let Some(frame) = latest_frame {
+                // ShmemStale: warn the user; skip all rendering state updates
+                if matches!(frame.payload, VizPayload::ShmemStale) {
+                    self.set_warning(
+                        "Audio data stale",
+                        "Squeezelite stopped writing to shared memory",
+                        "Restart squeezelite to restore visualization",
+                    );
+                    return Ok(());
+                }
+                // Any live frame clears a prior stale warning
+                self.clear_warning();
                 // Clear is_aio; only VuAio/HistAio arms will re-set it true
                 self.visualizer.viz_state_mut().is_aio = false;
                 match frame.payload {
