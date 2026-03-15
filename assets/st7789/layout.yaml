@@ -38,6 +38,82 @@ components:
         font: font_10x20
       - name: cover_art
         type: custom
+        x: "-10"
+        y: "-10"
+        width: "10"
+        height: "10"
+        scrollable: false
+      - name: album_artist
+        type: scrolling_text
+        x: "2"
+        y: "status_bar.bottom + 1"
+        width: "parent.width - 4"
+        height: "15"
+        font: font_7x13
+        fg_color: Yellow
+        scrollable: true
+      - name: album
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album_artist.bottom"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        fg_color: Yellow
+        scrollable: true
+      - name: title
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album.bottom"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        fg_color: Yellow
+        scrollable: true
+      - name: artist
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "title.bottom"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        fg_color: Yellow
+        scrollable: true
+      - name: year
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "artist.bottom"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        horizontal_alignment: Center
+        fg_color: Yellow
+        scrollable: false
+      - name: track_progress_bar
+        type: track_progress_bar
+        x: "2"
+        y: "parent.height - 26"
+        width: "parent.width - 4"
+        height: "8"
+      - name: info_line
+        type: info_line
+        x: "2"
+        y: "parent.height - 14"
+        width: "parent.width - 4"
+        height: "14"
+        font: font_7x13
+
+  scroller_panel_foo:
+    fields:
+      - name: status_bar
+        type: status_bar
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "20"
+        font: font_10x20
+      - name: cover_art
+        type: custom
         x: "4"
         y: "parent.height/2 - 70"
         width: "120"
@@ -581,6 +657,27 @@ components:
         fg_color: Cyan
 
 templates:
+
+  # AIO: 50/50 split — 160px info panel, 160px visualizer panel.
+  # Adjust x/width on visualizer_panel here to tune the split without recompiling.
+  aio:
+    variants:
+      - name: wide
+        match:
+          category: [Large, ExtraLarge]
+        regions:
+          - component: scroller_panel
+            x: "0"
+            y: "0"
+            width: "display.width/2"
+            height: "display.height"
+        fields:
+          - name: visualizer_panel
+            type: custom
+            x: "display.width/2"
+            y: "0"
+            width: "display.width/2"
+            height: "display.height"
 
   weather_forecast:
     variants:

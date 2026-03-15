@@ -243,6 +243,11 @@ impl Visual {
         }
     }
 
+    /// Override the render rectangle (used by AIO modes to apply layout-derived bounds).
+    pub fn set_rect(&mut self, rect: Rectangle) {
+        self.rect = rect;
+    }
+
     pub fn apply_template(
         &mut self,
         template: &str, 
@@ -482,9 +487,11 @@ pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
 }
 
 /// Loads/sets the visualization
-pub fn get_visual(kind: Visualization, wide: bool) -> Visual {
-    let folder = if wide {"./assets/ssd1322/"}else{"./assets/ssd1309/"};
-    let size = if wide { Size::new(256, 64) } else { Size::new(128, 64) };
+pub fn get_visual(kind: Visualization, wide: bool, layout: LayoutConfig) -> Visual {
+    //let folder = if wide {"./assets/ssd1322/"}else{"./assets/ssd1309/"};
+    //let size = if wide { Size::new(256, 64) } else { Size::new(128, 64) };
+    let folder = layout.asset_path;
+    let size = Size::new(layout.width, layout.height);
     let viz = match kind {
         Visualization::VuStereo => {
             let sweep: f64 = if size.width > 128 {44.01} else {41.12};

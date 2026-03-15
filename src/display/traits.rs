@@ -73,7 +73,7 @@ pub struct SpiInfo {
 pub enum BusInterface {
     /// I2C only (e.g. SSD1306, SH1106)
     I2c(I2cInfo),
-    /// SPI only (e.g. SSD1322)
+    /// SPI only (e.g. SSD1322, st7789)
     Spi(SpiInfo),
     /// Supports both I2C and SPI - selected by hardware pin strapping (e.g. SSD1309)
     Either { i2c: I2cInfo, spi: SpiInfo },

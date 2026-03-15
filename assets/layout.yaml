@@ -559,12 +559,26 @@ templates:
             y: "0"
             width: "display.width/2"
             height: "display.height"
+        fields:
+          - name: visualizer_panel
+            type: custom
+            x: "display.width/2"
+            y: "0"
+            width: "display.width/2"
+            height: "display.height"
 
       # Narrow displays: left half uses the compact AIO panel.
       - name: narrow
         regions:
           - component: aio_compact_panel
             x: "0"
+            y: "0"
+            width: "display.width/2"
+            height: "display.height"
+        fields:
+          - name: visualizer_panel
+            type: custom
+            x: "display.width/2"
             y: "0"
             width: "display.width/2"
             height: "display.height"

@@ -24,7 +24,7 @@
 #![allow(dead_code)] // visualizer component helpers; some methods reserved
 
 use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::PrimitiveStyle;
+use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::mono_font::iso_8859_13::FONT_5X8;
 use embedded_text::alignment::{HorizontalAlignment, VerticalAlignment};
 use crate::display::color_proxy::{ColorProxy, Pal16};
@@ -93,6 +93,8 @@ pub struct VisualizerComponent {
     viz_state: crate::vision::LastVizState,
     layout: LayoutConfig,
     visualization_type: Visualization,
+    /// Visualizer panel bounds for AIO modes — set from YAML layout before each render.
+    aio_viz_rect: Option<Rectangle>,
 }
 
 impl VisualizerComponent {
@@ -103,7 +105,7 @@ impl VisualizerComponent {
         viz_state.wide = layout.visualizer.is_wide;
         // Set spectrum history buffer size to match display width
         viz_state.spectrum_max_cols = layout.width as usize;
-        let viz = crate::visualization::get_visual(visualization_type, viz_state.wide);
+        let viz = crate::visualization::get_visual(visualization_type, viz_state.wide, layout.clone());
         Self {
             visualizer: None,
             state: VisualizerState::default(),
@@ -111,6 +113,7 @@ impl VisualizerComponent {
             viz_state,
             layout,
             visualization_type,
+            aio_viz_rect: None,
         }
     }
 
@@ -120,7 +123,7 @@ impl VisualizerComponent {
     }
 
     pub fn update_visual(&mut self) {
-        self.viz = crate::visualization::get_visual(self.visualization_type, self.viz_state.wide);
+        self.viz = crate::visualization::get_visual(self.visualization_type, self.viz_state.wide, self.layout.clone());
     }
 
     /// Get mutable reference to visualizer
@@ -162,6 +165,11 @@ impl VisualizerComponent {
         };
     }
 
+    /// Set the visualizer panel bounds for AIO modes (resolved from YAML layout).
+    pub fn set_aio_viz_rect(&mut self, rect: Rectangle) {
+        self.aio_viz_rect = Some(rect);
+    }
+
     /// Render the visualizer — generic over display color depth and color proxy.
     ///
     /// Callers select the appropriate proxy at the call site:
@@ -195,11 +203,13 @@ impl VisualizerComponent {
             }
             Visualization::VuAio => {
                 let (db_m, db_l, db_r) = (s.this.db_m, s.this.db_l, s.this.db_r);
-                Self::draw_aio_vu::<D, P>(target, viz_mut, db_m, db_l, db_r, s)
+                let rect = self.aio_viz_rect;
+                Self::draw_aio_vu::<D, P>(target, viz_mut, rect, db_m, db_l, db_r, s)
             }
             Visualization::HistAio => {
                 let (bands, bands_l, bands_r) = (s.last_bands_m.clone(), s.last_bands_l.clone(), s.last_bands_r.clone());
-                Self::draw_aio_hist::<D, P>(target, viz_mut, bands, bands_l, bands_r, s)
+                let rect = self.aio_viz_rect;
+                Self::draw_aio_hist::<D, P>(target, viz_mut, rect, bands, bands_l, bands_r, s)
             }
             Visualization::WaveformSpectrum => {
                 Self::draw_waveform_spectrum::<D, P>(target, s.last_waveform_l.clone(), s.last_waveform_r.clone(), Vec::new(), s, &self.layout)
@@ -611,6 +621,7 @@ impl VisualizerComponent {
     fn draw_aio_vu<D, P>(
         display: &mut D,
         viz: &mut Visual,
+        viz_rect: Option<Rectangle>,
         db_m: f32,
         db_l: f32,
         db_r: f32,
@@ -625,7 +636,10 @@ impl VisualizerComponent {
         state.init = false;
 
         if state.wide {
-            // Wide: stereo VU — vu2up.svg drawn at x=128 on 256px display
+            // Wide: stereo VU — position SVG at layout-provided rect (fallback: x=display.width/2)
+            if let Some(rect) = viz_rect {
+                viz.set_rect(rect);
+            }
             state.vu_l.update(db_l as f64);
             state.vu_r.update(db_r as f64);
             let disp_l = state.vu_l.angle_degrees() as f32;
@@ -675,6 +689,7 @@ impl VisualizerComponent {
     fn draw_aio_hist<D, P>(
         display: &mut D,
         viz: &mut Visual,
+        viz_rect: Option<Rectangle>,
         bands: Vec<u8>,
         bands_l: Vec<u8>,
         bands_r: Vec<u8>,
@@ -687,9 +702,8 @@ impl VisualizerComponent {
         let Size { width, height } = display.size();
         let (w, h) = (width as i32, height as i32);
 
-        let panel_h = h;
-        let mx = 3;
-        let my = 6;
+        let mx = 3i32;
+        let my = 6i32;
         let title_base = 10i32;
 
         let now = Instant::now();
@@ -697,11 +711,15 @@ impl VisualizerComponent {
         state.last_tick = now;
         state.init = false;
 
+        // Get visualizer panel bounds from layout, or fall back to computed values.
+        let (meter_x, meter_w, panel_h) = match viz_rect {
+            Some(r) => (r.top_left.x, r.size.width as i32, r.size.height as i32),
+            None if state.wide => { let x = w / 2 + 1; (x, w - x, h) }
+            None => { let (_, _, s) = aio_text_attributes(w); (s, w - s, h) }
+        };
+
         if state.wide {
 
-            // Wide: stereo histogram on right half
-            let meter_x = w / 2 + 1;
-            let meter_w = w - meter_x;
             ensure_band_state(state, bands_l.len(), bands_r.len(), 0, viz);
             state.last_bands_l.copy_from_slice(&bands_l);
             state.last_bands_r.copy_from_slice(&bands_r);
@@ -709,11 +727,6 @@ impl VisualizerComponent {
             Self::update_body_decay(&mut state.draw_bands_r, &state.last_bands_r, elapsed);
             Self::update_caps(&mut state.cap_l, &mut state.cap_hold_until_l, &mut state.cap_last_update_l, &state.draw_bands_l, now);
             Self::update_caps(&mut state.cap_r, &mut state.cap_hold_until_r, &mut state.cap_last_update_r, &state.draw_bands_r, now);
-
-            // Clear right half
-            //Rectangle::new(Point::new(meter_x, 0), Size::new(meter_w as u32, panel_h as u32))
-            //    .into_styled(PrimitiveStyle::with_fill(P::off()))
-            //    .draw(display)?;
 
             let gap = 2i32;
             let inner_w = meter_w - 2 * mx;
@@ -735,26 +748,19 @@ impl VisualizerComponent {
 
         } else {
 
-            // Narrow: mono histogram on right half
-            let (_, _, meter_area_start) = aio_text_attributes(w);
-            let (meter_mx, meter_my, meter_width, _) = aio_meter_attributes(meter_area_start, w, h);
-            let meter_h = panel_h - meter_my - title_base - 1;
-
             ensure_band_state(state, 0, 0, bands.len(), viz);
             state.last_bands_m.copy_from_slice(&bands);
             Self::update_body_decay(&mut state.draw_bands_m, &state.last_bands_m, elapsed);
             Self::update_caps(&mut state.cap_m, &mut state.cap_hold_until_m, &mut state.cap_last_update_m, &state.draw_bands_m, now);
 
-            // Clear right panel - draw_hist_panel takes care of cleanup
-            //Rectangle::new(Point::new(meter_area_start, 0), Size::new((w - meter_area_start) as u32, panel_h as u32))
-            //    .into_styled(PrimitiveStyle::with_fill(P::off()))
-            //    .draw(display)?;
+            let inner_w = meter_w - 2 * mx;
+            let meter_h = panel_h - my - title_base - 1;
 
             Self::draw_hist_panel::<D, P>(
-                display, "", // no label as we have the scroller
+                display, "", // no label — scroller handles track info
                 title_base as u32, panel_h - title_base,
-                Point::new(meter_area_start + meter_mx, meter_my),
-                Size::new(meter_width as u32, meter_h as u32),
+                Point::new(meter_x + mx, my),
+                Size::new(inner_w as u32, meter_h as u32),
                 &state.draw_bands_m, &state.cap_m,
             )?;
 

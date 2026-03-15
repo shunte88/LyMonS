@@ -436,16 +436,18 @@ impl From<&ColorSpec> for crate::display::color::Color {
 /// the intended `font_4x6`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum FontSpec {
-    #[serde(rename = "font_4x6")]    Font4x6,
-    #[serde(rename = "font_5x7")]    Font5x7,
-    #[serde(rename = "font_5x8")]    Font5x8,
-    #[serde(rename = "font_6x9")]    Font6x9,
-    #[serde(rename = "font_6x10")]   Font6x10,
+    #[serde(rename = "font_4x6")]       Font4x6,
+    #[serde(rename = "font_5x7")]       Font5x7,
+    #[serde(rename = "font_5x8")]       Font5x8,
+    #[serde(rename = "font_6x9")]       Font6x9,
+    #[serde(rename = "font_6x10")]      Font6x10,
+    #[serde(rename = "font_6x12")]      Font6x12,
+    #[serde(rename = "font_6x13")]      Font6x13,
     #[serde(rename = "font_6x13_bold")] Font6x13Bold,
-    #[serde(rename = "font_7x13")]   Font7x13,
+    #[serde(rename = "font_7x13")]      Font7x13,
     #[serde(rename = "font_7x13_bold")] Font7x13Bold,
-    #[serde(rename = "font_7x14")]   Font7x14,
-    #[serde(rename = "font_10x20")]   Font10x20,
+    #[serde(rename = "font_7x14")]      Font7x14,
+    #[serde(rename = "font_10x20")]     Font10x20,
 }
 
 impl FontSpec {
@@ -457,11 +459,13 @@ impl FontSpec {
             FontSpec::Font5x8      => &FONT_5X8,
             FontSpec::Font6x9      => &FONT_6X9,
             FontSpec::Font6x10     => &FONT_6X10,
+            FontSpec::Font6x12     => &FONT_6X12,
+            FontSpec::Font6x13     => &FONT_6X13,
             FontSpec::Font6x13Bold => &FONT_6X13_BOLD,
             FontSpec::Font7x13     => &FONT_7X13,
             FontSpec::Font7x13Bold => &FONT_7X13_BOLD,
             FontSpec::Font7x14     => &FONT_7X14,
-            FontSpec::Font10x20     => &FONT_10X20,
+            FontSpec::Font10x20    => &FONT_10X20,
         }
     }
 }

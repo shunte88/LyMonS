@@ -2136,6 +2136,15 @@ impl DisplayManager {
             }
         }
 
+        // Prime AIO visualizer panel rect from layout before rendering.
+        // Resolved here so the viz draw functions receive layout-accurate bounds.
+        if self.visualizer.viz_state().is_aio {
+            let page = self.layout_manager.create_aio_scrolling_page();
+            if let Some(viz_field) = page.get_field("visualizer_panel") {
+                self.visualizer.set_aio_viz_rect(viz_field.bounds);
+            }
+        }
+
         // Dispatch to the appropriate render method based on framebuffer type
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {

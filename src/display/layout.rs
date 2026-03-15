@@ -31,6 +31,7 @@ use crate::display::traits::{DisplayCapabilities, ColorDepth, BusInterface, I2cI
 /// appropriately for different display sizes and aspect ratios.
 #[derive(Debug, Clone)]
 pub struct LayoutConfig {
+
     /// Display width in pixels
     pub width: u32,
 
