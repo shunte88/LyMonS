@@ -428,13 +428,11 @@ pub fn transpose_kind(kind: &str) -> Visualization {
 /// asset path based on display resolution and capabilities.
 pub fn get_visualizer_panel_with_layout(kind: Visualization, layout: &LayoutConfig) -> String {
     let folder = &layout.asset_path;
-    //let vu_aio_svg = if layout.width > 132 { "vuaio.svg" } else { "vudownmix.svg" };
-    let vu_aio_svg = "vuaio.svg";
     let panel = match kind {
         Visualization::VuStereo => format!("{}vu2up.svg", folder),
         Visualization::VuMono  => format!("{}vudownmix.svg", folder),
         Visualization::VuStereoWithCenterPeak => format!("{}vucombi.svg", folder),
-        Visualization::VuAio => format!("{}{}", folder, vu_aio_svg),
+        Visualization::VuAio => format!("{}vuaio.svg", folder),
         Visualization::PeakStereo => format!("{}peak.svg", folder),
         Visualization::PeakMono  => format!("{}peakmono.svg", folder),
         Visualization::HistAio => format!("{}histaio.svg", folder),

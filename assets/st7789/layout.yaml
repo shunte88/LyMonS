@@ -34,76 +34,69 @@ components:
         x: "2"
         y: "2"
         width: "parent.width - 4"
-        height: "20"
-        font: font_10x20
-      - name: cover_art
-        type: custom
-        x: "-10"
-        y: "-10"
-        width: "10"
-        height: "10"
-        scrollable: false
+        height: "9"
+        font: font_4x6
+
       - name: album_artist
         type: scrolling_text
-        x: "2"
-        y: "status_bar.bottom + 1"
+        x: "status_bar.left"
+        y: "status_bar.bottom+1"
         width: "parent.width - 4"
-        height: "15"
+        height: "14"
         font: font_7x13
-        fg_color: Yellow
+        fg_color: Orange
         scrollable: true
+
       - name: album
         type: scrolling_text
         x: "album_artist.left"
-        y: "album_artist.bottom"
+        y: "album_artist.bottom+1"
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
-        fg_color: Yellow
+        fg_color: Orange
         scrollable: true
+
       - name: title
         type: scrolling_text
         x: "album_artist.left"
-        y: "album.bottom"
+        y: "album.bottom+1"
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
-        fg_color: Yellow
+        fg_color: Orange
         scrollable: true
+
       - name: artist
         type: scrolling_text
         x: "album_artist.left"
-        y: "title.bottom"
+        y: "title.bottom+1"
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
-        fg_color: Yellow
+        fg_color: Orange
         scrollable: true
-      - name: year
-        type: scrolling_text
-        x: "album_artist.left"
-        y: "artist.bottom"
-        width: "album_artist.width"
-        height: "album_artist.height"
-        font: font_7x13
-        horizontal_alignment: Center
-        fg_color: Yellow
-        scrollable: false
+
+      # parent.height - 15 = 49 on 64px display (matches: height - 6 - y_height)
       - name: track_progress_bar
         type: track_progress_bar
-        x: "2"
-        y: "parent.height - 26"
+        x: "status_bar.left"
+        y: "parent.height - 19"
         width: "parent.width - 4"
-        height: "8"
+        height: "3"
+
+      # parent.height - 10 = 54 on 64px display (matches: height - 1 - y_height)
       - name: info_line
         type: info_line
-        x: "2"
+        x: "status_bar.left"
         y: "parent.height - 14"
         width: "parent.width - 4"
         height: "14"
         font: font_7x13
 
-  scroller_panel_foo:
+  # Scroller panel — status bar + 4 cover art scrolling text rows + progress bar + info line.
+  # Fills any region; parent.width/height drive all expressions.
+  scroller_art_panel:
     fields:
       - name: status_bar
         type: status_bar
@@ -111,75 +104,70 @@ components:
         y: "2"
         width: "parent.width - 4"
         height: "20"
-        font: font_10x20
+
       - name: cover_art
         type: custom
-        x: "4"
-        y: "parent.height/2 - 70"
+        x: "status_bar.left"
+        y: "status_bar.bottom + 1"
         width: "120"
         height: "120"
-        scrollable: false
+
       - name: album_artist
         type: scrolling_text
-        x: "cover_art.right + 4"
+        x: "cover_art.right + 2"
         y: "status_bar.bottom + 1"
-        width: "parent.width - cover_art.right - 12"
-        height: "20"
+        width: "parent.width - cover_art.width - 4"
+        height: "14"
         font: font_7x13
-        fg_color: Yellow
+        fg_color: Orange
         scrollable: true
+
       - name: album
         type: scrolling_text
         x: "album_artist.left"
-        y: "album_artist.bottom"
+        y: "album_artist.bottom+1"
         width: "album_artist.width"
-        height: "20"
+        height: "album_artist.height"
         font: font_7x13
-        fg_color: Yellow
+        fg_color: Orange
         scrollable: true
+
       - name: title
         type: scrolling_text
         x: "album_artist.left"
-        y: "album.bottom"
+        y: "album.bottom+1"
         width: "album_artist.width"
-        height: "20"
+        height: "album_artist.height"
         font: font_7x13
-        fg_color: Yellow
+        fg_color: Orange
         scrollable: true
+
       - name: artist
         type: scrolling_text
         x: "album_artist.left"
-        y: "title.bottom"
+        y: "title.bottom+1"
         width: "album_artist.width"
-        height: "20"
+        height: "album_artist.height"
         font: font_7x13
-        fg_color: Yellow
+        fg_color: Orange
         scrollable: true
-      - name: year
-        type: scrolling_text
-        x: "album_artist.left"
-        y: "artist.bottom"
-        width: "album_artist.width"
-        height: "20"
-        font: font_7x13
-        horizontal_alignment: Center
-        fg_color: Yellow
-        scrollable: false
+
       # parent.height - 15 = 49 on 64px display (matches: height - 6 - y_height)
       - name: track_progress_bar
         type: track_progress_bar
-        x: "2"
-        y: "parent.height - 30"
+        x: "status_bar.left"
+        y: "parent.height - 19"
         width: "parent.width - 4"
-        height: "8"
+        height: "3"
+
       # parent.height - 10 = 54 on 64px display (matches: height - 1 - y_height)
       - name: info_line
         type: info_line
-        x: "2"
-        y: "parent.height - 20"
+        x: "status_bar.left"
+        y: "parent.height - 14"
         width: "parent.width - 4"
-        height: "20"
-        font: font_10x20
+        height: "14"
+        font: font_7x13
 
   warning_panel:
     fields:
@@ -657,6 +645,18 @@ components:
         fg_color: Cyan
 
 templates:
+
+  playback:
+    variants:
+      - name: wide
+        match:
+          category: [Large, ExtraLarge]
+        regions:
+          - component: scroller_art_panel
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
 
   # AIO: 50/50 split — 160px info panel, 160px visualizer panel.
   # Adjust x/width on visualizer_panel here to tune the split without recompiling.
