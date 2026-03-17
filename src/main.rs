@@ -855,13 +855,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         info!("DisplayManager created - using unified display loop");
 
-        // === INITIALIZATION SEQUENCE WITH SPLASH SCREEN ===
+        // I N I T I A L I Z A T I O N   S E Q U E N C E   W I T H   S P L A S H
         // Show splash screen during initialization (unless user opted out)
         display_manager.splash(
             show_splash,
-            &format!("v{}", env!("CARGO_PKG_VERSION")).as_str(),
+            &format!("v:{}", env!("CARGO_PKG_VERSION")).as_str(),
             BUILD_DATE
         ).await?;
+        // I N I T I A L I Z A T I O N   S E Q U E N C E   W I T H   S P L A S H
 
         // Initialize location service
         let location = {
