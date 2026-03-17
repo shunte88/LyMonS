@@ -427,7 +427,7 @@ pub fn transpose_kind(kind: &str) -> Visualization {
 /// This function uses the layout system to select the appropriate
 /// asset path based on display resolution and capabilities.
 pub fn get_visualizer_panel_with_layout(kind: Visualization, layout: &LayoutConfig) -> String {
-    let folder = &layout.asset_path;
+    let folder = &layout.asset_path.clone();
     let panel = match kind {
         Visualization::VuStereo => format!("{}vu2up.svg", folder),
         Visualization::VuMono  => format!("{}vudownmix.svg", folder),
@@ -441,6 +441,7 @@ pub fn get_visualizer_panel_with_layout(kind: Visualization, layout: &LayoutConf
         Visualization::WaveformSpectrum |
         Visualization::NoVisualization => "".to_string(),
     };
+    println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  visualization : {panel}  <<<<<<<<<<<<<<<");
     panel
 }
 
