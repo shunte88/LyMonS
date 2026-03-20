@@ -200,7 +200,7 @@ pub struct Cli {
 
     /// Clock font
     #[arg(short = 'C', long = "clock_font",
-          value_parser = ["7seg","dejavu","dotty","gawker","ledreal","marvel","moomy","noto","poppins","roboto"])]
+          value_parser = ["7seg","dejavu","dotty","gawker","ledreal","mackintosh","marvel","moomy","noto","poppins","roboto"])]
     pub clock_font: Option<String>,
 
     /// Easter egg animation

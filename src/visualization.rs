@@ -487,8 +487,6 @@ pub fn get_visualizer_panel(kind: Visualization, wide: bool) -> String {
 
 /// Loads/sets the visualization
 pub fn get_visual(kind: Visualization, wide: bool, layout: LayoutConfig) -> Visual {
-    //let folder = if wide {"./assets/ssd1322/"}else{"./assets/ssd1309/"};
-    //let size = if wide { Size::new(256, 64) } else { Size::new(128, 64) };
     let folder = layout.asset_path;
     let size = Size::new(layout.width, layout.height);
     let viz = match kind {
@@ -536,14 +534,20 @@ pub fn get_visual(kind: Visualization, wide: bool, layout: LayoutConfig) -> Visu
                 19,
             )},
         Visualization::VuAio  => {
+            // this should be handled by physical files - no convoluted assignment
             // Wide: stereo VU using ssd1309/vu2up.svg drawn at x=128 (right half of 256px display)
             // Narrow: mono VU using vuaio.svg covering full 128px (VU face in right portion)
             let (svg_file, rect) = if wide {
-                (String::from("./assets/ssd1309/vu2up.svg"),
-                 Rectangle::new(Point::new(128, 0), Size::new(128, 64)))
+                if folder.clone().contains("ssd1309") {
+                    (format!("{folder}/vu2up.svg"),
+                    Rectangle::new(Point::new(128, 0), Size::new(layout.width/2, layout.height)))
+                } else {
+                    (String::from(format!("{folder}vuaio.svg")),
+                    Rectangle::new(Point::zero(), Size::new(layout.width/2, layout.height)))
+                }
             } else {
                 (String::from(format!("{folder}vuaio.svg")),
-                 Rectangle::new(Point::zero(), Size::new(128, 64)))
+                 Rectangle::new(Point::zero(), Size::new(layout.width, layout.height)))
             };
             Visual::new(
                 kind,
