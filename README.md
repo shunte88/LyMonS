@@ -5,7 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red.svg)](https://www.raspberrypi.org/)
 ![version](version.svg)
 
-[![Buy Me A Coffee](assets/github/bmac-red.png) Like my work, then Buy Me A Coffee](https://buymeacoffee.com/shunte88)
+[![Buy Me A Coffee](assets/github/bmc-red-button.svg) Like my work, then Buy Me A Coffee](https://buymeacoffee.com/shunte88)
 
 **An LMS Monitor For The Future**
 
@@ -438,5 +438,5 @@ Team Badger shirts and other goodies are available at [shunte88](https://www.zaz
 
 ---
 
-[![Buy Me A Coffee](assets/github/bmac-red.png) Like my work, then Buy Me A Coffee](https://buymeacoffee.com/shunte88)
+[![Buy Me A Coffee](assets/github/bmc-red-button.svg) Like my work, then Buy Me A Coffee](https://buymeacoffee.com/shunte88)
 
