@@ -62,27 +62,59 @@ sudo ./install.sh
 
 Usage: LyMonS [OPTIONS] --name <name>
 
+LMS monitor — worth the squeeze
+
+Usage: LyMonS [OPTIONS]
+
 Options:
-  -v, --debug              Enable debug log level
-  -N, --name <name>        LMS player name to monitor
-  -W, --weather <WEATHER>  Weather: API key,units,lang,latitude,longitude (comma-separated)
-      --weather-api <KEY>  Tomorrow.io API key (overrides -W key field)
-      --weather-units <U>  Weather units: metric or imperial (overrides -W units field)
-      --weather-lang <L>   Weather language/translation code (overrides -W lang field)
-      --lat <LAT>          Latitude (overrides config and GeoIP)
-      --lon <LON>          Longitude (overrides config and GeoIP)
-  -z, --scroll <scroll>    Text display scroll mode [default: cylon] [possible values: loop, loopleft, cylon]
-  -r, --remain             Display Remaining Time rather than Total Time
-  -F, --font <font>        Clock font to use [default: 7seg] [possible values: 7seg, holdeco, holfestus, noto, roboto, soldeco, solfestus, space1999]
-  -E, --eggs <eggs>        Easter Egg Animation [default: none] [possible values: bass, cassette, ibmpc, moog, pipboy, radio40, radio50, reel2reel, scope, technics, tubeamp, tvtime, vcr, none]
-      --no-splash          Skip splash screen (shown by default)
-  -k, --metrics            Display device metrics
-  -c, --config <config>    monitor config file [default: config.toml]
-      --i2c-bus <i2c-bus>  I2C bus device path for OLED display (e.g., /dev/i2c-1) [default: /dev/i2c-1]
-  -d, --driver <driver>    Display driver type for emulator, overrides config (ssd1306, ssd1309, ssd1322, sh1106, sharpmemory) [possible values: ssd1306, ssd1309, ssd1322, sh1106, sharpmemory]
-  -a, --viz <viz>          Visualization, meters, VU, Peak, Histograms, and more [default: no_viz] [possible values: aio_hist_mono, aio_vu_mono, combination, hist_mono, hist_stereo, peak_mono, peak_stereo, vu_mono, vu_stereo, waveform_spectrum, no_viz]
-  -h, --help               Print help
-  -V, --version            Print version
+  -c, --config <CONFIG>
+          Path to YAML config file (overrides default search)
+  -v, --debug
+          Enable debug logging
+  -N, --name <NAME>
+          LMS player name to monitor (required unless set in config file)
+  -W, --weather <WEATHER>
+          Weather: API key,units,lang,latitude,longitude (comma-separated)
+      --weather-api <WEATHER_API>
+          Tomorrow.io API key (overrides --weather key field)
+      --weather-units <WEATHER_UNITS>
+          Weather units: metric (default) or imperial (overrides --weather units field)
+      --weather-lang <WEATHER_LANG>
+          Weather language/translation code (overrides --weather lang field)
+      --lat <LAT>
+          Latitude — overrides config file and GeoIP
+      --lon <LON>
+          Longitude — overrides config file and GeoIP
+  -z, --scroll <SCROLL>
+          Text scroll mode [possible values: loop, loopleft, cylon]
+  -r, --remain
+          Show remaining time instead of total duration
+  -F, --text_font <TEXT_FONT>
+          TTF text font name (must have ./data/{name}-text.zip)
+  -f, --text_font_size <TEXT_FONT_SIZE>
+          TTF text font size (must have ./data/{name}-text.zip)
+  -C, --clock_font <CLOCK_FONT>
+          Clock font [possible values: 7seg, dejavu, dotty, gawker, ledreal, mackintosh, marvel, moomy, noto, poppins, roboto]
+  -E, --eggs <EGGS>
+          Easter egg animation [possible values: bass, blackfly, cassette, ibmpc, moog, pipboy, radio40, radio50, reel2reel, scope, technics, tubeamp, tvtime, vcr, none]
+      --no-splash
+          Skip splash screen
+  -k, --metrics
+          Show device metrics overlay
+      --i2c-bus <I2C_BUS>
+          I2C bus device path [default: /dev/i2c-1]
+  -d, --driver <DRIVER>
+          Display driver (emulator / config override) [possible values: ssd1306, ssd1309, ssd1322, sh1106, sh1122, sharpmemory, st7789]
+  -a, --viz <VIZ>
+          Visualizer type [possible values: combination, hist_aio, hist_mono, hist_stereo, peak_mono, peak_stereo, vu_aio, vu_mono, vu_stereo, waveform_spectrum, no_viz]
+      --hist-scheme <HIST_SCHEME>
+          Histogram colour scheme [possible values: classic, ocean, fire, neon]
+      --dump-config
+          Print fully merged config and exit
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 
 LyMonS:
 LMS monitor
@@ -93,21 +125,25 @@ LMS monitor
 
 Supported OLED types:
     SH1106
+    SH1122
     SSD1306
     SSD1309
     SSD1322
     SHARP-memory
+    ST7789
 
 OLED Clock Fonts:
     7seg ........: Classic LCD Clock Font
-    soldeco .....: Deco-Solid Font
-    holdeco .....: Deco-Hollow Font
-    holfestus ...: Festus Hollow 25x44
-    solfestus ...: Festus Solid 25x44
-    space1999 ...: Space 1999
+    dejavu ......: DejaVu - or is that VU
+    dotty .......: Dotmatrix style font
+    gawker ......: Get an eyefull, use Gawker
+    ledreal .....: A slightly more complex LED font
+    mackintosh ..: C.R. Mackintosh perfection
+    marvel ......: Marvel movie poster font
+    moomy .......: More fontage, it's moomy
+    noto ........: Clasic san-serif Noto
+    poppins .....: Poppins, oh yes...
     roboto ......: Roboto Thin
-    solnoto .....: Noto 25x44
-    holnoto .....: Noto Fancy 25x44
 
 ```
 
