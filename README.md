@@ -191,6 +191,76 @@ Several visualizer modes are supported:
 - Wave Forms — coming soon
 - Easter Eggs — fixed mode (use `--egg <name>`)
 
+## TTF Scrolling Fonts
+
+By default LyMonS renders track details using its built-in bitmap fonts. You can replace these with any TrueType or OpenType font for richer text rendering, including full Unicode and CJK character support.
+
+### How It Works
+
+LyMonS loads a TTF/OTF font from a zip archive at startup. The archive can contain a single font file (`.ttf` or `.otf`) — LyMonS picks the first one it finds. Font metrics (ascent, descent, line height) are read directly from the font file, so vertical centering is always accurate regardless of the size you choose.
+
+### Adding a Font
+
+1. **Create the zip archive** containing your `.ttf` or `.otf` file:
+
+    ```bash
+    zip NotoSansMonoCJKjp-text.zip NotoSansMonoCJKjp-Regular.otf
+    ```
+
+2. **Place it in the `data/` folder** next to the LyMonS binary, named `{name}-text.zip` — the `{name}` part is how you refer to it on the command line or in the config file:
+
+    ```
+    data/
+      NotoSansMonoCJKjp-text.zip
+    ```
+
+3. **Enable it** via CLI or config (see below).
+
+### CLI
+
+```bash
+LyMonS --name myplayer -F NotoSansMonoCJKjp -f 24
+```
+
+| Flag | Description |
+|---|---|
+| `-F` / `--text_font` | Font name — must match `data/{name}-text.zip` |
+| `-f` / `--text_font_size` | Point size (floating point) |
+
+### Config File
+
+```yaml
+text_font: NotoSansMonoCJKjp
+text_font_size: 24
+```
+
+### CJK Fonts
+
+For Japanese, Chinese (Simplified, Traditional, Hong Kong), and Korean text, the **Noto Sans Mono CJK** family is an excellent choice. It is open source, metrically consistent, and covers all CJK scripts in a single font family.
+
+> **Note:** CJK fonts contain a very large glyph set and require a minimum rendered size to be legible. A point size of **24 or above** is recommended — smaller sizes may fail to load or render poorly.
+
+![CJK font in use — Japanese track details](assets/github/CJK-font-usage.png)
+
+*Japanese track metadata rendered at 24pt on ST7789 (320×170 color) in AIO histogram mode.*
+
+#### Noto Sans Mono CJK Variants
+
+| Font | Script |
+|---|---|
+| `NotoSansMonoCJKjp` | Japanese |
+| `NotoSansMonoCJKkr` | Korean |
+| `NotoSansMonoCJKsc` | Simplified Chinese |
+| `NotoSansMonoCJKtc` | Traditional Chinese |
+| `NotoSansMonoCJKhk` | Hong Kong Chinese |
+
+Fonts can be found on the web or downloaded from the official Noto CJK GitHub repository:
+
+- **Repository**: https://github.com/notofonts/noto-cjk/tree/main
+- **Download page**: https://github.com/notofonts/noto-cjk/tree/main/Sans#downloading-noto-sans-cjk
+
+Download the **Mono** variant in OTF format, zip the `.otf` file, and drop it in the `data/` folder as described above.
+
 ### Installation
 
 LyMonS can run in two configurations:
