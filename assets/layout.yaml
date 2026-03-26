@@ -273,24 +273,35 @@ components:
         width: "25"
         height: "44"
 
-      # System metrics (CPU % and temperature) — rendered in the gap below the digits.
-      # font_4x6 (6pt) fits the 6px gap; hidden unless --metrics is active.
-      - name: metrics
-        type: label
+      - name: date
+        type: date
         x: "2"
-        y: "clock_digits.bottom + 1"
+        y: "parent.height - 8"
         width: "parent.width - 4"
-        height: "6"
-        font: font_4x6
+        height: "7"
+        font: font_5x7
         horizontal_alignment: Center
+        fg_color: Cyan
 
       # Seconds progress bar — butts up to the bottom of the metrics gap.
       - name: seconds_progress
         type: seconds_progress
         x: "2"
-        y: "parent.height - 2"
+        y: "date.top - 5"
         width: "parent.width - 4"
-        height: "2"
+        height: "3"
+
+      # System metrics (CPU % and temperature) — rendered in the gap below the digits.
+      # font_4x6 (6pt) fits the 6px gap; hidden unless --metrics is active.
+      - name: metrics
+        type: label
+        x: "2"
+        y: "seconds_progress.top - 7"
+        width: "parent.width - 4"
+        height: "6"
+        font: font_4x6
+        horizontal_alignment: Center
+
 
   # Clock face for displays taller than 70px (digit size 60×105).
   # Layout (170px example): 11px top | 105px digits | 2px gap | 8px metrics | 26px open | 18px bar+date zone.
@@ -304,24 +315,6 @@ components:
         width: "60"
         height: "105"
 
-      # System metrics — rendered just below the digits.
-      # font_5x8 (8pt) for the taller display.
-      - name: metrics
-        type: label
-        x: "2"
-        y: "clock_digits.bottom + 2"
-        width: "parent.width - 4"
-        height: "8"
-        font: font_5x8
-        horizontal_alignment: Center
-
-      - name: seconds_progress
-        type: seconds_progress
-        x: "2"
-        y: "parent.height - 18"
-        width: "parent.width - 4"
-        height: "4"
-
       - name: date
         type: date
         x: "2"
@@ -331,6 +324,25 @@ components:
         font: font_6x10
         horizontal_alignment: Center
         fg_color: Cyan
+
+      - name: seconds_progress
+        type: seconds_progress
+        x: "2"
+        y: "date.top - 6"
+        width: "parent.width - 4"
+        height: "4"
+
+      # System metrics — rendered just below the digits.
+      # System metrics (CPU % and temperature) — rendered in the gap below the digits.
+      # font_5x8 (8pt) for the taller display.
+      - name: metrics
+        type: label
+        x: "2"
+        y: "seconds_progress.top - 9"
+        width: "parent.width - 4"
+        height: "8"
+        font: font_5x8
+        horizontal_alignment: Center
 
   # Splash screen — logo SVG full screen with version/build/status text at bottom.
   splash_screen:
