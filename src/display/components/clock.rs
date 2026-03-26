@@ -94,29 +94,25 @@ impl ClockDisplay {
         }
     }
 
-    /// Render the clock display using SVG-native colours (BinaryColor: alpha threshold).
-    ///
-    /// `y_start` is the top-left Y of the `clock_digits` layout field —
-    /// determined at layout-creation time so digits never overlap the progress bar.
-    pub fn render<D>(&self, target: &mut D, y_start: i32) -> Result<(), D::Error>
-    where
-        D: DrawTarget<Color = BinaryColor>,
-    {
-        use embedded_graphics::prelude::*;
-        use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
+    // DRY - core clock digits layout
+    fn render_core(&self, y_start: i32, progress: Point) -> ([char; 5], [i32; 5],i32) 
+    { 
         use chrono::Local;
 
+        let digit_width = self.clock_font.digit_width as i32;
+        let digit_height = self.clock_font.digit_height as i32;
+
+        let y_adj = if y_start + digit_height > progress.y {
+            //println!("y:{} h:{} seconds:{}",y_start, self.clock_font.digit_height, progress.y);
+            progress.y - digit_height
+        } else {
+            y_start
+        };
+
         let current_time = Local::now();
-
-        // Get display dimensions from layout
         let w = self.layout.width;
-        let _h = self.layout.height;
-
-        // Format time into HH:MM string
         let hours_str = format!("{:02}", current_time.format("%H"));
         let minutes_str = format!("{:02}", current_time.format("%M"));
-
-        // Determine colon state for blinking
         let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
         let colon_on = current_second % 2 == 0;
 
@@ -128,14 +124,8 @@ impl ClockDisplay {
             minutes_str.chars().nth(1).unwrap_or('0'),
         ];
 
-        let digit_width = self.clock_font.digit_width as i32;
-        let _digit_height = self.clock_font.digit_height as i32;
-
-        // Constants for spacing (from original code)
         const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
         const CLOCK_COLON_MINUTE_GAP: i32 = 1;
-
-        // Calculate total width of clock digits
         let mut total_clock_visual_width: i32 = (digit_width * 5) +
                                              CLOCK_DIGIT_GAP_HORIZONTAL * 2 + // H-H and H-Colon gaps
                                              CLOCK_COLON_MINUTE_GAP +          // Colon-M1 gap
@@ -152,110 +142,69 @@ impl ClockDisplay {
             clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
         ];
 
+        (time_chars, x_positions, y_adj)
+
+    }
+
+    /// Render the clock display using SVG-native colours (BinaryColor: alpha threshold).
+    ///
+    /// `y_start` is the top-left Y of the `clock_digits` layout field —
+    /// determined at layout-creation time so digits never overlap the progress bar.
+    pub fn render<D>(&self, target: &mut D, y_start: i32, progress: Point) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = BinaryColor>,
+    {
+        use embedded_graphics::prelude::*;
+        use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
+        let (time_chars, x_positions, y_adj) = self.render_core(y_start, progress);
         for i in 0..5 {
             EgRectangle::new(
-                Point::new(x_positions[i], y_start),
+                Point::new(x_positions[i], y_adj),
                 Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
             )
             .into_styled(PrimitiveStyleBuilder::new().fill_color(BinaryColor::Off).build())
             .draw(target)?;
-            self.draw_clock_char(target, time_chars[i], x_positions[i], y_start)?;
+            self.draw_clock_char(target, time_chars[i], x_positions[i], y_adj)?;
         }
         Ok(())
     }
 
     /// Render the clock display on grayscale displays using SVG-native colours.
-    pub fn render_gray4<D>(&self, target: &mut D, y_start: i32) -> Result<(), D::Error>
+    pub fn render_gray4<D>(&self, target: &mut D, y_start: i32, progress: Point) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Gray4>,
     {
         use embedded_graphics::prelude::*;
         use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
-        use chrono::Local;
-
-        let current_time = Local::now();
-        let w = self.layout.width;
-        let hours_str   = format!("{:02}", current_time.format("%H"));
-        let minutes_str = format!("{:02}", current_time.format("%M"));
-        let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
-        let colon_on = current_second % 2 == 0;
-        let time_chars: [char; 5] = [
-            hours_str.chars().nth(0).unwrap_or('0'),
-            hours_str.chars().nth(1).unwrap_or('0'),
-            if colon_on { ':' } else { ' ' },
-            minutes_str.chars().nth(0).unwrap_or('0'),
-            minutes_str.chars().nth(1).unwrap_or('0'),
-        ];
-        let digit_width = self.clock_font.digit_width as i32;
-        const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
-        const CLOCK_COLON_MINUTE_GAP: i32 = 1;
-        let mut total_w = (digit_width * 5) + CLOCK_DIGIT_GAP_HORIZONTAL * 2
-            + CLOCK_COLON_MINUTE_GAP + CLOCK_DIGIT_GAP_HORIZONTAL;
-        if total_w > w as i32 { total_w = w as i32; }
-        let clock_x_start = (w as i32 - total_w) / 2;
-        let x_positions: [i32; 5] = [
-            clock_x_start,
-            clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
-            clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2),
-            clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
-            clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
-        ];
+        let (time_chars, x_positions, y_adj) = self.render_core(y_start, progress);
         for i in 0..5 {
             EgRectangle::new(
-                Point::new(x_positions[i], y_start),
+                Point::new(x_positions[i], y_adj),
                 Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
             )
             .into_styled(PrimitiveStyleBuilder::new().fill_color(Gray4::BLACK).build())
             .draw(target)?;
-            self.draw_clock_char_gray4(target, time_chars[i], x_positions[i], y_start)?;
+            self.draw_clock_char_gray4(target, time_chars[i], x_positions[i], y_adj)?;
         }
         Ok(())
     }
 
     /// Render the clock display on Rgb565 displays using SVG-native colours.
-    pub fn render_rgb565<D>(&self, target: &mut D, y_start: i32) -> Result<(), D::Error>
+    pub fn render_rgb565<D>(&self, target: &mut D, y_start: i32, progress: Point) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Rgb565>,
     {
         use embedded_graphics::prelude::*;
         use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
-        use chrono::Local;
-
-        let current_time = Local::now();
-        let w = self.layout.width;
-        let hours_str   = format!("{:02}", current_time.format("%H"));
-        let minutes_str = format!("{:02}", current_time.format("%M"));
-        let current_second: u32 = current_time.format("%S").to_string().parse().unwrap_or(0);
-        let colon_on = current_second % 2 == 0;
-        let time_chars: [char; 5] = [
-            hours_str.chars().nth(0).unwrap_or('0'),
-            hours_str.chars().nth(1).unwrap_or('0'),
-            if colon_on { ':' } else { ' ' },
-            minutes_str.chars().nth(0).unwrap_or('0'),
-            minutes_str.chars().nth(1).unwrap_or('0'),
-        ];
-        let digit_width = self.clock_font.digit_width as i32;
-        const CLOCK_DIGIT_GAP_HORIZONTAL: i32 = 1;
-        const CLOCK_COLON_MINUTE_GAP: i32 = 1;
-        let mut total_w = (digit_width * 5) + CLOCK_DIGIT_GAP_HORIZONTAL * 2
-            + CLOCK_COLON_MINUTE_GAP + CLOCK_DIGIT_GAP_HORIZONTAL;
-        if total_w > w as i32 { total_w = w as i32; }
-        let clock_x_start = (w as i32 - total_w) / 2;
-        let x_positions: [i32; 5] = [
-            clock_x_start,
-            clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
-            clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2),
-            clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
-            clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
-        ];
+        let (time_chars, x_positions, y_adj) = self.render_core(y_start, progress);
         for i in 0..5 {
             EgRectangle::new(
-                Point::new(x_positions[i], y_start),
+                Point::new(x_positions[i], y_adj),
                 Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
             )
             .into_styled(PrimitiveStyleBuilder::new().fill_color(Rgb565::BLACK).build())
             .draw(target)?;
-            self.draw_clock_char_rgb565(target, time_chars[i], x_positions[i], y_start)?;
+            self.draw_clock_char_rgb565(target, time_chars[i], x_positions[i], y_adj)?;
         }
         Ok(())
     }

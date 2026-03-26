@@ -976,8 +976,19 @@ impl DisplayManager {
 
     /// Render clock mode
     fn render_clock(&mut self) -> Result<(), DisplayError> {
+
         // Get the clock page layout
         let page = self.layout_manager.create_clock_page();
+        let mut progress_top = Point::zero();
+        for field in page.fields() {
+            match field.name.as_str() {
+                "seconds_progress" => {
+                    progress_top = field.position();
+                    break;
+                }
+                _ => {}
+            }
+        }
 
         // Extract current second, millisecond fidelity, for progress bar
         let current_second: f32 = chrono::Local::now().format("%S.%3f").to_string().parse().unwrap_or(0.0);
@@ -993,10 +1004,9 @@ impl DisplayManager {
             String::new()
         };
 
-        // Clock is monochrome-only, but must work on both display types
+        // Clock must work on all display types, and render to supported color depth
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                // Render each field for monochrome displays
                 for field in page.fields() {
                     match field.name.as_str() {
                         "metrics" => {
@@ -1011,7 +1021,7 @@ impl DisplayManager {
                         }
                         "clock_digits" => {
                             // Clock renders digits color defined in SVG -> transposed to color depth
-                            self.clock_display.render(fb, field.position().y)
+                            self.clock_display.render(fb, field.position().y, progress_top)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1053,20 +1063,12 @@ impl DisplayManager {
                         "date" => {
                             // Render date text using field color (e.g., cyan)
                             use embedded_graphics::mono_font::MonoTextStyle;
-                            use embedded_text::{
-                                alignment::{HorizontalAlignment, VerticalAlignment},
-                                style::TextBoxStyleBuilder, TextBox,
-                            };
-                            let tbstyle_center = TextBoxStyleBuilder::new()
-                                .alignment(HorizontalAlignment::Center)
-                                .vertical_alignment(VerticalAlignment::Bottom)
-                                .build();
                             let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
                             let style = MonoTextStyle::new(font, field.fg_binary());
                             let date_str = chrono::Local::now().format("%a %b %d").to_string();
-                            TextBox::with_textbox_style(&date_str, field.bounds, style, tbstyle_center)
-                                .draw(fb)
-                                .map_err(|_| DisplayError::DrawingError("Failed to write date text".to_string()))?;
+                            // Use DRY helper for text rendering
+                            Self::draw_field_text(fb, field, &date_str, style)
+                                .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
                         }
                         _ => {}
                     }
@@ -1088,7 +1090,7 @@ impl DisplayManager {
                         }
                         "clock_digits" => {
                             // Clock renders digits with field color (e.g., green → gray4 value 8)
-                            self.clock_display.render_gray4(fb, field.position().y)
+                            self.clock_display.render_gray4(fb, field.position().y, progress_top)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1132,7 +1134,6 @@ impl DisplayManager {
                             let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
                             let style = MonoTextStyle::new(font, field.fg_color.to_gray4());
                             let date_str = chrono::Local::now().format("%a %b %d").to_string();
-
                             // Use DRY helper for text rendering
                             Self::draw_field_text(fb, field, &date_str, style)
                                 .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
@@ -1155,7 +1156,7 @@ impl DisplayManager {
                             }
                          }
                         "clock_digits" => {
-                            self.clock_display.render_rgb565(fb, field.position().y)
+                            self.clock_display.render_rgb565(fb, field.position().y, progress_top)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
                         }
                         "seconds_progress" => {
@@ -1199,7 +1200,6 @@ impl DisplayManager {
                             let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
                             let style = MonoTextStyle::new(font, field.fg_color.to_color());
                             let date_str = chrono::Local::now().format("%a %b %d").to_string();
-
                             Self::draw_field_text(fb, field, &date_str, style)
                                 .map_err(|_| DisplayError::DrawingError("Failed to draw date".to_string()))?;
                         }
