@@ -109,6 +109,7 @@ impl Sh1106Driver {
             max_fps: 30,
             supports_brightness: true,
             supports_invert: true,
+            driver_name: "sh1106".to_string(),
         }
     }
 

@@ -146,6 +146,7 @@ impl Ssd1309Driver {
             max_fps: 30,
             supports_brightness: true,
             supports_invert: true,
+            driver_name: "ssd1309".to_string(),
         }
     }
 

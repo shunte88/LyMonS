@@ -392,6 +392,7 @@ impl From<LyMonsDisplayCapabilities> for DisplayCapabilities {
             max_fps: caps.max_fps,
             supports_brightness: caps.supports_brightness,
             supports_invert: caps.supports_invert,
+            driver_name: String::new(),
         }
     }
 }

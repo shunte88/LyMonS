@@ -117,6 +117,7 @@ impl St7789Driver {
             max_fps: 60,
             supports_brightness: true,
             supports_invert: true,
+            driver_name: "st7789".to_string(),
         }
     }
 

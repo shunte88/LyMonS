@@ -145,6 +145,7 @@ impl Ssd1306Driver {
                     max_fps: 30, // I2C is slower
                     supports_brightness: true,
                     supports_invert: true,
+                    driver_name: "ssd1306".to_string(),
                 };
 
                 (Ssd1306Variants::Size128x64(display), caps)
@@ -166,6 +167,7 @@ impl Ssd1306Driver {
                     max_fps: 30,
                     supports_brightness: true,
                     supports_invert: true,
+                    driver_name: "ssd1306".to_string(),
                 };
 
                 (Ssd1306Variants::Size128x32(display), caps)

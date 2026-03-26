@@ -124,6 +124,10 @@ pub struct DisplayCapabilities {
     pub supports_brightness: bool,
     /// Whether the display supports inversion
     pub supports_invert: bool,
+    /// Canonical lowercase driver identifier (e.g. "st7789", "ssd1322").
+    /// Used to derive the correct asset folder path.
+    /// Empty string for plugin-loaded drivers.
+    pub driver_name: String,
 }
 
 /// Minimal hardware abstraction - all display drivers must implement this trait

@@ -110,6 +110,7 @@ impl Ssd1322Driver {
             max_fps: 60,
             supports_brightness: true,
             supports_invert: false,
+            driver_name: "ssd1322".to_string(),
         }
     }
 

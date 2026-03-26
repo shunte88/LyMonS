@@ -312,12 +312,12 @@ async fn signal_handler() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(feature = "emulator")]
 async fn emulator_demo_loop(
     driver: std::sync::Arc<tokio::sync::Mutex<display::drivers::emulator::EmulatorDriver>>,
-    clock_font: &str,
+    _clock_font: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!(">>>>>>>>>>>>>>>>>>>>>> emulator_demo_loop <<<<<<<<<<<<<<<<<<<<<<");
     use embedded_graphics::prelude::*;
     use embedded_graphics::pixelcolor::BinaryColor;
-    use embedded_graphics::mono_font::{MonoTextStyle, ascii::{FONT_5X8, FONT_6X10, FONT_9X18_BOLD}};
+    use embedded_graphics::mono_font::{MonoTextStyle, ascii::{FONT_6X10, FONT_9X18_BOLD}};
     use embedded_graphics::text::Text;
     use embedded_graphics::primitives::{Line, PrimitiveStyle};
     use display::traits::DisplayDriver;
@@ -374,7 +374,7 @@ async fn emulator_render_loop(
     player_name: &str,
     _scroll_mode: &str,
     clock_font: &str,
-    show_metrics: bool,
+    _show_metrics: bool,
     _easter_egg: &str,
     _weather: &str,
     _viz_type: &str,
@@ -385,7 +385,7 @@ async fn emulator_render_loop(
     use embedded_graphics::prelude::*;
     use embedded_graphics::pixelcolor::BinaryColor;
     use embedded_graphics::primitives::{PrimitiveStyle, Line};
-    use embedded_graphics::mono_font::{MonoTextStyle, ascii::{FONT_5X8, FONT_6X10}};
+    use embedded_graphics::mono_font::{MonoTextStyle, ascii::{FONT_6X10}};
     use embedded_graphics::text::Text;
     use embedded_graphics::geometry::Size;
     use display::traits::DisplayDriver;

@@ -114,6 +114,7 @@ impl MockDriver {
             max_fps: 60,
             supports_brightness: true,
             supports_invert: true,
+            driver_name: String::new(),
         };
 
         let framebuffer = VarFrameBuf::new(width, height, BinaryColor::Off);

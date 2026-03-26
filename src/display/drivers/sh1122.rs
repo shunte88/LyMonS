@@ -111,6 +111,7 @@ impl Sh1122Driver {
             max_fps:             60,
             supports_brightness: true,
             supports_invert:     false,
+            driver_name:         "sh1122".to_string(),
         }
     }
 

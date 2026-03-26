@@ -238,18 +238,40 @@ impl LayoutConfig {
         // Determine layout category based on resolution
         let category = Self::categorize_display(width, height);
 
-        match category {
+        let mut layout = match category {
             LayoutCategory::Small => Self::small_layout(width, height, color_depth),
             LayoutCategory::Medium => Self::medium_layout(width, height, color_depth),
             LayoutCategory::Large => Self::large_layout(width, height, color_depth),
             LayoutCategory::ExtraLarge => Self::extra_large_layout(width, height, color_depth),
+        };
+
+        // Driver name is the authoritative source for asset path — override the
+        // category/color_depth guess whenever a concrete driver name is available.
+        if !capabilities.driver_name.is_empty() {
+            layout.asset_path = Self::driver_asset_path(&capabilities.driver_name);
+        }
+
+        layout
+    }
+
+    /// Map a canonical driver name to its asset folder.
+    fn driver_asset_path(driver_name: &str) -> String {
+        match driver_name {
+            "ssd1306" | "ssd1309" | "sh1106" => "./assets/ssd1309/".to_string(),
+            "ssd1322" | "sh1122"              => "./assets/ssd1322/".to_string(),
+            "st7789"                          => "./assets/st7789/".to_string(),
+            "sharpmemory"                     => "./assets/sharp400/".to_string(),
+            _                                 => "./assets/ssd1309/".to_string(),
         }
     }
 
     /// Categorize display size
     fn categorize_display(width: u32, height: u32) -> LayoutCategory {
         match (width, height) {
-            (w, h) if w >= 400 || h >= 240 => LayoutCategory::ExtraLarge,
+            // ExtraLarge: tall/wide colour panels (ST7789 320×170, SharpMemory 400×240).
+            // Key distinction from Large: height > 64 (Gray4 OLEDs are all 64px tall).
+            (w, _) if w >= 320 => LayoutCategory::ExtraLarge,
+            (_, h) if h >= 160 => LayoutCategory::ExtraLarge,
             (w, h) if w >= 256 && h >= 64 => LayoutCategory::Large,
             (w, h) if w >= 132 && h >= 64 => LayoutCategory::Medium,
             _ => LayoutCategory::Small,
@@ -523,6 +545,7 @@ pub fn layout_for_resolution(width: u32, height: u32, color_depth: ColorDepth) -
         max_fps: 60,
         supports_brightness: true,
         supports_invert: false,
+        driver_name: String::new(),
     };
 
     LayoutConfig::for_display(&capabilities)

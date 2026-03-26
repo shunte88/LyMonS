@@ -167,6 +167,7 @@ impl EmulatorDriver {
             max_fps: 60,
             supports_brightness: true,
             supports_invert: true,
+            driver_name: display_type.to_lowercase(),
         };
 
         let framebuffer = EmulatorFramebuffer::Mono(
@@ -211,6 +212,7 @@ impl EmulatorDriver {
             max_fps: 60,
             supports_brightness: true,
             supports_invert: true,
+            driver_name: display_type.to_lowercase(),
         };
 
         let framebuffer = EmulatorFramebuffer::Gray(
@@ -255,6 +257,7 @@ impl EmulatorDriver {
             max_fps: 60,
             supports_brightness: true,
             supports_invert: true,
+            driver_name: display_type.to_lowercase(),
         };
 
         let framebuffer = EmulatorFramebuffer::Rgb565(
