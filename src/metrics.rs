@@ -94,24 +94,18 @@ impl MachineMetrics {
     }
 
     pub fn check(&mut self) -> MachineMetrics {
-
         let mut metrics = MachineMetrics::default();
-
         metrics.cpu_load = self.cpu_load();
         metrics.cpu_temp = self.cpu_temp();
         metrics.up_time = self.up_time();
-
-        /*
-        {
-            let mut file = fs::File::open("/proc/meminfo").unwrap();
-            let mut contents = String::new();
-            file.read_to_string(&mut contents).unwrap();    
-            for line in contents.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();   
-            }
-        }
-        */
-
+        // need to look at this, totally backasswards
+        self.update(metrics);
+        //println!(
+        //    "CPU {:.1}%  {:.1}C {}H",
+        //    metrics.cpu_load,
+        //    metrics.cpu_temp,
+        //    metrics.up_time,
+        //);
         metrics
     }
 

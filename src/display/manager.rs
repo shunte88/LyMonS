@@ -974,57 +974,6 @@ impl DisplayManager {
         Ok(())
     }
 
-    /// Render metrics data line
-    fn render_metrics(&mut self, y: i32) -> Result<(), DisplayError> {
-        if self.show_metrics {
-            use embedded_graphics::mono_font::{
-                iso_8859_13::{FONT_4X6, FONT_5X8},
-                MonoTextStyle,
-            };
-            use embedded_graphics::text::{Text, Baseline};
-            use embedded_graphics::prelude::*;
-
-            // 6pt (font_4x6) for ≤70px displays; 8pt (font_5x8) for taller displays.
-            let use_small_font = self.layout.height <= 70;
-            let char_width: i32 = if use_small_font { 4 } else { 5 };
-
-            // CPU % and temperature only — fits the tight gap above the seconds bar.
-            self.render_buffers.status_buffer.clear();
-            let _ = write!(
-                &mut self.render_buffers.status_buffer,
-                "CPU {:.1}%  {:.1}C",
-                self.device_metrics.cpu_load,
-                self.device_metrics.cpu_temp,
-            );
-            let metrics_str = self.render_buffers.status_buffer.as_str();
-
-            // Horizontally centre within the display width (2px margins each side).
-            let field_w = self.layout.width as i32 - 4;
-            let text_w  = metrics_str.len() as i32 * char_width;
-            let x = 2 + ((field_w - text_w) / 2).max(0);
-
-            macro_rules! draw_metrics {
-                ($fb:expr, $color:expr) => {{
-                    let style = if use_small_font {
-                        MonoTextStyle::new(&FONT_4X6, $color)
-                    } else {
-                        MonoTextStyle::new(&FONT_5X8, $color)
-                    };
-                    Text::with_baseline(metrics_str, Point::new(x, y), style, Baseline::Top)
-                        .draw($fb)
-                        .map_err(|_| DisplayError::DrawingError("Failed to draw metrics".to_string()))?;
-                }};
-            }
-
-            match &mut self.framebuffer {
-                crate::display::framebuffer::FrameBuffer::Mono(fb)   => draw_metrics!(fb, BinaryColor::On),
-                crate::display::framebuffer::FrameBuffer::Gray4(fb)  => draw_metrics!(fb, Gray4::WHITE),
-                crate::display::framebuffer::FrameBuffer::Rgb565(fb) => draw_metrics!(fb, Rgb565::WHITE),
-            }
-        }
-        Ok(())
-    }
-
     /// Render clock mode
     fn render_clock(&mut self) -> Result<(), DisplayError> {
         // Get the clock page layout
@@ -1033,13 +982,16 @@ impl DisplayManager {
         // Extract current second, millisecond fidelity, for progress bar
         let current_second: f32 = chrono::Local::now().format("%S.%3f").to_string().parse().unwrap_or(0.0);
 
-        // Render metrics first (if present) before borrowing framebuffer.
-        // Y position comes from the layout field so it sits in the correct gap.
-        if let Some(mf) = page.fields().iter().find(|f| f.name == "metrics") {
-            let metrics_y = mf.position().y;
-            self.render_metrics(metrics_y)
-                .map_err(|_| DisplayError::DrawingError("Failed to render metrics".to_string()))?;
-        }
+        let metrics_str = if self.show_metrics {
+            self.device_metrics.check();
+            format!("CPU {:.1}%  {:.1}C {}", 
+                self.device_metrics.cpu_load, 
+                self.device_metrics.cpu_temp,
+                self.device_metrics.up_time,
+            )
+        } else {
+            String::new()
+        };
 
         // Clock is monochrome-only, but must work on both display types
         match &mut self.framebuffer {
@@ -1048,7 +1000,14 @@ impl DisplayManager {
                 for field in page.fields() {
                     match field.name.as_str() {
                         "metrics" => {
-                            // Already rendered above
+                            if self.show_metrics && !metrics_str.clone().is_empty() {
+                                use embedded_graphics::mono_font::MonoTextStyle;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                Self::draw_field_text(fb, field, &metrics_str, style)
+                                    .map_err(|_| DisplayError::DrawingError("Failed to device metrics".to_string()))?;
+                            }
                         }
                         "clock_digits" => {
                             // Clock renders digits color defined in SVG -> transposed to color depth
@@ -1118,7 +1077,14 @@ impl DisplayManager {
                 for field in page.fields() {
                     match field.name.as_str() {
                         "metrics" => {
-                            // Already rendered above
+                            if self.show_metrics && !metrics_str.clone().is_empty() {
+                                use embedded_graphics::mono_font::MonoTextStyle;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                Self::draw_field_text(fb, field, &metrics_str, style)
+                                    .map_err(|_| DisplayError::DrawingError("Failed to device metrics".to_string()))?;
+                            }
                         }
                         "clock_digits" => {
                             // Clock renders digits with field color (e.g., green → gray4 value 8)
@@ -1179,8 +1145,15 @@ impl DisplayManager {
                 for field in page.fields() {
                     match field.name.as_str() {
                         "metrics" => {
-                            // Already rendered above
-                        }
+                            if self.show_metrics && !metrics_str.clone().is_empty() {
+                                use embedded_graphics::mono_font::MonoTextStyle;
+                                use crate::display::color_proxy::ConvertColor;
+                                let font = field.font.unwrap_or(&embedded_graphics::mono_font::iso_8859_13::FONT_6X10);
+                                let style = MonoTextStyle::new(font, field.fg_color.to_color());
+                                Self::draw_field_text(fb, field, &metrics_str, style)
+                                    .map_err(|_| DisplayError::DrawingError("Failed to device metrics".to_string()))?;
+                            }
+                         }
                         "clock_digits" => {
                             self.clock_display.render_rgb565(fb, field.position().y)
                                 .map_err(|_| DisplayError::DrawingError("Failed to render clock".to_string()))?;
