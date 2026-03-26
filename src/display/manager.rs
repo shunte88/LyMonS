@@ -975,65 +975,51 @@ impl DisplayManager {
     }
 
     /// Render metrics data line
-    fn render_metrics(&mut self) -> Result<(), DisplayError> {
+    fn render_metrics(&mut self, y: i32) -> Result<(), DisplayError> {
         if self.show_metrics {
-            use embedded_graphics::mono_font::{iso_8859_13::FONT_5X8, MonoTextStyle};
+            use embedded_graphics::mono_font::{
+                iso_8859_13::{FONT_4X6, FONT_5X8},
+                MonoTextStyle,
+            };
             use embedded_graphics::text::{Text, Baseline};
             use embedded_graphics::prelude::*;
 
-            let metrics_y = 2;
+            // 6pt (font_4x6) for ≤70px displays; 8pt (font_5x8) for taller displays.
+            let use_small_font = self.layout.height <= 70;
+            let char_width: i32 = if use_small_font { 4 } else { 5 };
 
-            // Format metrics string (only once)
+            // CPU % and temperature only — fits the tight gap above the seconds bar.
             self.render_buffers.status_buffer.clear();
             let _ = write!(
                 &mut self.render_buffers.status_buffer,
-                "CPU:{:.1}% CPUt:{:.1}C MEM:{:.1}% FPS:{:.1}",
+                "CPU {:.1}%  {:.1}C",
                 self.device_metrics.cpu_load,
                 self.device_metrics.cpu_temp,
-                100.00 - self.device_metrics.mem_avail_pct,
-                self.metrics.fps(),
             );
             let metrics_str = self.render_buffers.status_buffer.as_str();
 
-            // Center the metrics text
-            let text_width = metrics_str.len() * 6; // Approximate width
-            let x = (self.layout.width as i32 - text_width as i32) / 2;
+            // Horizontally centre within the display width (2px margins each side).
+            let field_w = self.layout.width as i32 - 4;
+            let text_w  = metrics_str.len() as i32 * char_width;
+            let x = 2 + ((field_w - text_w) / 2).max(0);
 
-            // Render based on framebuffer type
+            macro_rules! draw_metrics {
+                ($fb:expr, $color:expr) => {{
+                    let style = if use_small_font {
+                        MonoTextStyle::new(&FONT_4X6, $color)
+                    } else {
+                        MonoTextStyle::new(&FONT_5X8, $color)
+                    };
+                    Text::with_baseline(metrics_str, Point::new(x, y), style, Baseline::Top)
+                        .draw($fb)
+                        .map_err(|_| DisplayError::DrawingError("Failed to draw metrics".to_string()))?;
+                }};
+            }
+
             match &mut self.framebuffer {
-                crate::display::framebuffer::FrameBuffer::Mono(fb) => {
-                    let style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
-                    Text::with_baseline(
-                        metrics_str,
-                        Point::new(x, metrics_y as i32),
-                        style,
-                        Baseline::Top,
-                    )
-                    .draw(fb)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw metrics".to_string()))?;
-                }
-                crate::display::framebuffer::FrameBuffer::Gray4(fb) => {
-                    let style = MonoTextStyle::new(&FONT_5X8, Gray4::WHITE);
-                    Text::with_baseline(
-                        metrics_str,
-                        Point::new(x, metrics_y as i32),
-                        style,
-                        Baseline::Top,
-                    )
-                    .draw(fb)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw metrics".to_string()))?;
-                }
-                crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
-                    let style = MonoTextStyle::new(&FONT_5X8, Rgb565::WHITE);
-                    Text::with_baseline(
-                        metrics_str,
-                        Point::new(x, metrics_y as i32),
-                        style,
-                        Baseline::Top,
-                    )
-                    .draw(fb)
-                    .map_err(|_| DisplayError::DrawingError("Failed to draw metrics".to_string()))?;
-                }
+                crate::display::framebuffer::FrameBuffer::Mono(fb)   => draw_metrics!(fb, BinaryColor::On),
+                crate::display::framebuffer::FrameBuffer::Gray4(fb)  => draw_metrics!(fb, Gray4::WHITE),
+                crate::display::framebuffer::FrameBuffer::Rgb565(fb) => draw_metrics!(fb, Rgb565::WHITE),
             }
         }
         Ok(())
@@ -1047,9 +1033,11 @@ impl DisplayManager {
         // Extract current second, millisecond fidelity, for progress bar
         let current_second: f32 = chrono::Local::now().format("%S.%3f").to_string().parse().unwrap_or(0.0);
 
-        // Render metrics first (if present) before borrowing framebuffer
-        if page.fields().iter().any(|f| f.name == "metrics") {
-            self.render_metrics()
+        // Render metrics first (if present) before borrowing framebuffer.
+        // Y position comes from the layout field so it sits in the correct gap.
+        if let Some(mf) = page.fields().iter().find(|f| f.name == "metrics") {
+            let metrics_y = mf.position().y;
+            self.render_metrics(metrics_y)
                 .map_err(|_| DisplayError::DrawingError("Failed to render metrics".to_string()))?;
         }
 
