@@ -60,6 +60,7 @@ pub enum WeatherCondition {
     ForecastDay4 = 4,
     ForecastDay5 = 5,
     ForecastDay6 = 6,
+    //ForecastDay7 = 7,
 }
 
 #[derive(Debug)]

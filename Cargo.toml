@@ -1,7 +1,10 @@
 [package]
 name = "LyMonS"
-version = "0.4.9"
+version = "0.4.12"
 edition = "2024"
+description = "An LMS Monitor For The Future — This LyMonS worth the squeeze"
+license = "Apache-2.0"
+authors = ["shunte88"]
 
 [lib]
 name = "lymons"
@@ -83,8 +86,8 @@ opt-level = "s"       # "z" we prioritize size over speed, "s" is balanced
 lto = true            # enable link-time optimization
 codegen-units = 1     # fewer parallel codegen units, better optimization
 panic = "abort"       # strip panic backtrace machinery
-#strip = "symbols"     # requires Rust 1.70+, automatically strips symbols
-strip = "debuginfo"   # requires Rust 1.70+, automatically strips symbols
+strip = true          # requires Rust 1.70+, automatically strips symbols
+#strip = "debuginfo"   # requires Rust 1.70+, automatically strips symbols
 #strip = "metadata"    # requires Rust 1.70+, automatically strips symbols
 
 [features]
@@ -98,9 +101,10 @@ driver-ssd1322 = ["dep:ssd1322"]
 driver-sh1106 = ["dep:sh1106"]
 driver-sh1122 = []
 driver-st7789 = ["dep:mipidsi"]
+driver-st7796s = ["dep:mipidsi"]
 
 # Convenience features
-all-drivers = ["driver-ssd1306", "driver-ssd1309", "driver-ssd1322", "driver-sh1106", "driver-sh1122", "driver-st7789"]
+all-drivers = ["driver-ssd1306", "driver-ssd1309", "driver-ssd1322", "driver-sh1106", "driver-sh1122", "driver-st7789", "driver-st7796s"]
 
 # Plugin system for dynamic driver loading
 plugin-system = ["dep:libloading"]
@@ -116,5 +120,3 @@ embedded-sh1106 = ["driver-sh1106"]
 # Display emulator for desktop testing
 emulator = ["dep:pixels", "dep:winit", "dep:winit_input_helper"]
 
-# For development/migration - allows both old and new display systems to coexist
-new-display-system = []

@@ -1,0 +1,13 @@
+#
+#  assets/st7796s/layout.yaml
+#
+#  LyMonS — ST7796S display override (480x320 Rgb565)
+#
+#  Merged on top of assets/layout.yaml at runtime.
+#  Only components/templates that differ from the base are defined here.
+#  Add dimensional variants (e.g. "480x320") under templates as needed.
+#
+
+components: {}
+
+templates: {}

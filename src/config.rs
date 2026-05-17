@@ -87,6 +87,7 @@ pub enum DriverKind {
     Sh1122,
     SharpMemory,
     St7789,
+    St7796s,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -226,7 +227,7 @@ pub struct Cli {
 
     /// Display driver (emulator / config override)
     #[arg(short = 'd', long = "driver",
-          value_parser = ["ssd1306","ssd1309","ssd1322","sh1106","sh1122","sharpmemory","st7789"])]
+          value_parser = ["ssd1306","ssd1309","ssd1322","sh1106","sh1122","sharpmemory","st7789","st7796s"])]
     pub driver: Option<String>,
 
     /// Visualizer type
@@ -412,6 +413,7 @@ fn apply_cli_overrides(cfg: &mut Config, cli: &Cli) {
             "sh1122"      => DriverKind::Sh1122,
             "sharpmemory" => DriverKind::SharpMemory,
             "st7789"      => DriverKind::St7789,
+            "st7796s"     => DriverKind::St7796s,
             _             => unreachable!(),
         };
         cfg.display.get_or_insert_with(DisplayConfig::default).driver = Some(driver);

@@ -40,6 +40,9 @@ pub mod sh1106;
 #[cfg(feature = "driver-st7789")]
 pub mod st7789;
 
+#[cfg(feature = "driver-st7796s")]
+pub mod st7796s;
+
 // Mock driver for testing
 #[cfg(test)]
 pub mod mock;

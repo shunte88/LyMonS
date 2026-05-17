@@ -1,7 +1,8 @@
 #
 #  assets/st7789/layout.yaml
 #
-#  LyMonS — ST7789 display override  (300×170 Rgb565)
+#  LyMonS — ST7789 display override (default 300×170 Rgb565)
+#  ST7789 display family 320x240, 300×170, 240x240, 280x240, 240x135, 160x80
 #
 #  Merged on top of assets/layout.yaml at runtime.
 #  Only components/templates that differ from the base are defined here.
@@ -27,7 +28,113 @@
 
 components:
 
-  scroller_panel:
+  egg_tracks_240x135:
+    fields:
+      # combination text is not needed here - move out of bounds
+      - name: combination
+        type: label
+        x: "display.width+10"
+        y: "-10"
+      - name: artist
+        type: label
+        x: "40 + display.width/2"
+        y: "10"
+        width: "display.width/2 - 40"
+        height: "30"
+        font: font_6x9
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: title
+        type: label
+        x: "artist.left"
+        y: "artist.bottom"
+        width: "artist.width"
+        height: "artist.height"
+        font: font_6x9
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: album
+        type: label
+        x: "artist.left"
+        y: "title.bottom"
+        width: "artist.width"
+        height: "artist.height"
+        font: font_6x9
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: year
+        type: label
+        x: "artist.left"
+        y: "album.bottom"
+        width: "artist.width"
+        height: "artist.height/2"
+        font: font_6x9
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: time
+        type: label
+        x: "display.width - 43"
+        y: "display.height - 14"
+        width: "41"
+        height: "13"
+        font: font_7x13
+        horizontal_alignment: Right
+        fg_color: Yellow
+
+  egg_tracks_240x240:
+    fields:
+      # combination text is not needed here - move out of bounds
+      - name: combination
+        type: label
+        x: "display.width+10"
+        y: "-10"
+      - name: artist
+        type: label
+        x: "2"
+        y: "display.height - 75"
+        width: "display.width - 4"
+        height: "14"
+        font: font_7x13_bold
+        horizontal_alignment: Center
+        fg_color: Orange
+      - name: title
+        type: label
+        x: "artist.left"
+        y: "artist.bottom"
+        width: "artist.width"
+        height: "artist.height"
+        font: font_7x13_bold
+        horizontal_alignment: Center
+        fg_color: Orange
+      - name: album
+        type: label
+        x: "artist.left"
+        y: "title.bottom"
+        width: "artist.width"
+        height: "artist.height"
+        font: font_7x13_bold
+        horizontal_alignment: Center
+        fg_color: Orange
+      - name: year
+        type: label
+        x: "artist.left"
+        y: "album.bottom"
+        width: "artist.width"
+        height: "artist.height"
+        font: font_7x13_bold
+        horizontal_alignment: Center
+        fg_color: Orange
+      - name: time
+        type: label
+        x: "display.width - 43"
+        y: "display.height - 14"
+        width: "41"
+        height: "13"
+        font: font_7x13
+        horizontal_alignment: Right
+        fg_color: Yellow
+
+  scroller_panel_main:
     fields:
       - name: status_bar
         type: status_bar
@@ -36,47 +143,52 @@ components:
         width: "parent.width - 4"
         height: "9"
         font: font_4x6
-
       - name: album_artist
         type: scrolling_text
         x: "status_bar.left"
         y: "status_bar.bottom+10"
         width: "parent.width - 4"
-        height: "14"
+        height: "19"
         font: font_7x13
         fg_color: Orange
         scrollable: true
-
       - name: album
         type: scrolling_text
         x: "album_artist.left"
-        y: "album_artist.bottom+1"
+        y: "album_artist.bottom+3"
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
         fg_color: Orange
         scrollable: true
-
       - name: title
         type: scrolling_text
         x: "album_artist.left"
-        y: "album.bottom+1"
+        y: "album.bottom+3"
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
         fg_color: Orange
         scrollable: true
-
       - name: artist
         type: scrolling_text
         x: "album_artist.left"
-        y: "title.bottom+1"
+        y: "title.bottom+3"
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
         fg_color: Orange
         scrollable: true
-
+      - name: year
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "artist.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        fg_color: Orange
+        horizontal_alignment: Center
+        scrollable: true
       # parent.height - 15 = 49 on 64px display (matches: height - 6 - y_height)
       - name: track_progress_bar
         type: track_progress_bar
@@ -84,8 +196,80 @@ components:
         y: "parent.height - 19"
         width: "parent.width - 4"
         height: "3"
-
       # parent.height - 10 = 54 on 64px display (matches: height - 1 - y_height)
+      - name: info_line
+        type: info_line
+        x: "status_bar.left"
+        y: "parent.height - 14"
+        width: "parent.width - 4"
+        height: "14"
+        font: font_7x13
+
+  scroller_panel_240x135:
+    fields:
+      - name: status_bar
+        type: status_bar
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_4x6
+      - name: album_artist
+        type: scrolling_text
+        x: "status_bar.left"
+        y: "status_bar.bottom+10"
+        width: "parent.width - 4"
+        height: "10"
+        font: font_6x9
+        fg_color: Orange
+        horizontal_alignment: Center
+        scrollable: true
+      - name: album
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album_artist.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_6x9
+        fg_color: Orange
+        horizontal_alignment: Center
+        scrollable: true
+      - name: title
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_6x9
+        fg_color: Orange
+        horizontal_alignment: Center
+        scrollable: true
+      - name: artist
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "title.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_6x9
+        fg_color: Orange
+        horizontal_alignment: Center
+        scrollable: true
+      - name: year
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "artist.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_6x9
+        fg_color: Orange
+        horizontal_alignment: Center
+        scrollable: true
+      - name: track_progress_bar
+        type: track_progress_bar
+        x: "status_bar.left"
+        y: "parent.height - 19"
+        width: "parent.width - 4"
+        height: "3"
       - name: info_line
         type: info_line
         x: "status_bar.left"
@@ -104,24 +288,95 @@ components:
         y: "2"
         width: "parent.width - 4"
         height: "20"
-
       - name: cover_art
         type: custom
         x: "status_bar.left"
         y: "status_bar.bottom + 1"
         width: "120"
         height: "120"
-
       - name: album_artist
         type: scrolling_text
         x: "cover_art.right + 2"
         y: "status_bar.bottom + 10"
         width: "parent.width - cover_art.width - 4"
-        height: "14"
+        height: "19"
         font: font_7x13
         fg_color: Orange
         scrollable: true
+      - name: album
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album_artist.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        fg_color: Orange
+        scrollable: true
+      - name: title
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        fg_color: Orange
+        scrollable: true
+      - name: artist
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "title.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        fg_color: Orange
+        scrollable: true
+      - name: year
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "artist.bottom+3"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13
+        fg_color: Orange
+        scrollable: true
+      - name: track_progress_bar
+        type: track_progress_bar
+        x: "status_bar.left"
+        y: "parent.height - 19"
+        width: "parent.width - 4"
+        height: "3"
+      - name: info_line
+        type: info_line
+        x: "status_bar.left"
+        y: "parent.height - 14"
+        width: "parent.width - 4"
+        height: "14"
+        font: font_7x13
 
+  scroller_art_panel_240x135:
+    fields:
+      - name: status_bar
+        type: status_bar
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "20"
+      - name: cover_art
+        type: custom
+        x: "status_bar.left"
+        y: "status_bar.bottom + 1"
+        width: "100"
+        height: "100"
+      - name: album_artist
+        type: scrolling_text
+        x: "cover_art.right+4"
+        y: "status_bar.bottom+10"
+        width: "parent.width - 4 - cover_art.right"
+        height: "14"
+        font: font_7x13
+        fg_color: Cyan
+        horizontal_alignment: Center
+        scrollable: true
       - name: album
         type: scrolling_text
         x: "album_artist.left"
@@ -129,9 +384,9 @@ components:
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
-        fg_color: Orange
+        fg_color: Cyan
+        horizontal_alignment: Center
         scrollable: true
-
       - name: title
         type: scrolling_text
         x: "album_artist.left"
@@ -139,9 +394,9 @@ components:
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
-        fg_color: Orange
+        fg_color: Cyan
+        horizontal_alignment: Center
         scrollable: true
-
       - name: artist
         type: scrolling_text
         x: "album_artist.left"
@@ -149,18 +404,103 @@ components:
         width: "album_artist.width"
         height: "album_artist.height"
         font: font_7x13
-        fg_color: Orange
+        fg_color: Cyan
+        horizontal_alignment: Center
         scrollable: true
-
-      # parent.height - 15 = 49 on 64px display (matches: height - 6 - y_height)
+      - name: year
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "artist.bottom+1"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13_bold
+        fg_color: Cyan
+        horizontal_alignment: Center
+        scrollable: true
       - name: track_progress_bar
         type: track_progress_bar
         x: "status_bar.left"
         y: "parent.height - 19"
         width: "parent.width - 4"
         height: "3"
+      - name: info_line
+        type: info_line
+        x: "status_bar.left"
+        y: "parent.height - 14"
+        width: "parent.width - 4"
+        height: "14"
+        font: font_7x13
 
-      # parent.height - 10 = 54 on 64px display (matches: height - 1 - y_height)
+  scroller_art_panel_240x240:
+    fields:
+      - name: status_bar
+        type: status_bar
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "20"
+      - name: cover_art
+        type: custom
+        x: "status_bar.left"
+        y: "status_bar.bottom + 1"
+        width: "130"
+        height: "130"
+      - name: album_artist
+        type: scrolling_text
+        x: "2"
+        y: "cover_art.bottom - 10"
+        width: "parent.width - 4"
+        height: "14"
+        font: font_7x13_bold
+        fg_color: Cyan
+        horizontal_alignment: Center
+        scrollable: true
+      - name: album
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album_artist.bottom + 2"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13_bold
+        fg_color: Cyan
+        horizontal_alignment: Center
+        scrollable: true
+      - name: title
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album.bottom + 2"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13_bold
+        fg_color: Cyan
+        horizontal_alignment: Center
+        scrollable: true
+      - name: artist
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "title.bottom + 2"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13_bold
+        fg_color: Cyan
+        horizontal_alignment: Center
+        scrollable: true
+      - name: year
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "artist.bottom + 2"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_7x13_bold
+        fg_color: Cyan
+        horizontal_alignment: Center
+        scrollable: true
+      - name: track_progress_bar
+        type: track_progress_bar
+        x: "status_bar.left"
+        y: "parent.height - 19"
+        width: "parent.width - 4"
+        height: "3"
       - name: info_line
         type: info_line
         x: "status_bar.left"
@@ -382,7 +722,6 @@ components:
         font: font_7x13_bold
         horizontal_alignment: Center
         fg_color: Green
-
 
   weather_forecast_main:
     fields:
@@ -644,6 +983,894 @@ components:
         horizontal_alignment: Center
         fg_color: Cyan
 
+  # Current weather — 120×120 SVG icon left, all data in right column,
+  # conditions as a full-width strip at the bottom of the display.
+  weather_current_240x240:
+    fields:
+      # SVG icon — 120×120 vertically centered
+      - name: weather_icon
+        type: weather_icon
+        x: "0"
+        y: "15"
+        width: "120"
+        height: "120"
+      # Metric rows — 20×20 glyphs, font_6x10 text, 26px pitch
+      - name: temp_glyph
+        type: weather_glyph
+        x: "weather_icon.right + 2"
+        y: "6"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: temperature
+        type: label
+        x: "temp_glyph.right + 2"
+        y: "temp_glyph.top"
+        width: "parent.width - temp_glyph.right - 2"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: humidity_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "temp_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: humidity
+        type: label
+        x: "temperature.left"
+        y: "humidity_glyph.top"
+        width: "temperature.width"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: wind_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "humidity_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: wind
+        type: label
+        x: "temperature.left"
+        y: "wind_glyph.top"
+        width: "temperature.width"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: precip_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "wind_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: precipitation
+        type: label
+        x: "temperature.left"
+        y: "precip_glyph.top"
+        width: "temperature.width"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: pressure_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "precip_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: pressure
+        type: label
+        x: "temperature.left"
+        y: "pressure_glyph.top"
+        width: "temperature.width"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      # Astral block — rows chained with no gap, 20x20 glyphs
+      - name: sunrise_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "pressure_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: sunrise_text
+        type: label
+        x: "sunrise_glyph.right + 2"
+        y: "sunrise_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: sunset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunrise_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: sunset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "sunset_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: moonrise_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunset_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: moonrise_text
+        type: label
+        x: "sunrise_text.left"
+        y: "moonrise_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: moonset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "moonrise_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: moonset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "moonset_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+      # Moonphase — multi-line text below
+      # glyph will be centered above this text
+      - name: moonphase_text
+        type: label
+        # (120-50)/2
+        x: "35"
+        y: "parent.height - 46"
+        width: "50"
+        height: "22"
+        font: font_6x10
+        horizontal_alignment: Center
+        fg_color: Yellow
+      # Moonphase — 42×42 glyph center-justified 
+      # with multi-line text below
+      - name: moonphase_svg
+        type: custom
+        x: "moonphase_text.left + 4"
+        y: "moonphase_text.top - 52"
+        width: "42"
+        height: "42"
+      # Conditions — full-width strip at the bottom of the display
+      - name: conditions
+        type: label
+        x: "2"
+        y: "parent.height - 16"
+        width: "parent.width - 4"
+        height: "13"
+        font: font_7x13_bold
+        horizontal_alignment: Center
+        fg_color: Green
+
+  # 320x240 dimensional
+  # Current weather — 40×40 SVG icon left, all data in right column,
+  # conditions as a full-width strip at the bottom of the display.
+  weather_current_320x240:
+    fields:
+      # SVG icon — 140×140 vertically centered
+      - name: weather_icon
+        type: weather_icon
+        x: "0"
+        y: "15"
+        width: "140"
+        height: "140"
+      # Metric rows — 20×20 glyphs, font_7x13_bold text, 26px pitch
+      - name: temp_glyph
+        type: weather_glyph
+        x: "weather_icon.right + 2"
+        y: "6"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: temperature
+        type: label
+        x: "temp_glyph.right + 2"
+        y: "temp_glyph.top"
+        width: "parent.width - temp_glyph.right - 2"
+        height: "14"
+        font: font_7x13_bold
+        fg_color: Cyan
+      - name: humidity_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "temp_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: humidity
+        type: label
+        x: "temperature.left"
+        y: "humidity_glyph.top"
+        width: "temperature.width"
+        height: "14"
+        font: font_7x13
+        fg_color: Cyan
+      - name: wind_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "humidity_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: wind
+        type: label
+        x: "temperature.left"
+        y: "wind_glyph.top"
+        width: "temperature.width"
+        height: "14"
+        font: font_7x13
+        fg_color: Cyan
+      - name: precip_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "wind_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: precipitation
+        type: label
+        x: "temperature.left"
+        y: "precip_glyph.top"
+        width: "temperature.width"
+        height: "14"
+        font: font_7x13
+        fg_color: Cyan
+      - name: pressure_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "precip_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: pressure
+        type: label
+        x: "temperature.left"
+        y: "pressure_glyph.top"
+        width: "temperature.width"
+        height: "14"
+        font: font_7x13
+        fg_color: Cyan
+      # Astral block — rows chained with no gap, 20x20 glyphs
+      - name: sunrise_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "pressure_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: sunrise_text
+        type: label
+        x: "sunrise_glyph.right + 2"
+        y: "sunrise_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: sunset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunrise_glyph.bottom"
+        width: "20"
+        height: "20"
+      - name: sunset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "sunset_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: moonrise_glyph
+        type: weather_glyph
+        x: "sunrise_text.right + 8"
+        y: "pressure_glyph.bottom + 3"
+        width: "20"
+        height: "20"
+      - name: moonrise_text
+        type: label
+        x: "moonrise_glyph.right + 2"
+        y: "moonrise_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: moonset_glyph
+        type: weather_glyph
+        x: "sunset_text.right + 8"
+        y: "sunset_glyph.top"
+        width: "20"
+        height: "20"
+      - name: moonset_text
+        type: label
+        x: "moonset_glyph.right + 2"
+        y: "moonset_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+      # Moonphase — multi-line text below
+      # glyph will be centered above this text
+      - name: moonphase_text
+        type: label
+        x: "parent.width - 52"
+        y: "precip_glyph.top"
+        width: "50"
+        height: "22"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      # Moonphase — 42×42 glyph center-justified 
+      # with multi-line text below
+      - name: moonphase_svg
+        type: custom
+        x: "moonphase_text.left + 4"
+        y: "12"
+        width: "42"
+        height: "42"
+      # Conditions — full-width strip at the bottom of the display
+      - name: conditions
+        type: label
+        x: "2"
+        y: "parent.height - 16"
+        width: "parent.width - 4"
+        height: "13"
+        font: font_7x13_bold
+        horizontal_alignment: Center
+        fg_color: Green
+
+  # 280x240 dimensional
+  # Current weather — 40×40 SVG icon left, all data in right column,
+  # conditions as a full-width strip at the bottom of the display.
+  weather_current_280x240:
+    fields:
+      # SVG icon — 120×120 vertically centered
+      - name: weather_icon
+        type: weather_icon
+        x: "0"
+        y: "15"
+        width: "120"
+        height: "120"
+      # Metric rows — 20×20 glyphs, font_6x10 text, 26px pitch
+      - name: temp_glyph
+        type: weather_glyph
+        x: "weather_icon.right + 20"
+        y: "6"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: temperature
+        type: label
+        x: "temp_glyph.right + 2"
+        y: "temp_glyph.top"
+        width: "parent.width - temp_glyph.right - 2"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: humidity_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "temp_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: humidity
+        type: label
+        x: "temperature.left"
+        y: "humidity_glyph.top"
+        width: "temperature.width"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: wind_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "humidity_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: wind
+        type: label
+        x: "temperature.left"
+        y: "wind_glyph.top"
+        width: "temperature.width"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: precip_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "wind_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: precipitation
+        type: label
+        x: "temperature.left"
+        y: "precip_glyph.top"
+        width: "temperature.width"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: pressure_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "precip_glyph.bottom + 1"
+        width: "20"
+        height: "20"
+        fg_color: Cyan
+      - name: pressure
+        type: label
+        x: "temperature.left"
+        y: "pressure_glyph.top"
+        width: "temperature.width"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      # Astral block — rows chained with no gap, 20x20 glyphs
+      - name: sunrise_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "pressure_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: sunrise_text
+        type: label
+        x: "sunrise_glyph.right + 2"
+        y: "sunrise_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: sunset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunrise_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: sunset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "sunset_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: moonrise_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunset_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: moonrise_text
+        type: label
+        x: "sunrise_text.left"
+        y: "moonrise_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: moonset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "moonrise_glyph.bottom + 2"
+        width: "20"
+        height: "20"
+      - name: moonset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "moonset_glyph.top"
+        width: "33"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+      # Moonphase — multi-line text below
+      # glyph will be centered above this text
+      - name: moonphase_text
+        type: label
+        # (120-50)/2
+        x: "35"
+        y: "parent.height - 46"
+        width: "50"
+        height: "22"
+        font: font_6x10
+        horizontal_alignment: Center
+        fg_color: Yellow
+      # Moonphase — 42×42 glyph center-justified 
+      # with multi-line text below
+      - name: moonphase_svg
+        type: custom
+        x: "moonphase_text.left + 4"
+        y: "moonphase_text.top - 52"
+        width: "42"
+        height: "42"
+      # Conditions — full-width strip at the bottom of the display
+      - name: conditions
+        type: label
+        x: "2"
+        y: "parent.height - 16"
+        width: "parent.width - 4"
+        height: "13"
+        font: font_7x13_bold
+        horizontal_alignment: Center
+        fg_color: Green
+
+  # Current weather — 40×40 SVG icon left, all data in right column,
+  # conditions as a full-width strip at the bottom of the display.
+  weather_current_240x135:
+    fields:
+      # SVG icon — 10×140 vertically centered
+      - name: weather_icon
+        type: weather_icon
+        x: "0"
+        y: "15"
+        width: "100"
+        height: "100"
+      # Metric rows — 20×20 glyphs, font_7x13_bold text, 26px pitch
+      - name: temp_glyph
+        type: weather_glyph
+        x: "weather_icon.right + 2"
+        y: "6"
+        width: "14"
+        height: "14"
+      - name: temperature
+        type: label
+        x: "temp_glyph.right + 2"
+        y: "temp_glyph.top"
+        width: "parent.width - temp_glyph.right - 2"
+        height: "11"
+        font: font_6x10
+        fg_color: Cyan
+      - name: humidity_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "temp_glyph.bottom + 2"
+        width: "temp_glyph.width"
+        height: "temp_glyph.height"
+      - name: humidity
+        type: label
+        x: "temperature.left"
+        y: "humidity_glyph.top"
+        width: "temperature.width"
+        height: "temperature.height"
+        font: font_6x10
+        fg_color: Cyan
+      - name: wind_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "humidity_glyph.bottom + 1"
+        width: "temp_glyph.width"
+        height: "temp_glyph.height"
+      - name: wind
+        type: label
+        x: "temperature.left"
+        y: "wind_glyph.top"
+        width: "temperature.width"
+        height: "temperature.height"
+        font: font_6x10
+        fg_color: Cyan
+      - name: precip_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "wind_glyph.bottom + 1"
+        width: "temp_glyph.width"
+        height: "temp_glyph.height"
+      - name: precipitation
+        type: label
+        x: "temperature.left"
+        y: "precip_glyph.top"
+        width: "temperature.width"
+        height: "temperature.height"
+        font: font_6x10
+        fg_color: Cyan
+      - name: pressure_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "precip_glyph.bottom + 1"
+        width: "temp_glyph.width"
+        height: "temp_glyph.height"
+      - name: pressure
+        type: label
+        x: "temperature.left"
+        y: "pressure_glyph.top"
+        width: "temperature.width"
+        height: "temperature.height"
+        font: font_6x10
+        fg_color: Cyan
+      # Astral block — rows chained with no gap, 20x20 glyphs
+      - name: sunrise_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "pressure_glyph.bottom + 2"
+        width: "temp_glyph.width"
+        height: "temp_glyph.height"
+      - name: sunrise_text
+        type: label
+        x: "sunrise_glyph.right + 2"
+        y: "sunrise_glyph.top"
+        width: "33"
+        height: "temperature.height"
+        font: font_6x10
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: sunset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunrise_glyph.bottom"
+        width: "temp_glyph.width"
+        height: "temp_glyph.height"
+      - name: sunset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "sunset_glyph.top"
+        width: "sunrise_text.width"
+        height: "sunrise_text.height"
+        font: font_6x10
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: moonrise_glyph
+        type: weather_glyph
+        x: "sunrise_text.right + 8"
+        y: "pressure_glyph.bottom + 3"
+        width: "temp_glyph.width"
+        height: "temp_glyph.height"
+      - name: moonrise_text
+        type: label
+        x: "moonrise_glyph.right + 2"
+        y: "moonrise_glyph.top"
+        width: "sunrise_text.width"
+        height: "sunrise_text.height"
+        font: font_6x10
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: moonset_glyph
+        type: weather_glyph
+        x: "sunset_text.right + 8"
+        y: "sunset_glyph.top"
+        width: "temp_glyph.width"
+        height: "temp_glyph.height"
+      - name: moonset_text
+        type: label
+        x: "moonset_glyph.right + 2"
+        y: "moonset_glyph.top"
+        width: "sunset_text.width"
+        height: "sunset_text.height"
+        font: font_6x10
+        horizontal_alignment: Center
+        fg_color: Cyan
+      # Moonphase — multi-line text below
+      # glyph will be centered above this text
+      - name: moonphase_text
+        type: label
+        x: "parent.width - 52"
+        y: "precip_glyph.top"
+        width: "50"
+        height: "22"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      # Moonphase — 42×42 glyph center-justified 
+      # with multi-line text below
+      - name: moonphase_svg
+        type: custom
+        x: "moonphase_text.left + 4"
+        y: "12"
+        width: "42"
+        height: "42"
+      # Conditions — full-width strip at the bottom of the display
+      - name: conditions
+        type: label
+        x: "2"
+        y: "parent.height - 16"
+        width: "parent.width - 4"
+        height: "13"
+        font: font_7x13_bold
+        horizontal_alignment: Center
+        fg_color: Green
+
+  # Current weather — 40×40 SVG icon left, all data in right column,
+  # conditions as a full-width strip at the bottom of the display.
+  weather_current_160x80:
+    fields:
+      # SVG icon — 36×36 top left sector
+      - name: weather_icon
+        type: weather_icon
+        x: "4"
+        y: "4"
+        width: "34"
+        height: "34"
+      # Metric rows — 10×10 glyphs, font_5x7 text
+      - name: temp_glyph
+        type: weather_glyph
+        x: "weather_icon.right + 2"
+        y: "2"
+        width: "10"
+        height: "10"
+        fg_color: Cyan
+      - name: temperature
+        type: label
+        x: "temp_glyph.right + 2"
+        y: "temp_glyph.top"
+        width: "parent.width - temp_glyph.right - 2"
+        height: "8"
+        font: font_5x7
+        fg_color: Cyan
+      - name: humidity_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "temp_glyph.bottom + 1"
+        width: "10"
+        height: "10"
+        fg_color: Cyan
+      - name: humidity
+        type: label
+        x: "temperature.left"
+        y: "humidity_glyph.top"
+        width: "temperature.width"
+        height: "8"
+        font: font_5x7
+        fg_color: Cyan
+      - name: wind_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "humidity_glyph.bottom + 1"
+        width: "10"
+        height: "10"
+        fg_color: Cyan
+      - name: wind
+        type: label
+        x: "temperature.left"
+        y: "wind_glyph.top"
+        width: "temperature.width"
+        height: "8"
+        font: font_5x7
+        fg_color: Cyan
+      - name: precip_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "wind_glyph.bottom + 1"
+        width: "10"
+        height: "10"
+        fg_color: Cyan
+      - name: precipitation
+        type: label
+        x: "temperature.left"
+        y: "precip_glyph.top"
+        width: "temperature.width"
+        height: "8"
+        font: font_5x7
+        fg_color: Cyan
+      - name: pressure_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "precip_glyph.bottom + 1"
+        width: "10"
+        height: "10"
+        fg_color: Cyan
+      - name: pressure
+        type: label
+        x: "temperature.left"
+        y: "pressure_glyph.top"
+        width: "temperature.width"
+        height: "8"
+        font: font_5x7
+        fg_color: Cyan
+      # Astral block — rows chained with no gap
+      - name: sunrise_glyph
+        type: weather_glyph
+        x: "104"
+        y: "temp_glyph.top"
+        width: "10"
+        height: "10"
+      - name: sunrise_text
+        type: label
+        x: "sunrise_glyph.right + 2"
+        y: "sunrise_glyph.top"
+        width: "33"
+        height: "8"
+        font: font_5x7
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: sunset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunrise_glyph.bottom + 1"
+        width: "10"
+        height: "10"
+      - name: sunset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "sunset_glyph.top"
+        width: "sunrise_text.width"
+        height: "sunrise_text.height"
+        font: font_5x7
+        horizontal_alignment: Center
+        fg_color: Yellow
+      - name: moonrise_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunset_glyph.bottom + 1"
+        width: "10"
+        height: "10"
+      - name: moonrise_text
+        type: label
+        x: "sunrise_text.left"
+        y: "moonrise_glyph.top"
+        width: "sunrise_text.width"
+        height: "sunrise_text.height"
+        font: font_5x7
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: moonset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "moonrise_glyph.bottom + 1"
+        width: "10"
+        height: "10"
+      - name: moonset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "moonset_glyph.top"
+        width: "sunrise_text.width"
+        height: "sunrise_text.height"
+        font: font_5x7
+        horizontal_alignment: Center
+        fg_color: Cyan
+      # Moonphase
+      - name: moonphase_text
+        type: label
+        x: "2"
+        y: "parent.height - 20"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+      # Moonphase — 34×34 glyph center-justified 
+      # with multi-line text below
+      - name: moonphase_svg
+        type: custom
+        x: "weather_icon.left"
+        y: "weather_icon.bottom + 3"
+        width: "weather_icon.width"
+        height: "weather_icon.height"
+      # Conditions — full-width strip at the bottom of the display
+      - name: conditions
+        type: label
+        x: "2"
+        y: "parent.height - 9"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Blue
+
 templates:
 
   playback:
@@ -657,6 +1884,27 @@ templates:
             y: "0"
             width: "display.width"
             height: "display.height"
+      - name: 240x240
+        regions: 
+          - component: scroller_art_panel_240x240
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+      - name: 280x240
+        regions: 
+          - component: scroller_art_panel_240x240
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+      - name: 240x135
+        regions: 
+          - component: scroller_art_panel_240x135
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
 
   # AIO: 50/50 split — 160px info panel, 160px visualizer panel.
   # Adjust x/width on visualizer_panel here to tune the split without recompiling.
@@ -666,7 +1914,7 @@ templates:
         match:
           category: [Large, ExtraLarge]
         regions:
-          - component: scroller_panel
+          - component: scroller_panel_main
             x: "0"
             y: "0"
             width: "display.width/2"
@@ -684,6 +1932,51 @@ templates:
       - name: default
         regions:
           - component: weather_forecast_main
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  weather_current:
+    variants:
+      - name: default
+        regions:
+          - component: weather_current_main
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+      - name: 160x80
+        regions:
+          - component: weather_current_160x80
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+      - name: 320x240
+        regions:
+          - component: weather_current_320x240
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+      - name: 280x240
+        regions:
+          - component: weather_current_280x240
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+      - name: 240x135
+        regions:
+          - component: weather_current_240x135
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+      - name: 240x240
+        regions:
+          - component: weather_current_240x240
             x: "0"
             y: "0"
             width: "display.width"
@@ -743,6 +2036,20 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_tvtime:
     variants:
@@ -798,6 +2105,25 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x135
+        regions:
+          - component: egg_tracks_240x135
+            x: "0"
+            y: "0"
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_tubeamp:
     variants:
@@ -853,6 +2179,25 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x135
+        regions:
+          - component: egg_tracks_240x135
+            x: "0"
+            y: "0"
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_vcr:
     variants:
@@ -908,6 +2253,20 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_scope:
     variants:
@@ -963,6 +2322,20 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_moog:
     variants:
@@ -1018,6 +2391,25 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x135
+        regions:
+          - component: egg_tracks_240x135
+            x: "0"
+            y: "0"
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_ibmpc:
     variants:
@@ -1073,6 +2465,25 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x135
+        regions:
+          - component: egg_tracks_240x135
+            x: "0"
+            y: "0"
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_radio40:
     variants:
@@ -1128,6 +2539,25 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x135
+        regions:
+          - component: egg_tracks_240x135
+            x: "0"
+            y: "0"
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_radio50:
     variants:
@@ -1183,6 +2613,25 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x135
+        regions:
+          - component: egg_tracks_240x135
+            x: "0"
+            y: "0"
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_blackfly:
     variants:
@@ -1238,6 +2687,25 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x135
+        regions:
+          - component: egg_tracks_240x135
+            x: "0"
+            y: "0"
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_reel2reel:
     variants:
@@ -1293,6 +2761,20 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_bass:
     variants:
@@ -1348,6 +2830,20 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_pipboy:
     variants:
@@ -1403,6 +2899,20 @@ templates:
             font: font_7x13
             horizontal_alignment: Right
             fg_color: Yellow
+      - name: 240x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
+      - name: 280x240
+        regions:
+          - component: egg_tracks_240x240
+            x: "0"
+            y: "0"
+            width: "parent.width"
+            height: "parent.height-100"
 
   easter_egg_cassette:
     variants:

@@ -122,6 +122,7 @@ pub struct LyMonsBusConfig {
 pub enum LyMonsColorDepth {
     Monochrome = 0,
     Gray4 = 1,
+    Rgb565 = 2,
 }
 
 /// Display configuration passed to plugin

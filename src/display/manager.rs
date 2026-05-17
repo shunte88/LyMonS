@@ -406,7 +406,11 @@ impl DisplayManager {
         let scroll_mode_enum = crate::textable::transform_scroll_mode(scroll_mode);
         let scrolling_text = ScrollingText::new(layout.clone(), scroll_mode_enum);
 
-        let clock_font_data = set_clock_font(clock_font, layout.height);
+        let clock_font_data = set_clock_font(
+            clock_font, 
+            layout.width,
+            layout.height
+        );
         let clock_display = ClockDisplay::new(layout.clone(), clock_font_data, show_metrics);
 
         let weather_display = WeatherComponent::new(layout.clone());
@@ -577,13 +581,14 @@ impl DisplayManager {
     fn render_scrolling(&mut self) -> Result<(), DisplayError> {
         let page = self.layout_manager.create_scrolling_page(SCROLLING_PAGE);
 
-        if let (Some(aa), Some(al), Some(ti), Some(ar)) = (
+        if let (Some(aa), Some(al), Some(ti), Some(ar), Some(yr)) = (
             page.get_field("album_artist"),
             page.get_field("album"),
             page.get_field("title"),
             page.get_field("artist"),
+            page.get_field("year"),
         ) {
-            self.scrolling_text.update_with_fields(aa, al, ti, ar);
+            self.scrolling_text.update_with_fields(aa, al, ti, ar, yr);
         }
 
         // Pre-compute display data before the framebuffer borrow
@@ -2163,17 +2168,21 @@ impl DisplayManager {
                 Some(album_artist_field), 
                 Some(album_field), 
                 Some(title_field), 
-                Some(artist_field)) = (
+                Some(artist_field),
+                Some(year_field)
+            ) = (
                 page.get_field("album_artist"),
                 page.get_field("album"),
                 page.get_field("title"),
                 page.get_field("artist"),
+                page.get_field("year"),
             ) {
                 self.scrolling_text.update_with_fields(
                     album_artist_field, 
                     album_field, 
                     title_field, 
-                    artist_field
+                    artist_field,
+                    year_field
                 );
             }
 
@@ -2191,7 +2200,7 @@ impl DisplayManager {
                                 self.status_bar.render_field(field, fb)
                                     .map_err(|_| DisplayError::DrawingError("aio status_bar".to_string()))?;
                             }
-                            "album_artist" | "album" | "title" | "artist" | "combination" => {
+                            "album_artist" | "album" | "title" | "artist" | "combination" | "year" => {
                                 self.scrolling_text.render_field(field, fb)
                                     .map_err(|_| DisplayError::DrawingError(format!("aio {}", field.name)))?;
                             }
@@ -2291,7 +2300,7 @@ impl DisplayManager {
                                 self.status_bar.render_field(field, fb)
                                     .map_err(|_| DisplayError::DrawingError("aio status_bar".to_string()))?;
                             }
-                            "album_artist" | "album" | "title" | "artist" | "combination"=> {
+                            "album_artist" | "album" | "title" | "artist" | "combination" | "year" => {
                                 self.scrolling_text.render_field(field, fb)
                                     .map_err(|_| DisplayError::DrawingError(format!("aio {}", field.name)))?;
                             }
@@ -2394,7 +2403,7 @@ impl DisplayManager {
                                 self.status_bar.render_field(field, fb)
                                     .map_err(|_| DisplayError::DrawingError("aio status_bar".to_string()))?;
                             }
-                            "album_artist" | "album" | "title" | "artist" | "combination"=> {
+                            "album_artist" | "album" | "title" | "artist" | "combination" | "year" => {
                                 self.scrolling_text.render_field(field, fb)
                                     .map_err(|_| DisplayError::DrawingError(format!("aio {}", field.name)))?;
                             }
@@ -3284,9 +3293,10 @@ impl DisplayManager {
             album_artist,
             album,
             title,
-            artist
+            artist,
+            year,
         );
-        self.scrolling_text.set_year(year.clone());
+
         // Note: update() is called in render_scrolling() on each frame
 
         // Cover art: fetch if coverid changed (Rgb565 displays only)

@@ -117,7 +117,7 @@ impl LayoutTemplates {
                         match base_tmpl.variants.iter_mut().find(|v| v.name == other_variant.name) {
                             None => base_tmpl.variants.push(other_variant),
                             Some(base_variant) => {
-                                // Upsert each field by name
+                                // Merge/upsert each field by name
                                 for other_field in other_variant.fields {
                                     match base_variant.fields.iter_mut().find(|f| f.name == other_field.name) {
                                         Some(base_field) => *base_field = other_field,
@@ -349,6 +349,7 @@ pub enum CategoryFilter {
     Medium,
     Large,
     ExtraLarge,
+    Dimensional,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

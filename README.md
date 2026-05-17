@@ -104,7 +104,7 @@ Options:
       --i2c-bus <I2C_BUS>
           I2C bus device path [default: /dev/i2c-1]
   -d, --driver <DRIVER>
-          Display driver (emulator / config override) [possible values: ssd1306, ssd1309, ssd1322, sh1106, sh1122, sharpmemory, st7789]
+          Display driver (emulator / config override) [possible values: ssd1306, ssd1309, ssd1322, sh1106, sh1122, sharpmemory, st7789, st7796s]
   -a, --viz <VIZ>
           Visualizer type [possible values: combination, hist_aio, hist_mono, hist_stereo, peak_mono, peak_stereo, vu_aio, vu_mono, vu_stereo, waveform_spectrum, no_viz]
       --hist-scheme <HIST_SCHEME>
@@ -311,6 +311,69 @@ There are currently 10 easter egg modes:
 
 Specify `--egg <name>` to display an easter egg during track playback.
 
+## Supported Displays
+
+Each driver speaks a single bus and a single colour depth. Colour depth is a
+property of the **driver**, not the panel size — choosing `--driver st7789`
+implies Rgb565 even on a 240×135 panel; `--driver ssd1322` implies Gray4
+regardless of physical dimensions.
+
+| Driver        | Bus     | Colour depth | Panel sizes (long × short)                 |
+|---------------|---------|--------------|--------------------------------------------|
+| `ssd1306`     | I²C/SPI | Mono (1bpp)  | 128×64                                     |
+| `ssd1309`     | I²C/SPI | Mono (1bpp)  | 128×64                                     |
+| `sh1106`      | I²C     | Mono (1bpp)  | 132×64                                     |
+| `ssd1322`     | SPI     | Gray4 (4bpp) | 256×64                                     |
+| `sh1122`      | SPI     | Gray4 (4bpp) | 256×64                                     |
+| `st7789`      | SPI     | Rgb565 (16bpp) | 320×240, 320×170, 280×240, 240×240, 240×135, 160×80 |
+| `st7796s`     | SPI     | Rgb565 (16bpp) | 480×320                                    |
+| `sharpmemory` | SPI     | Mono (1bpp)  | 400×240                                    |
+
+### Specifying Panel Size
+
+For drivers with more than one panel option (currently `st7789`; `st7796s`
+will follow if/when alternative panel sizes are supported), set
+`width` and `height` in the `display:` block of your config file:
+
+```yaml
+display:
+  driver: st7789
+  width:  240
+  height: 240
+```
+
+The configurator validates the requested size against the supported list and
+fails fast with a clear message if it doesn't match. For drivers with a single
+panel (e.g. `ssd1322`) the size is fixed and the values are ignored.
+
+### Orientation and Rotation
+
+LyMonS treats every framebuffer as **landscape-canonical**: the longer axis is
+always width, the shorter axis is always height. If you supply portrait
+dimensions in YAML — e.g. `width: 135, height: 240` for a 240×135 ST7789 — the
+driver normalises silently and logs:
+
+```
+ST7789: normalised input 135x240 → 240x135 (long axis first)
+```
+
+Physical orientation is then handled by `rotate_deg` (`0`, `90`, `180`, `270`),
+which rotates the rendered framebuffer when blitted to the panel. This means
+the layout YAML never needs portrait-specific variants — author once in
+landscape and rotate at the panel.
+
+### SVG and Scaling
+
+Most pixel-bearing assets in LyMonS are SVG (clock digits, weather glyphs,
+easter eggs, status icons, peak meters). They scale cleanly to whatever panel
+size the driver reports. Layout YAML, however, currently carries
+**hand-tuned absolute coordinates** for the canonical panel size of each
+driver — so a non-canonical ST7789 size (anything other than 320×170) will
+render but field positions and widths may need attention. Add a sized layout
+override using a **dimensional variant** named `{width}x{height}` (for example
+`240x240`) within the driver's `layout.yaml` — see *Dimensional Variants*
+below. The underlying SVGs themselves should require no changes.
+
 ## Layout System
 
 LyMonS uses a declarative YAML layout system to define where and how every element appears on screen. All positions, sizes, fonts, colors, and alignment are data — no recompilation needed. Driver-specific overrides let each display have its own tuned layout without touching shared definitions.
@@ -435,6 +498,32 @@ Match filters:
 |---|---|
 | `category` | `Small` (128px), `Medium` (132px), `Large` (256px), `ExtraLarge` (320px+) |
 | `color_depth` | `Monochrome`, `Gray4`, `Rgb565` |
+
+### Dimensional Variants
+
+A variant whose **name** is exactly `{width}x{height}` (e.g. `240x240`,
+`320x170`) is matched as an exact size override and wins over every other
+variant — no `match:` block required. This lets you ship a hand-tuned layout
+for a specific panel size without disturbing the catch-all `default` variant
+that other sizes fall back to.
+
+```yaml
+templates:
+  weather_current:
+    variants:
+      - name: 240x240             # exact size match — wins on 240×240 panels
+        regions:
+          - component: weather_current_240x240
+            ...
+      - name: default             # everything else
+        regions:
+          - component: weather_current_main
+            ...
+```
+
+Resolution order: dimensional name match → variant with a matching `match:`
+block → first catch-all. Authoring convention: put dimensional variants and
+specific match-rule variants first, leave the catch-all `default` last.
 
 ### Driver Overrides
 

@@ -385,13 +385,18 @@ pub struct LMSServer {
     // Fields for background polling thread management
     stop_sender: Option<mpsc::Sender<()>>,
     poll_handle: Option<JoinHandle<()>>,
-    // beacon watch channel 
+    // beacon watch channel
     playing_tx: watch::Sender<bool>,
     playing_rx: watch::Receiver<bool>,
-    last_playing: bool, 
+    last_playing: bool,
     changed: bool,
+    consecutive_poll_errors: u32,
     pub sliminfo: SlimInfo,
 }
+
+/// Number of consecutive poll failures before the connection is considered unhealthy.
+/// At 200ms poll interval this is ~3 seconds of silence before we flag for reconnection.
+const UNHEALTHY_THRESHOLD: u32 = 15;
 
 impl LMSServer {
     pub fn new() -> Self {
@@ -415,10 +420,10 @@ impl LMSServer {
             poll_handle: None,
             playing_tx,
             playing_rx,
-            last_playing: false, 
+            last_playing: false,
             changed: false,
+            consecutive_poll_errors: 0,
             sliminfo: SlimInfo::default(),
-
         }
     }
 
@@ -443,13 +448,62 @@ impl LMSServer {
     }
 
     pub fn is_playing(&self) -> bool {
-        //self.players[self.active_player].playing
-        // the boolean on the play is likely better but mode has the detail too
-        if self.active_player != usize::MAX && self.sliminfo.mode == "play" {
-            true
-        }else {
-            false
+        self.active_player != usize::MAX && self.sliminfo.mode == "play"
+    }
+
+    /// Returns false when consecutive poll failures reach UNHEALTHY_THRESHOLD.
+    /// Signals that the server or player connection has been lost.
+    pub fn is_healthy(&self) -> bool {
+        self.consecutive_poll_errors < UNHEALTHY_THRESHOLD
+    }
+
+    /// Returns display names of all currently known players, for diagnostic logging.
+    pub fn available_player_names(&self) -> Vec<String> {
+        self.players.iter()
+            .map(|p| format!("\"{}\" ({})", p.player_name, p.player_id))
+            .collect()
+    }
+
+    /// Sends a stop signal to the background polling task (non-blocking).
+    pub fn stop_polling(&mut self) {
+        if let Some(sender) = self.stop_sender.take() {
+            let _ = sender.try_send(());
         }
+    }
+
+    /// Wraps this connected server in `Arc<Mutex>` and starts the background polling task.
+    /// Call only after `discover()` and `get_players()` have both succeeded.
+    pub async fn start_polling(mut self) -> Arc<TokMutex<LMSServer>> {
+        let (tx, rx) = mpsc::channel(1);
+        self.stop_sender = Some(tx);
+        self.ask_refresh();
+
+        let lms_arc = Arc::new(TokMutex::new(self));
+        let lms_for_poll = Arc::clone(&lms_arc);
+
+        let poll_handle = tokio::spawn(async move {
+            let mut rx = rx;
+            loop {
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_millis(200)) => {
+                        let mut locked_lms = lms_for_poll.lock().await;
+                        if locked_lms.refresh && locked_lms.active_player != usize::MAX {
+                            match locked_lms.get_sliminfo_status().await {
+                                Ok(_) => {},
+                                Err(e) => error!("LMS poll error: {}", e),
+                            }
+                        }
+                    }
+                    _ = rx.recv() => {
+                        debug!("LMS polling stopped.");
+                        break;
+                    }
+                }
+            }
+        });
+
+        lms_arc.lock().await.poll_handle = Some(poll_handle);
+        lms_arc
     }
 
     /// Discovers LMS servers on the local network using UDP broadcast.
@@ -572,14 +626,17 @@ impl LMSServer {
                 params,
             ).await {
                 Ok(result) => {
-                    //println!("{:?}", result);
                     let status: PlayerStatus = serde_json::from_value(result)?;
                     let slim = SlimInfo::from_status(status);
                     self.changed = slim != self.sliminfo;
                     self.sliminfo = slim.clone();
                     self.maybe_emit_playing(&slim.mode.clone());
+                    self.consecutive_poll_errors = 0;
                 },
-                Err(e) => error!("Error calling 'status' on LMS Server: {}", e),
+                Err(e) => {
+                    error!("Error calling 'status' on LMS Server: {}", e);
+                    self.consecutive_poll_errors += 1;
+                },
             }
             self.working = false;
         }
@@ -587,140 +644,79 @@ impl LMSServer {
         
     }
         
-    /// Fetches player information from the discovered LMS server.
-    /// This method assumes `self.host` and `self.port` are already populated by `discover()`.
+    /// Fetches the player list from the LMS server and matches the configured player.
+    /// Returns `Err` if the server is unreachable or the requested player is not found.
+    /// Available player names are included in the error message for diagnostics.
     pub async fn get_players(&mut self, player_name_filter: &str, mac_address: &str) -> Result<(), Box<dyn std::error::Error>> {
         if !self.ready {
             return Err("LMS Server not discovered. Call discover() first.".into());
         }
-        
-        let command="players";
-        let params = vec![json!("0"), json!("99")]; // Requesting players from index 0 to 99
-        
+
+        let params = vec![json!("0"), json!("99")];
         debug!("Requesting players from {}:{}...", self.host, self.port);
-        match self.client.send_slim_request(
+
+        let result = self.client.send_slim_request(
             self.host.to_string().as_str(),
             self.port,
-            "", // Player MAC is empty for this command
-            command,
+            "",
+            "players",
             params,
-        ).await {
-            Ok(result) => {
-                self.player_count = value_to_i16(&result["count"]).unwrap_or(0);
-                debug!("Total players found: {}", self.player_count);
-                
-                if self.player_count > 0 {
-                    self.players = serde_json::from_value::<Vec<Player>>(result["players_loop"].clone())
-                    .expect(&format!("{} json parser", command));
-                
-                    // Iterate through the players to find the active player
-                    for (i, player) in self.players.iter().enumerate() {
-                        if player_name_filter == "-" || player.player_name.to_lowercase() == player_name_filter.to_lowercase() {
-                            self.active_player = i; // Store the index
-                            debug!("Active player set to: {} ({})", player.player_name, player.player_id);
-                            if player.player_id.to_lowercase() == mac_address.to_lowercase() {
-                                self.shared_memory = format!("/squeezelite-{}", player.player_id.clone().to_lowercase());
-                            }
-                            break; // Found the player, no need to continue
-                        }
+        ).await.map_err(|e| format!("LMS server unreachable while fetching players: {}", e))?;
+
+        self.player_count = value_to_i16(&result["count"]).unwrap_or(0);
+        debug!("Total players found: {}", self.player_count);
+
+        if self.player_count > 0 {
+            self.players = serde_json::from_value::<Vec<Player>>(result["players_loop"].clone())
+                .map_err(|e| format!("Failed to parse player list: {}", e))?;
+
+            for (i, player) in self.players.iter().enumerate() {
+                if player_name_filter == "-" || player.player_name.to_lowercase() == player_name_filter.to_lowercase() {
+                    self.active_player = i;
+                    debug!("Active player: {} ({})", player.player_name, player.player_id);
+                    if player.player_id.to_lowercase() == mac_address.to_lowercase() {
+                        self.shared_memory = format!("/squeezelite-{}", player.player_id.to_lowercase());
                     }
-                    
-                    if self.active_player == usize::MAX && player_name_filter != "-" {
-                        debug!("Player '{}' not found among discovered players.", player_name_filter);
-                    } else if self.active_player == usize::MAX {
-                        info!("No specific player requested or no players found.");
-                    }
-                } else {
-                    info!("No players reported by LMS server.");
+                    break;
                 }
-            },
-            Err(e) => error!("Error calling 'players' on LMS Server: {}", e),
+            }
         }
+
+        if self.active_player == usize::MAX {
+            let available = self.players.iter()
+                .map(|p| format!("\"{}\"", p.player_name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let msg = if player_name_filter == "-" {
+                "No players available on LMS server".to_string()
+            } else {
+                format!(
+                    "Player '{}' not found — available: [{}]",
+                    player_name_filter,
+                    if available.is_empty() { "none".to_string() } else { available }
+                )
+            };
+            info!("{}", msg);
+            return Err(msg.into());
+        }
+
         Ok(())
     }
 
-    /// Initializes the LMS server, discovers it, fetches players, initializes tags,
-    /// and starts a background polling thread for status updates.
-    ///
-    /// Returns the LMSServer instance wrapped in an `Arc<TokMutex>` on success,
-    /// or an error if initialization fails.
+    /// One-shot convenience wrapper: discover → find player → start polling.
+    /// Returns `Err` if the server is not found or the player is not available.
+    /// For retry-with-warning behaviour use `establish_lms_connection()` in main.
     pub async fn init_server(player_name_filter: &str, mac_address: &str) -> Result<Arc<TokMutex<LMSServer>>, Box<dyn std::error::Error>> {
-        // Directly initialize lms with the result of discover() to avoid unused_assignments warning
         let mut lms = LMSServer::discover()?;
-        
-        if lms.ready {
-            lms.get_players(player_name_filter, mac_address).await?;
-            if lms.player_count > 0 && lms.active_player != usize::MAX { // Ensure an active player is found
-                lms.ask_refresh();
-
-                // Create a channel for stopping the polling thread
-                let (tx, rx) = mpsc::channel(1);
-                lms.stop_sender = Some(tx);
-
-                // Wrap the LMSServer instance in Arc<TokMutex> for shared mutable access
-                let lms_arc = Arc::new(TokMutex::new(lms));
-                let lms_for_poll = Arc::clone(&lms_arc);
-
-                // Spawn the background polling task
-                let poll_handle = tokio::spawn(async move {
-                    let mut rx = rx; // Move receiver into the async block
-                    loop {
-                        tokio::select! {
-                            _ = tokio::time::sleep(Duration::from_millis(200)) => { // Poll every 1/5 second
-                                let mut locked_lms = lms_for_poll.lock().await;
-                                if locked_lms.refresh {
-                                    if locked_lms.active_player != usize::MAX {
-                                        let _player_id = locked_lms.players[locked_lms.active_player].player_id.clone();
-                                        match locked_lms.get_sliminfo_status().await {
-                                            Ok(_) => {},
-                                            Err(e) => error!("Error updating LMS status in polling thread: {}", e),
-                                        }
-                                    } else {
-                                        debug!("No active player selected for status polling.");
-                                    }
-                                }
-                            }
-                            _ = rx.recv() => {
-                                debug!("LMS polling thread received stop signal. Exiting.");
-                                break; // Exit the loop and terminate the thread
-                            }
-                        }
-                    }
-                });
-                // Store the JoinHandle in the original LMSServer instance (which is now part of lms_arc)
-                lms_arc.lock().await.poll_handle = Some(poll_handle);
-                
-                Ok(lms_arc) // Return the Arc<TokMutex<LMSServer>>
-            } else {
-                // If no active player, no polling thread is started.
-                // We still need to return an Arc<TokMutex<LMSServer>> to match the signature.
-                // This means we wrap the initial `lms` in an Arc<TokMutex> and return it.
-                info!("No active LMS players found. Returning initial LMSServer instance.");
-                Ok(Arc::new(TokMutex::new(lms)))
-            }
-        } else {
-            info!("LMS Server not found during discovery. Returning initial LMSServer instance.");
-            // If discovery failed, return the initial `lms` wrapped in Arc<TokMutex>
-            Ok(Arc::new(TokMutex::new(lms)))
-        }
+        lms.get_players(player_name_filter, mac_address).await?;
+        Ok(lms.start_polling().await)
     }
 }
 
-// Implement Drop trait to stop the background thread when LMSServer goes out of scope
 impl Drop for LMSServer {
     fn drop(&mut self) {
-        info!("LMSServer dropped. Attempting to stop polling thread...");
-        if let Some(sender) = self.stop_sender.take() {
-            // Send a stop signal. This is non-blocking.
-            if let Err(e) = sender.try_send(()) {
-                error!("Failed to send stop signal to polling thread: {}", e);
-            }
-        }
-        // Note: Joining the thread here (self.poll_handle.take().unwrap().await)
-        // would require this Drop impl to be async or to block on a runtime,
-        // which is generally discouraged in Drop implementations.
-        // For graceful shutdown, a dedicated async `shutdown` method is usually preferred.
-        // Here, we just send the signal and let the runtime clean up the detached task.
+        info!("LMSServer dropped — stopping polling task.");
+        self.stop_polling();
     }
 }
 

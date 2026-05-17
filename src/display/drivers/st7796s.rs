@@ -1,13 +1,13 @@
 /*
- *  display/drivers/st7789.rs
+ *  display/drivers/st7796s.rs
  *
  *  LyMonS - worth the squeeze
  *  (c) 2020-26 Stuart Hunter
  *
- *  ST7789 full-colour display driver (320x170, Rgb565, SPI only)
+ *  ST7796S full-colour display driver (480x320, Rgb565, SPI only)
  *
- *  The ST7789V is a 262K-colour TFT LCD controller with a MIPI DCS command set.
- *  Supported variant: 320×170 (TTGO T-Display / Waveshare 1.9" form factor).
+ *  The ST7796S is a 262K-colour TFT LCD controller with a MIPI DCS command set.
+ *  Supported variant: 480×320 (Waveshare 4.0" form factor and similar).
  *  SPI only — no I2C mode.
  *
  *  Typical wiring (Raspberry Pi, BCM pin numbering):
@@ -22,7 +22,7 @@
  *    BL   → GPIO 18 (pin 12) - Backlight PWM (optional; tie HIGH for max)
  *
  *  Pixel format: Rgb565 big-endian (2 bytes per pixel, R5 G6 B5).
- *  Init sequence follows the mipidsi ST7789 model (MIPI DCS):
+ *  Init sequence follows the mipidsi ST7796S model (MIPI DCS):
  *    ExitSleepMode  (0x11)  → 120ms delay
  *    SetAddressMode (0x36)  → 0x00 (normal orientation)
  *    SetInvertMode  (0x21)  → panel is inverted by default; invert to correct
@@ -45,7 +45,7 @@
  *
  */
 
-#![allow(dead_code)] // ST7789 driver helpers; some methods reserved for future display modes
+#![allow(dead_code)] // st7796s driver helpers; some methods reserved for future display modes
 
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::Rgb565;
@@ -62,42 +62,37 @@ use crate::vframebuf::VarFrameBuf;
 
 use log::info;
 
-/// Default SPI clock speed (40 MHz — ST7789 supports up to ~62.5 MHz on Pi)
+/// Default SPI clock speed (40 MHz — ST7796S supports up to ~62.5 MHz on Pi)
 pub const DEFAULT_SPI_SPEED_HZ: u32 = 40_000_000;
 /// Default DC (Data/Command) GPIO pin (BCM)
 pub const DEFAULT_DC_PIN: u32 = 24;
 /// Default RST (Reset) GPIO pin (BCM)
 pub const DEFAULT_RST_PIN: u32 = 25;
 
-/// Supported ST7789 panel sizes in `(long_axis, short_axis)` form.
+/// Supported ST7796S panel sizes in `(long_axis, short_axis)` form.
 pub const SUPPORTED_SIZES: &[(u32, u32)] = &[
-    (320, 240),  // layout done, inclusive easter eggs
-    (320, 170),  // layout done, inclusive easter eggs
-    (280, 240),  // layout done, inclusive easter eggs
-    (240, 240),  // layout done, inclusive easter eggs
-    (240, 135),  // layout done, eggs mostly good -fix if we get a ticket 
-    (160, 80),   // layout done, eggs are a mess - fix if we get a ticket
+    (480, 320),
 ];
 
-/// ST7789 display driver (320×170 Rgb565, SPI only, stub implementation)
+/// ST7796S display driver (480×320 Rgb565, SPI only, stub implementation)
 ///
-/// Full-colour 16-bit per pixel (Rgb565) at 320×170 resolution.
+/// Full-colour 16-bit per pixel (Rgb565) at 480×320 resolution.
 /// Uses MIPI DCS commands — no I2C mode.
-pub struct St7789Driver {
+pub struct St7796sDriver {
     /// Framebuffer for drawing operations (Rgb565)
     framebuffer: VarFrameBuf<Rgb565>,
     /// Display capabilities
     capabilities: DisplayCapabilities,
 }
 
-impl St7789Driver {
+impl St7796sDriver {
 
-    /// Returns default DisplayConfig for ST7789 over SPI
+    /// Returns default DisplayConfig for st7796s over SPI
     pub fn default_config() -> DisplayConfig {
         DisplayConfig {
-            driver: Some(crate::config::DriverKind::St7789),
-            width: Some(320),
-            height: Some(170),
+            driver: Some(crate::config::DriverKind::St7796s),
+            width: Some(480),
+            height: Some(320),
             bus: Some(BusConfig::Spi {
                 bus: "/dev/spidev0.0".to_string(),
                 speed_hz: Some(DEFAULT_SPI_SPEED_HZ),
@@ -112,9 +107,9 @@ impl St7789Driver {
         }
     }
 
-    /// Normalise and validate ST7789 panel dimensions.
+    /// Normalise and validate st7796s panel dimensions.
     ///
-    /// The ST7789 controller drives a fixed set of TFT panels. The user may
+    /// The st7796s controller drives a fixed set of TFT panels. The user may
     /// supply `(width, height)` in either orientation; we always return them
     /// with the long axis first (`width >= height`) so the framebuffer is
     /// landscape-canonical and physical orientation is handled by `rotate_deg`.
@@ -128,7 +123,7 @@ impl St7789Driver {
                 .collect::<Vec<_>>()
                 .join(", ");
             Err(DisplayError::InvalidConfiguration(format!(
-                "ST7789: unsupported panel size {}x{}; supported (any orientation): {}",
+                "st7796s: unsupported panel size {}x{}; supported (any orientation): {}",
                 w, h, supported
             )))
         }
@@ -149,11 +144,11 @@ impl St7789Driver {
             max_fps: 60,
             supports_brightness: true,
             supports_invert: true,
-            driver_name: "st7789".to_string(),
+            driver_name: "st7796s".to_string(),
         }
     }
 
-    /// Create a new ST7789 driver using SPI
+    /// Create a new st7796s driver using SPI
     ///
     /// # Arguments
     /// * `spi_bus_path` - Path to SPI device (e.g. "/dev/spidev0.0")
@@ -166,23 +161,23 @@ impl St7789Driver {
         rst_pin: u32,
         config: &DisplayConfig,
     ) -> Result<Self, DisplayError> {
-        info!("Initializing ST7789 SPI on {} DC={} RST={}",
+        info!("Initializing st7796s SPI on {} DC={} RST={}",
               spi_bus_path, dc_pin, rst_pin);
 
-        let raw_w = config.width.unwrap_or(320);
-        let raw_h = config.height.unwrap_or(170);
+        let raw_w = config.width.unwrap_or(480);
+        let raw_h = config.height.unwrap_or(320);
         let (width, height) = Self::validate_size(raw_w, raw_h)?;
         if (raw_w, raw_h) != (width, height) {
-            info!("ST7789: normalised input {}x{} → {}x{} (long axis first)",
+            info!("st7796s: normalised input {}x{} → {}x{} (long axis first)",
                   raw_w, raw_h, width, height);
         }
 
         // TODO: open SPI bus at DEFAULT_SPI_SPEED_HZ, configure DC/RST GPIO pins
-        // TODO: send ST7789 initialisation sequence (MIPI DCS):
+        // TODO: send st7796s initialisation sequence (MIPI DCS):
         //   - Assert RST low ≥10µs, then release high; wait 5ms
         //   - ExitSleepMode  (0x11); wait 120ms
         //   - SetAddressMode (0x36, 0x00)  — no flip, no mirror
-        //   - SetInvertMode  (0x21)        — ST7789 panel is normally inverted
+        //   - SetInvertMode  (0x21)        — st7796s panel is normally inverted
         //   - SetPixelFormat (0x3A, 0x55)  — Rgb565
         //   - SetColumnAddr  (0x2A, 0x00, 0x00, 0x01, 0x3F)  — 0..319
         //   - SetRowAddr     (0x2B, 0x00, 0x00, 0x00, 0xA9)  — 0..169
@@ -191,7 +186,7 @@ impl St7789Driver {
         //
         // Using mipidsi 0.10.0 as reference (not stored in struct due to generics):
         //   let di = SpiInterface::new(spi, dc_pin, &mut spi_buffer);
-        //   let mut display = Builder::new(ST7789, di)
+        //   let mut display = Builder::new(st7796s, di)
         //       .display_size(320, 170)
         //       .invert_colors(ColorInversion::Inverted)
         //       .init(&mut delay)?;
@@ -203,13 +198,13 @@ impl St7789Driver {
     }
 }
 
-impl DisplayDriver for St7789Driver {
+impl DisplayDriver for St7796sDriver {
     fn as_any(&self) -> &dyn std::any::Any { self }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
     fn capabilities(&self) -> &DisplayCapabilities { &self.capabilities }
 
     fn init(&mut self) -> Result<(), DisplayError> {
-        // TODO: send ST7789 init sequence (see new_spi comments above)
+        // TODO: send st7796s init sequence (see new_spi comments above)
         Ok(())
     }
 
@@ -232,7 +227,7 @@ impl DisplayDriver for St7789Driver {
     }
 
     fn write_buffer(&mut self, buffer: &[u8]) -> Result<(), DisplayError> {
-        // ST7789 Rgb565: 2 bytes per pixel, big-endian
+        // st7796s Rgb565: 2 bytes per pixel, big-endian
         let expected = (self.capabilities.width * self.capabilities.height * 2) as usize;
         if buffer.len() != expected {
             return Err(DisplayError::BufferSizeMismatch { expected, actual: buffer.len() });
@@ -267,11 +262,11 @@ impl DisplayDriver for St7789Driver {
     }
 }
 
-impl DrawableDisplay for St7789Driver {
+impl DrawableDisplay for St7796sDriver {
     type Color = Rgb565;
 }
 
-impl DrawTarget for St7789Driver {
+impl DrawTarget for St7796sDriver {
     type Color = Rgb565;
     type Error = core::convert::Infallible;
 
@@ -290,7 +285,7 @@ impl DrawTarget for St7789Driver {
     }
 }
 
-impl OriginDimensions for St7789Driver {
+impl OriginDimensions for St7796sDriver {
     fn size(&self) -> Size {
         Size::new(self.capabilities.width, self.capabilities.height)
     }

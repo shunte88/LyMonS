@@ -83,10 +83,19 @@ impl<'t> LayoutResolver<'t> {
     pub fn resolve(&self, template_name: &str, profile: DisplayProfile) -> Option<PageLayout> {
         let template = self.templates.templates.get(template_name)?;
 
-        // Pick first matching variant
-        let variant = template.variants.iter().find(|v| {
-            v.match_rule.is_catch_all() || matches_profile(&v.match_rule, profile)
-        })?;
+        // Variant selection: a variant whose name is "{width}x{height}" wins
+        // (exact dimensional override). Otherwise fall through to the original
+        // first-match logic: catch-all OR matching match_rule, in YAML order.
+        let dim_name = format!("{}x{}", profile.width, profile.height);
+        let variant = template.variants.iter()
+            .find(|v| v.name == dim_name)
+            .or_else(|| template.variants.iter().find(|v| {
+                v.match_rule.is_catch_all() || matches_profile(&v.match_rule, profile)
+            }))?;
+
+        log::info!(
+            "layout: {} → variant '{}' for {}x{}",
+            template_name, variant.name, profile.width, profile.height);
 
         let dw = profile.width  as i32;
         let dh = profile.height as i32;

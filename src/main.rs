@@ -65,16 +65,13 @@ async fn unified_display_loop(
     // Get MAC address for LMS discovery
     let mac_addr = get_mac_addr();
 
-    // Initialize LMS server
-    let lms_arc = match LMSServer::init_server(player_name, mac_addr.as_str()).await {
-        Ok(server_arc) => server_arc,
-        Err(e) => {
-            error!("LMS Server initialization failed: {}", e);
-            return Err(e);
-        }
+    // Connect to LMS server — shows warning and retries every 5s until connected
+    let mut lms_arc = {
+        let mut display_lock = display.lock().await;
+        establish_lms_connection(&mut *display_lock, player_name, mac_addr.as_str()).await
     };
 
-    info!("LMS Server communication initialized");
+    info!("LMS Server communication initialized.");
 
     // Setup weather if configured
     if let Some(ref wc) = weather {
@@ -146,6 +143,19 @@ async fn unified_display_loop(
         mode_controller.set_weather_active(is_weather_active);
 
         let mut lms_guard = lms_arc.lock().await;
+
+        // Mid-session health check — reconnect if server/player connection lost
+        if !lms_guard.is_healthy() {
+            warn!("LMS connection unhealthy — reconnecting...");
+            lms_guard.stop_polling();
+            drop(lms_guard);
+            lms_arc = establish_lms_connection(
+                &mut *display_lock, player_name, mac_addr.as_str()
+            ).await;
+            info!("LMS reconnected.");
+            drop(display_lock);
+            continue;
+        }
 
         // Determine and set display mode
         let mut mode = display_lock.display_mode();
@@ -286,6 +296,50 @@ async fn unified_display_loop(
         drop(display_lock);
 
         tokio::time::sleep(current_poll_duration).await;
+    }
+}
+
+/// Renders the warning display for `duration`, pumping frames at 500ms intervals.
+/// Reused by `establish_lms_connection` at both startup and mid-session reconnect.
+async fn render_for_duration(display: &mut display::DisplayManager, duration: Duration) {
+    let deadline = std::time::Instant::now() + duration;
+    while std::time::Instant::now() < deadline {
+        display.render_frame().await.ok();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
+/// Connects to the LMS server and locates the configured player.
+/// Shows appropriate warnings and retries every 5 seconds until both succeed.
+/// Reusable at startup and after mid-session connection loss — single implementation.
+async fn establish_lms_connection(
+    display: &mut display::DisplayManager,
+    name_filter: &str,
+    mac_addr: &str,
+) -> std::sync::Arc<tokio::sync::Mutex<LMSServer>> {
+    const RETRY: Duration = Duration::from_secs(5);
+    loop {
+        // Convert Box<dyn Error> → String before awaiting so the future stays Send.
+        match LMSServer::discover().map_err(|e| e.to_string()) {
+            Err(msg) => {
+                warn!("LMS server not found: {}", msg);
+                display.set_warning("LMS Not Found", "No LMS server discovered on the network", "retrying in 5s...");
+                render_for_duration(display, RETRY).await;
+            }
+            Ok(mut lms) => {
+                match lms.get_players(name_filter, mac_addr).await.map_err(|e| e.to_string()) {
+                    Err(msg) => {
+                        warn!("{}", msg);
+                        display.set_warning("Player Not Found", msg, "retrying in 5s...");
+                        render_for_duration(display, RETRY).await;
+                    }
+                    Ok(()) => {
+                        display.clear_warning();
+                        return lms.start_polling().await;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -796,25 +850,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Determine display specs: driver defaults, overridden by config width/height.
         // Useful for displays that ship in multiple sizes (ST7789: 320×170, 300×170, 240×240…)
-        let (default_w, default_h, is_grayscale, display_name) = match display_config.driver {
-            Some(config::DriverKind::Ssd1306)     => (128, 64,  false, "SSD1306"),
-            Some(config::DriverKind::Ssd1309)     => (128, 64,  false, "SSD1309"),
-            Some(config::DriverKind::Sh1106)      => (132, 64,  false, "SH1106"),
-            Some(config::DriverKind::Ssd1322)     => (256, 64,  true,  "SSD1322"),
-            Some(config::DriverKind::Sh1122)      => (256, 64,  true,  "SH1122"),
-            Some(config::DriverKind::SharpMemory) => (400, 240, false, "SharpMemory"),
-            Some(config::DriverKind::St7789)      => (320, 170, true,  "ST7789"),
-            None                                  => (128, 64,  false, "SSD1306"),
+        let (default_w, default_h, color_depth, display_name) = match display_config.driver {
+            Some(config::DriverKind::Ssd1306)     => (128, 64,  display::ColorDepth::Monochrome, "SSD1306"),
+            Some(config::DriverKind::Ssd1309)     => (128, 64,  display::ColorDepth::Monochrome, "SSD1309"),
+            Some(config::DriverKind::Sh1106)      => (132, 64,  display::ColorDepth::Monochrome, "SH1106"),
+            Some(config::DriverKind::Ssd1322)     => (256, 64,  display::ColorDepth::Gray4,      "SSD1322"),
+            Some(config::DriverKind::Sh1122)      => (256, 64,  display::ColorDepth::Gray4,      "SH1122"),
+            Some(config::DriverKind::SharpMemory) => (400, 240, display::ColorDepth::Monochrome, "SharpMemory"),
+            Some(config::DriverKind::St7789)      => (320, 170, display::ColorDepth::Rgb565,     "ST7789"),
+            Some(config::DriverKind::St7796s)     => (480, 320, display::ColorDepth::Rgb565,     "ST7796S"),
+            None                                  => (128, 64,  display::ColorDepth::Monochrome, "SSD1306"),
         };
-        let width  = display_config.width .unwrap_or(default_w);
-        let height = display_config.height.unwrap_or(default_h);
+        let raw_w = display_config.width .unwrap_or(default_w);
+        let raw_h = display_config.height.unwrap_or(default_h);
 
-        let is_rgb565 = matches!(display_config.driver, Some(config::DriverKind::St7789));
+        // ST7789 / ST7796S ship in fixed sets of panel sizes — validate and
+        // normalise (long axis becomes width). Other drivers carry their
+        // config straight through.
+        let (width, height) = {
+            #[allow(unused_mut)]
+            let mut wh = (raw_w, raw_h);
+            #[cfg(feature = "driver-st7789")]
+            if matches!(display_config.driver, Some(config::DriverKind::St7789)) {
+                use display::drivers::st7789::St7789Driver;
+                let (w, h) = St7789Driver::validate_size(raw_w, raw_h)
+                    .map_err(|e| format!("{}", e))?;
+                if (raw_w, raw_h) != (w, h) {
+                    info!("ST7789: normalised input {}x{} → {}x{} (long axis first)",
+                          raw_w, raw_h, w, h);
+                }
+                wh = (w, h);
+            }
+            #[cfg(feature = "driver-st7796s")]
+            if matches!(display_config.driver, Some(config::DriverKind::St7796s)) {
+                use display::drivers::st7796s::St7796sDriver;
+                let (w, h) = St7796sDriver::validate_size(raw_w, raw_h)
+                    .map_err(|e| format!("{}", e))?;
+                if (raw_w, raw_h) != (w, h) {
+                    info!("ST7796S: normalised input {}x{} → {}x{} (long axis first)",
+                          raw_w, raw_h, w, h);
+                }
+                wh = (w, h);
+            }
+            wh
+        };
 
         // Create EmulatorDriver (not the actual hardware driver!)
-        let mut emulator_driver: display::BoxedDriver = if is_rgb565 {
+        let mut emulator_driver: display::BoxedDriver = if color_depth == display::ColorDepth::Rgb565 {
             Box::new(EmulatorDriver::new_rgb565(width, height, display_name)?)
-        } else if is_grayscale {
+        } else if color_depth == display::ColorDepth::Gray4 {
             Box::new(EmulatorDriver::new_grayscale(width, height, display_name)?)
         } else {
             Box::new(EmulatorDriver::new_monochrome(width, height, display_name)?)
@@ -1105,30 +1189,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else{
         info!("LMS communication...");
     }
-    const RETRY_INTERVAL_SECS: u64 = 30;
-    let lms_arc = loop {
-        match LMSServer::init_server(name_filter, mac_addr.as_str()).await {
-            Ok(server_arc) => break server_arc,
-            Err(e) => {
-                warn!("LMS server unavailable: {}. Retrying in {}s...", e, RETRY_INTERVAL_SECS);
-                display_manager.set_warning(
-                    "LMS Not Found",
-                    e.to_string(),
-                    format!("retrying in {}s...", RETRY_INTERVAL_SECS),
-                );
-                // Keep the display alive while waiting to retry
-                let deadline = std::time::Instant::now()
-                    + Duration::from_secs(RETRY_INTERVAL_SECS);
-                while std::time::Instant::now() < deadline {
-                    display_manager.render_frame().await.ok();
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                }
-            }
-        }
-    };
-    display_manager.clear_warning();
-
-    // The polling thread is now running in the background if init_server was successful.
+    // Connect to LMS server — shows warning and retries every 5s until connected
+    let mut lms_arc = establish_lms_connection(
+        &mut display_manager, name_filter, mac_addr.as_str()
+    ).await;
     info!("LMS Server communication initialized.");
 
     let lms = lms_arc.lock().await;
@@ -1172,6 +1236,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Acquire a lock on the LMSServer instance to access its methods and data
                 let mut lms_guard = lms_arc.lock().await;
+
+                // Mid-session health check — reconnect if server/player connection lost
+                if !lms_guard.is_healthy() {
+                    warn!("LMS connection unhealthy — reconnecting...");
+                    lms_guard.stop_polling();
+                    drop(lms_guard);
+                    lms_arc = establish_lms_connection(
+                        &mut display_manager, name_filter, mac_addr.as_str()
+                    ).await;
+                    info!("LMS reconnected.");
+                    continue;
+                }
 
                 // Determine and set display mode using controller
                 let is_playing = lms_guard.is_playing();

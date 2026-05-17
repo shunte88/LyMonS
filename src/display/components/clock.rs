@@ -26,7 +26,7 @@
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::{BinaryColor, Gray4, Rgb565};
 use crate::display::layout::LayoutConfig;
-use crate::clock_font_svg::ClockFontData;
+use crate::clock_font_svg::{ClockDigitLayout, ClockFontData};
 use std::time::Instant;
 
 /// Clock display state
@@ -103,7 +103,6 @@ impl ClockDisplay {
         let digit_height = self.clock_font.digit_height as i32;
 
         let y_adj = if y_start + digit_height > progress.y {
-            //println!("y:{} h:{} seconds:{}",y_start, self.clock_font.digit_height, progress.y);
             progress.y - digit_height
         } else {
             y_start
@@ -134,13 +133,23 @@ impl ClockDisplay {
         if total_clock_visual_width > w as i32 { total_clock_visual_width = w as i32; }
 
         let clock_x_start: i32 = (w as i32 - total_clock_visual_width) / 2;
-        let x_positions: [i32; 5] = [
+        let mut x_positions: [i32; 5] = [
             clock_x_start,
             clock_x_start + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
             clock_x_start + (digit_width * 2) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2),
             clock_x_start + (digit_width * 3) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
             clock_x_start + (digit_width * 4) + (CLOCK_DIGIT_GAP_HORIZONTAL * 2) + CLOCK_COLON_MINUTE_GAP,
         ];
+        let square_adj = digit_width as i32 / 2;
+        if ClockDigitLayout::SquareTime==self.clock_font.digit_layout {
+            x_positions = [
+                clock_x_start + square_adj,
+                clock_x_start + square_adj + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
+                -1,
+                clock_x_start + square_adj,
+                clock_x_start + square_adj + digit_width + CLOCK_DIGIT_GAP_HORIZONTAL,
+            ];
+        }
 
         (time_chars, x_positions, y_adj)
 
@@ -156,8 +165,15 @@ impl ClockDisplay {
     {
         use embedded_graphics::prelude::*;
         use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
-        let (time_chars, x_positions, y_adj) = self.render_core(y_start, progress);
+        let (time_chars, x_positions, mut y_adj) = self.render_core(y_start, progress);
+        // if the display is square draw HH over MM else HH:MM
         for i in 0..5 {
+            // square mode we've set colon off screen
+            // use this fact to position minutes
+            if x_positions[i] <= 0 {
+                y_adj += (self.clock_font.digit_height + 10) as i32;
+                continue;
+            }
             EgRectangle::new(
                 Point::new(x_positions[i], y_adj),
                 Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
@@ -176,8 +192,15 @@ impl ClockDisplay {
     {
         use embedded_graphics::prelude::*;
         use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
-        let (time_chars, x_positions, y_adj) = self.render_core(y_start, progress);
+        let (time_chars, x_positions, mut y_adj) = self.render_core(y_start, progress);
+        // if the display is square draw HH over MM else HH:MM
         for i in 0..5 {
+            // square mode we've set colon off screen
+            // use this fact to position minutes
+            if x_positions[i] <= 0 {
+                y_adj += (self.clock_font.digit_height + 10) as i32;
+                continue;
+            }
             EgRectangle::new(
                 Point::new(x_positions[i], y_adj),
                 Size::new(self.clock_font.digit_width, self.clock_font.digit_height),
@@ -196,8 +219,15 @@ impl ClockDisplay {
     {
         use embedded_graphics::prelude::*;
         use embedded_graphics::primitives::{Rectangle as EgRectangle, PrimitiveStyleBuilder};
-        let (time_chars, x_positions, y_adj) = self.render_core(y_start, progress);
+        let (time_chars, x_positions, mut y_adj) = self.render_core(y_start, progress);
+        // if the display is square draw HH over MM else HH:MM
         for i in 0..5 {
+            // square mode we've set colon off screen
+            // use this fact to position minutes
+            if x_positions[i] <= 0 {
+                y_adj += (self.clock_font.digit_height + 10) as i32;
+                continue;
+            }
             EgRectangle::new(
                 Point::new(x_positions[i], y_adj),
                 Size::new(self.clock_font.digit_width, self.clock_font.digit_height),

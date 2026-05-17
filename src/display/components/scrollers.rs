@@ -129,6 +129,7 @@ pub struct ScrollingText {
     title_scroller: Option<TextScroller>,
     artist_scroller: Option<TextScroller>,
     combination_scroller: Option<TextScroller>,
+    year_scroller: Option<TextScroller>,
     // Simple synchronous scroll states
     album_artist_scroll: ScrollState,
     album_scroll: ScrollState,
@@ -136,6 +137,7 @@ pub struct ScrollingText {
     artist_scroll: ScrollState,
     combination_scroll: ScrollState,
     year_scroll: ScrollState,
+    // attribute drivers
     scroll_mode: ScrollMode,
     layout: LayoutConfig,
     display_width: u32,
@@ -153,6 +155,7 @@ impl ScrollingText {
             title_scroller: None,
             artist_scroller: None,
             combination_scroller: None,
+            year_scroller: None,
             album_artist_scroll: ScrollState::new(),
             album_scroll: ScrollState::new(),
             title_scroll: ScrollState::new(),
@@ -216,12 +219,14 @@ impl ScrollingText {
         album: String, 
         title: String, 
         artist: String, 
+        year: String, 
     ) 
     {
         self.set_album_artist(album_artist.clone());
         self.set_album(album.clone());
         self.set_title(title.clone());
         self.set_artist(artist.clone());
+        self.set_year(year.clone());
 
         // Set combination text (artist - title or partial)
         let scroll_text = match (artist.is_empty(), album.is_empty(), title.is_empty()) {
@@ -271,6 +276,7 @@ impl ScrollingText {
         album_field:        &Field,
         title_field:        &Field,
         artist_field:       &Field,
+        year_field:         &Field,
     ) {
         let ttf = self.ttf_font.as_deref();
 
@@ -300,7 +306,15 @@ impl ScrollingText {
             self.artist_scroll.char_width =
                 f.character_size.width as usize + f.character_spacing as usize;
         }
-        self.artist_scroll.update(self.scroll_mode, ttf);
+
+        self.year_scroll.update(self.scroll_mode, ttf);
+        self.year_scroll.scroll_width = year_field.width();
+        if let Some(f) = year_field.font {
+            self.year_scroll.char_width =
+                f.character_size.width as usize + f.character_spacing as usize;
+        }
+        self.year_scroll.update(self.scroll_mode, ttf);
+
     }
 
     /// Update scroll width + advance one tick for a single named field.
@@ -478,6 +492,7 @@ impl ScrollingText {
         self.artist_scroller = None;
         self.album_scroller = None;
         self.combination_scroller = None;
+        self.year_scroller = None;
     }
 
     /// Get scroll mode

@@ -260,6 +260,7 @@ impl LayoutConfig {
             "ssd1306" | "ssd1309" | "sh1106" => "./assets/ssd1309/".to_string(),
             "ssd1322" | "sh1122"              => "./assets/ssd1322/".to_string(),
             "st7789"                          => "./assets/st7789/".to_string(),
+            "st7796s"                         => "./assets/st7796s/".to_string(),
             "sharpmemory"                     => "./assets/sharp400/".to_string(),
             _                                 => "./assets/ssd1309/".to_string(),
         }
@@ -402,7 +403,7 @@ impl LayoutConfig {
         }
     }
 
-    /// Layout for extra large displays (400x240)
+    /// Layout for extra large displays (400x240), (480x320)
     fn extra_large_layout(width: u32, height: u32, color_depth: ColorDepth) -> Self {
         Self {
             width,

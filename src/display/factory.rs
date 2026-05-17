@@ -46,6 +46,9 @@ use crate::display::drivers::sh1122::Sh1122Driver;
 #[cfg(feature = "driver-st7789")]
 use crate::display::drivers::st7789::St7789Driver;
 
+#[cfg(feature = "driver-st7796s")]
+use crate::display::drivers::st7796s::St7796sDriver;
+
 #[cfg(feature = "plugin-system")]
 use crate::display::plugin::{PluginLoader, PluginDriverAdapter};
 
@@ -169,6 +172,18 @@ impl DisplayDriverFactory {
                 )?))
             }
 
+            #[cfg(feature = "driver-st7796s")]
+            (DriverKind::St7796s, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
+                Ok(Box::new(St7796sDriver::new_spi(
+                    bus,
+                    *dc_pin,
+                    rst_pin.ok_or_else(|| DisplayFactoryError::ConfigError(
+                        "ST7796S requires rst_pin".to_string()
+                    ))?,
+                    config
+                )?))
+            }
+
             // Catch-all for unsupported combinations or disabled features
             _ => {
                 #[cfg(not(feature = "driver-ssd1306"))]
@@ -213,6 +228,13 @@ impl DisplayDriverFactory {
                     ));
                 }
 
+                #[cfg(not(feature = "driver-st7796s"))]
+                if matches!(driver_kind, DriverKind::St7796s) {
+                    return Err(DisplayFactoryError::ConfigError(
+                        "ST7796S driver not enabled. Enable with --features driver-st7796s".to_string()
+                    ));
+                }
+
                 Err(DisplayFactoryError::UnsupportedCombination)
             }
         }
@@ -236,6 +258,7 @@ impl DisplayDriverFactory {
             DriverKind::Sh1122 => "sh1122",
             DriverKind::SharpMemory => "sharpmemory",
             DriverKind::St7789 => "st7789",
+            DriverKind::St7796s => "st7796s",
         };
 
         debug!("Searching for plugin: {}", plugin_name);
@@ -286,6 +309,7 @@ impl DisplayDriverFactory {
             DriverKind::Sh1122 => (256, 64, true, "SH1122"),
             DriverKind::SharpMemory => (400, 240, false, "SharpMemory"),
             DriverKind::St7789 => (320, 170, true, "ST7789"),  // Gray4 emulation (Rgb565 not yet supported by emulator)
+            DriverKind::St7796s => (480, 320, true, "ST7796S"), // Gray4 emulation (Rgb565 not yet supported by emulator)
         };
 
         // Override with config if specified
@@ -360,6 +384,11 @@ impl DisplayDriverFactory {
             DriverKind::St7789 => {
                 use crate::display::drivers::st7789::St7789Driver;
                 St7789Driver::default_config()
+            }
+            #[cfg(feature = "driver-st7796s")]
+            DriverKind::St7796s => {
+                use crate::display::drivers::st7796s::St7796sDriver;
+                St7796sDriver::default_config()
             }
             #[allow(unreachable_patterns)]
             _ => DisplayConfig::default(),

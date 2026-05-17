@@ -52,8 +52,17 @@ const SVG_WIDTH: u32  = 25;
 const SVG_HEIGHT: u32 = 44;
 
 // Rendered sizes by display capability
+// will be modified based on display dimensions
 const SIZE_NORMAL: (u32, u32) = (25, 44);   // height ≤ 70
 const SIZE_LARGE:  (u32, u32) = (60, 105);  // height > 70 (ST7789)
+
+// Clock digit layout
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClockDigitLayout {
+    StandardTime,  // Clock HH:MM mode
+    LongFormTime,  // Clock HH:MM.SS mode
+    SquareTime,    // Clock HH over MM mode
+}
 
 /// Clock font with SVG-rendered RGBA character data.
 ///
@@ -70,6 +79,7 @@ const SIZE_LARGE:  (u32, u32) = (60, 105);  // height > 70 (ST7789)
 pub struct ClockFontData {
     pub digit_width:  u32,
     pub digit_height: u32,
+    pub digit_layout: ClockDigitLayout,
     /// RGBA per pixel: `digit_width * digit_height * 4` bytes per character.
     /// [0..9] = digits, [10] = colon, [11] = space, [12] = minus.
     chars: [Vec<u8>; CHAR_COUNT],
@@ -127,6 +137,7 @@ fn char_name(idx: usize) -> &'static str {
         10    => "colon",
         11    => "space",
         12    => "minus",
+        13    => "period",
         _     => "space",
     }
 }
@@ -177,8 +188,25 @@ fn load_from_zip(font_name: &str, width: u32, height: u32) -> Option<[Vec<u8>; C
 ///   marvel, moomy, noto, poppins, roboto
 ///
 /// Falls back to `7seg` if the requested font cannot be loaded.
-pub fn set_clock_font(font_name: &str, display_height: u32) -> ClockFontData {
-    let (width, height) = if display_height > 70 { SIZE_LARGE } else { SIZE_NORMAL };
+///
+/// Added logic for additional screen sizes (ST7789)
+/// 
+pub fn set_clock_font(font_name: &str, display_width: u32, display_height: u32) -> ClockFontData {
+    let mut layout = ClockDigitLayout::StandardTime;
+    let (mut width, mut height) = if display_height > 70 { SIZE_LARGE } else { SIZE_NORMAL };
+
+    if 5*width > display_width {
+        warn!("Display width {} too small for font width {}, scaling down", display_width, width);
+        let scale = display_width as f32 / (6.0 * width as f32); // 6 as we need buffer at start end
+        width  = (width  as f32 * scale) as u32;
+        height = (height as f32 * scale) as u32;
+    }
+
+    if display_width==display_height {
+        layout = ClockDigitLayout::SquareTime;
+        width  = (display_width  as f32 / 3.0) as u32;
+        height = (display_height as f32 / 3.0) as u32;
+    }
     info!("Load SVG clock font: {} @ {}×{}", font_name, width, height);
 
     // Try requested font, then fall back to 7seg
@@ -196,5 +224,5 @@ pub fn set_clock_font(font_name: &str, display_height: u32) -> ClockFontData {
             Default::default()
         });
 
-    ClockFontData { digit_width: width, digit_height: height, chars }
+    ClockFontData { digit_width: width, digit_height: height, digit_layout: layout, chars }
 }
