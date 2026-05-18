@@ -93,9 +93,9 @@ impl<'t> LayoutResolver<'t> {
                 v.match_rule.is_catch_all() || matches_profile(&v.match_rule, profile)
             }))?;
 
-        log::info!(
-            "layout: {} → variant '{}' for {}x{}",
-            template_name, variant.name, profile.width, profile.height);
+        //log::info!(
+        //    "layout: {} → variant '{}' for {}x{}",
+        //    template_name, variant.name, profile.width, profile.height);
 
         let dw = profile.width  as i32;
         let dh = profile.height as i32;
