@@ -6,7 +6,7 @@
  *
  *  ST7796S full-colour display driver (480x320, Rgb565, SPI only)
  *
- *  The ST7796S is a 262K-colour TFT LCD controller with a MIPI DCS command set.
+ *  The ST7796S is a 262K-color TFT LCD controller with a MIPI DCS command set.
  *  Supported variant: 480×320 (Waveshare 4.0" form factor and similar).
  *  SPI only — no I2C mode.
  *

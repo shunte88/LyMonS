@@ -448,6 +448,8 @@ pub enum FontSpec {
     #[serde(rename = "font_7x13")]      Font7x13,
     #[serde(rename = "font_7x13_bold")] Font7x13Bold,
     #[serde(rename = "font_7x14")]      Font7x14,
+    #[serde(rename = "font_8x13")]      Font8x13,
+    #[serde(rename = "font_8x13_bold")] Font8x13Bold,
     #[serde(rename = "font_10x20")]     Font10x20,
 }
 
@@ -466,6 +468,8 @@ impl FontSpec {
             FontSpec::Font7x13     => &FONT_7X13,
             FontSpec::Font7x13Bold => &FONT_7X13_BOLD,
             FontSpec::Font7x14     => &FONT_7X14,
+            FontSpec::Font8x13     => &FONT_8X13,
+            FontSpec::Font8x13Bold => &FONT_8X13_BOLD,
             FontSpec::Font10x20    => &FONT_10X20,
         }
     }
