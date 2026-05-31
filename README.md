@@ -39,15 +39,15 @@ sudo ./install.sh
 **Building from source?** See [CROSS_COMPILE.md](CROSS_COMPILE.md) for cross-compilation instructions.
 
 ### Features
-- OLED drivers loaded on demand — delete the ones you don't use and save space
+- OLED drivers loaded on demand, delete the ones you don't use and save space
 - SVG rendering gives clean, sharp graphics across many different OLED displays
 - Mono, Gray4, and Color support depending on the display you use
 - SVGs are lightweight external files, not baked into the binary
 - Track details are displayed only when playing
 - Display features independent scrolling of track details as required
 - When playing, remaining time can be displayed rather than total time
-- Audio attributes — volume, sample depth, and sample rate — are shown
-- Player attributes — shuffle, repeat, and fidelity glyphs — are shown
+- Audio attributes: volume, sample depth, and sample rate, are shown
+- Player attributes: shuffle, repeat, and fidelity glyphs, are shown
 - A retro clock is displayed when the audio is paused or stopped
 - Display regions handle alignment, text wrapping, and layout
 - Current weather and time display. Requires a free API key from [tommorow.io](https://www.tomorrow.io/a/faq/weather-api/how-to-get-a-weather-api-key/)
@@ -55,14 +55,14 @@ sudo ./install.sh
 - Automatically sets display brightness at dawn and dusk
 - Multiple audio visualization modes, see below
 - If monitoring from a separate device, animations can be displayed as the track plays
-- Written in Rust — robust and memory safe
+- Written in Rust: robust and memory safe
 
 ### Options
 ```bash
 
 Usage: LyMonS [OPTIONS] --name <name>
 
-LMS monitor — worth the squeeze
+LMS monitor, worth the squeeze
 
 Usage: LyMonS [OPTIONS]
 
@@ -82,9 +82,9 @@ Options:
       --weather-lang <WEATHER_LANG>
           Weather language/translation code (overrides --weather lang field)
       --lat <LAT>
-          Latitude — overrides config file and GeoIP
+          Latitude, overrides config file and GeoIP
       --lon <LON>
-          Longitude — overrides config file and GeoIP
+          Longitude, overrides config file and GeoIP
   -z, --scroll <SCROLL>
           Text scroll mode [possible values: loop, loopleft, cylon]
   -r, --remain
@@ -108,7 +108,7 @@ Options:
   -a, --viz <VIZ>
           Visualizer type [possible values: combination, hist_aio, hist_mono, hist_stereo, peak_mono, peak_stereo, vu_aio, vu_mono, vu_stereo, waveform_spectrum, no_viz]
       --hist-scheme <HIST_SCHEME>
-          Histogram colour scheme [possible values: classic, ocean, fire, neon]
+          Histogram color scheme [possible values: classic, ocean, fire, neon]
       --dump-config
           Print fully merged config and exit
   -h, --help
@@ -159,19 +159,19 @@ TTF font on ST7789:
 
 ![ST7789 scroller TTF font](assets/github/scroller_ttf_font_st7789.png)
 
-### Clock — Marvel Font
+### Clock, Marvel Font
 
 | SSD1309 (128×64 mono) | SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
 |:---:|:---:|:---:|
 | ![SSD1309 clock](assets/github/clock_ssd1309.png) | ![SSD1322 clock](assets/github/clock_ssd1322.png) | ![ST7789 clock](assets/github/clock_st7789.png) |
 
-### Weather — Current Conditions
+### Weather, Current Conditions
 
 | SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
 |:---:|:---:|
 | ![SSD1322 weather current](assets/github/weather_current_ssd1322.png) | ![ST7789 weather current](assets/github/weather_current_st7789.png) |
 
-### Weather — Forecast
+### Weather, Forecast
 
 | SSD1309 (128×64 mono) | SSD1322 (256×64 gray4) | ST7789 (320×170 color) |
 |:---:|:---:|:---:|
@@ -180,16 +180,16 @@ TTF font on ST7789:
 ### Visualizer Modes
 
 Several visualizer modes are supported:
-- Stereo VU Meters — dBFS metered
+- Stereo VU Meters - dBFS metered
 - Stereo 12-band Spectrum Analysis
 - Stereo 20-band Spectrum Analysis for wide displays
-- Stereo Peak Meter — dBFS metered
+- Stereo Peak Meter - dBFS metered
 - Downmix Peak Meter
 - Large Downmix VU meter
 - Large Downmix Spectrum
-- All-In-One — track details alongside spectrum or VU meter
-- Wave Forms — coming soon
-- Easter Eggs — fixed mode (use `--egg <name>`)
+- All-In-One - track details alongside spectrum or VU meter
+- Wave Forms - coming soon
+- Easter Eggs - fixed mode (use `--egg <name>`)
 
 ## TTF Scrolling Fonts
 
@@ -197,7 +197,7 @@ By default LyMonS renders track details using its built-in bitmap fonts. You can
 
 ### How It Works
 
-LyMonS loads a TTF/OTF font from a zip archive at startup. The archive can contain a single font file (`.ttf` or `.otf`) — LyMonS picks the first one it finds. Font metrics (ascent, descent, line height) are read directly from the font file, so vertical centering is always accurate regardless of the size you choose.
+LyMonS loads a TTF/OTF font from a zip archive at startup. The archive can contain a single font file (`.ttf` or `.otf`), LyMonS picks the first one it finds. Font metrics (ascent, descent, line height) are read directly from the font file, so vertical centering is always accurate regardless of the size you choose.
 
 ### Adding a Font
 
@@ -207,7 +207,7 @@ LyMonS loads a TTF/OTF font from a zip archive at startup. The archive can conta
     zip NotoSansMonoCJKjp-text.zip NotoSansMonoCJKjp-Regular.otf
     ```
 
-2. **Place it in the `data/` folder** next to the LyMonS binary, named `{name}-text.zip` — the `{name}` part is how you refer to it on the command line or in the config file:
+2. **Place it in the `data/` folder** next to the LyMonS binary, named `{name}-text.zip`, the `{name}` part is how you refer to it on the command line or in the config file:
 
     ```
     data/
@@ -224,7 +224,7 @@ LyMonS --name myplayer -F NotoSansMonoCJKjp -f 24
 
 | Flag | Description |
 |---|---|
-| `-F` / `--text_font` | Font name — must match `data/{name}-text.zip` |
+| `-F` / `--text_font` | Font name - must match `data/{name}-text.zip` |
 | `-f` / `--text_font_size` | Point size (floating point) |
 
 ### Config File
@@ -238,9 +238,9 @@ text_font_size: 24
 
 For Japanese, Chinese (Simplified, Traditional, Hong Kong), and Korean text, the **Noto Sans Mono CJK** family is an excellent choice. It is open source, metrically consistent, and covers all CJK scripts in a single font family.
 
-> **Note:** CJK fonts contain a very large glyph set and require a minimum rendered size to be legible. A point size of **24 or above** is recommended — smaller sizes may fail to load or render poorly.
+> **Note:** CJK fonts contain a very large glyph set and require a minimum rendered size to be legible. A point size of **24 or above** is recommended; smaller sizes may fail to load or render poorly but this is also screen size dependent - YMMV.
 
-![CJK font in use — Japanese track details](assets/github/CJK-font-usage.png)
+![CJK font in use, Japanese track details](assets/github/CJK-font-usage.png)
 
 *Japanese track metadata rendered at 24pt on ST7789 (320×170 color) in AIO histogram mode.*
 
@@ -265,9 +265,9 @@ Download the **Mono** variant in OTF format, zip the `.otf` file, and drop it in
 
 LyMonS can run in two configurations:
 
-**On the player device** — installed directly on a piCorePlayer or any Pi running Squeezelite. LyMonS reads audio data from Squeezelite's shared memory, which gives it access to real-time PCM data for VU meters, peak meters, and spectrum analysis.
+**On the player device**, installed directly on a piCorePlayer or any Pi running Squeezelite. LyMonS reads audio data from Squeezelite's shared memory, which gives it access to real-time PCM data for VU meters, peak meters, and spectrum analysis.
 
-**On a separate device** — installed on another machine on the same network, pointing at the LMS player by name. In this case LyMonS connects to the [visionon](https://github.com/shunte88/visionon) streaming daemon running on the player device and receives audio metrics over the network. LyMonS figures out which approach to use on its own — if shared memory is available it uses it, otherwise it connects to visionon. No flags, no configuration switches.
+**On a separate device**, installed on another machine on the same network, pointing at the LMS player by name. In this case LyMonS connects to the [visionon](https://github.com/shunte88/visionon) streaming daemon running on the player device and receives audio metrics over the network. LyMonS figures out which approach to use on its own, if shared memory is available it uses it, otherwise it connects to visionon. No flags, no configuration switches.
 
 The only thing you need for remote visualization is the visionon daemon running on the player device. Point LyMonS at the player name and the rest is handled for you.
 
@@ -301,24 +301,24 @@ There are currently 10 easter egg modes:
 - <b>[cassette]</b> Compact Cassette, as visually accurate as the OLED allows. Hubs turn and the tape loops from one hub to the other with the tape window showing track progress.
 - <b>[technics]</b> Technics SL-1200, as visually accurate as the OLED allows. Tone arm traverses the platter to indicate progress.
 - <b>[reel2reel]</b> Open Reel To Reel, pure fantasy. Reels rotate, minor animation.
-- <b>[vcr]</b> VCR with flashing 12:00 AM clock. No additional animation — the clock is annoying enough.
+- <b>[vcr]</b> VCR with flashing 12:00 AM clock. No additional animation - the clock is annoying enough.
 - <b>[radio40]</b> A large ornate radio. Minor animation, station changes as the track progresses.
 - <b>[radio50]</b> An old Bakelite radio. Minor animation, station changes as the track progresses.
-- <b>[tvtime]</b> An old analog TV in all its 5x4 glory. VHF or UHF — no, a dancing news reader.
+- <b>[tvtime]</b> An old analog TV in all its 5x4 glory. VHF or UHF - no, a dancing news reader.
 - <b>[ibmpc]</b> A crusty old IBM PS/2 clone. Simple starfield animation, just for fun.
-- <b>[bass]</b> A rubbish bass guitar — and why not.
+- <b>[bass]</b> A rubbish bass guitar or bass ?? - and why not.
 - <b>[pipboy]</b> It's Pip-Boy.
 
 Specify `--egg <name>` to display an easter egg during track playback.
 
 ## Supported Displays
 
-Each driver speaks a single bus and a single colour depth. Colour depth is a
-property of the **driver**, not the panel size — choosing `--driver st7789`
+Each driver speaks a single bus and a single color depth. Color depth is a
+property of the **driver**, not the panel size, choosing `--driver st7789`
 implies Rgb565 even on a 240×135 panel; `--driver ssd1322` implies Gray4
 regardless of physical dimensions.
 
-| Driver        | Bus     | Colour depth | Panel sizes (long × short)                 |
+| Driver        | Bus     | Color depth | Panel sizes (long × short)                 |
 |---------------|---------|--------------|--------------------------------------------|
 | `ssd1306`     | I²C/SPI | Mono (1bpp)  | 128×64                                     |
 | `ssd1309`     | I²C/SPI | Mono (1bpp)  | 128×64                                     |
@@ -350,16 +350,18 @@ panel (e.g. `ssd1322`) the size is fixed and the values are ignored.
 
 LyMonS treats every framebuffer as **landscape-canonical**: the longer axis is
 always width, the shorter axis is always height. If you supply portrait
-dimensions in YAML — e.g. `width: 135, height: 240` for a 240×135 ST7789 — the
+dimensions in YAML, e.g. `width: 135, height: 240` for a 240×135 ST7789, the
 driver normalises silently and logs:
 
 ```
 ST7789: normalised input 135x240 → 240x135 (long axis first)
 ```
 
+As the dimension take the longest side as the width you may need to rotate the
+display image so that we correctly display your information. 
 Physical orientation is then handled by `rotate_deg` (`0`, `90`, `180`, `270`),
 which rotates the rendered framebuffer when blitted to the panel. This means
-the layout YAML never needs portrait-specific variants — author once in
+the layout YAML never needs portrait-specific variants, author once in
 landscape and rotate at the panel.
 
 ### SVG and Scaling
@@ -368,21 +370,21 @@ Most pixel-bearing assets in LyMonS are SVG (clock digits, weather glyphs,
 easter eggs, status icons, peak meters). They scale cleanly to whatever panel
 size the driver reports. Layout YAML, however, currently carries
 **hand-tuned absolute coordinates** for the canonical panel size of each
-driver — so a non-canonical ST7789 size (anything other than 320×170) will
+driver, so a non-canonical ST7789 size (anything other than 320×170) will
 render but field positions and widths may need attention. Add a sized layout
 override using a **dimensional variant** named `{width}x{height}` (for example
-`240x240`) within the driver's `layout.yaml` — see *Dimensional Variants*
+`240x240`) within the driver's `layout.yaml`, see *Dimensional Variants*
 below. The underlying SVGs themselves should require no changes.
 
 ## Layout System
 
-LyMonS uses a declarative YAML layout system to define where and how every element appears on screen. All positions, sizes, fonts, colors, and alignment are data — no recompilation needed. Driver-specific overrides let each display have its own tuned layout without touching shared definitions.
+LyMonS uses a declarative YAML layout system to define where and how every element appears on screen. All positions, sizes, fonts, colors, and alignment are data, and no recompilation needed. Driver-specific overrides let each display have its own tuned layout without touching shared definitions.
 
 ### How It Works
 
-Layouts are defined in `assets/layout.yaml` (the base, targeting 128×64 mono displays). Driver-specific overrides are placed alongside the driver in `assets/{driver}/layout.yaml` — for example `assets/ssd1322/layout.yaml` for the 256×64 gray4 display, or `assets/st7789/layout.yaml` for the 320×170 color display.
+Layouts are defined in `assets/layout.yaml` (the base, targeting 128×64 mono displays). Driver-specific overrides are placed alongside the driver in `assets/{driver}/layout.yaml` - for example `assets/ssd1322/layout.yaml` for the 256×64 gray4 display, or `assets/st7789/layout.yaml` for the 320×170 color display.
 
-When LyMonS starts it loads the base layout, then merges the driver override on top. The merge is **additive at the field level** — the override can add new fields or change individual field properties without having to redeclare fields it doesn't touch.
+When LyMonS starts it loads the base layout, then merges the driver override on top. The merge is **additive at the field level** - the override can add new fields or change individual field properties without having to redeclare fields it doesn't touch.
 
 ### Layout File Structure
 
@@ -409,7 +411,7 @@ templates:
             height: "display.height"
 ```
 
-Simple pages — like easter egg overlays — can define fields inline directly in the variant, skipping the component indirection entirely:
+Simple pages like easter egg overlays can define fields inline directly in the variant, skipping the component indirection entirely:
 
 ```yaml
 templates:
@@ -455,7 +457,7 @@ Because expressions reference `display.width`, the same component definition oft
 
 | Property | Values | Default |
 |---|---|---|
-| `type` | `label`, `scrolling_text`, `status_bar`, `track_progress_bar`, `info_line`, `clock_digits`, `weather_icon`, `weather_glyph`, `cover_image`, `custom` | — |
+| `type` | `label`, `scrolling_text`, `status_bar`, `track_progress_bar`, `info_line`, `clock_digits`, `weather_icon`, `weather_glyph`, `cover_image`, `custom` |, |
 | `x` / `y` | integer or expression | `"0"` |
 | `width` / `height` | integer or expression | `"parent.width"` / `"0"` |
 | `font` | `font_4x6` `font_5x8` `font_6x10` `font_7x13` `font_7x13_bold` `font_10x20` etc. | type default |
@@ -503,7 +505,7 @@ Match filters:
 
 A variant whose **name** is exactly `{width}x{height}` (e.g. `240x240`,
 `320x170`) is matched as an exact size override and wins over every other
-variant — no `match:` block required. This lets you ship a hand-tuned layout
+variant, no `match:` block required. This lets you ship a hand-tuned layout
 for a specific panel size without disturbing the catch-all `default` variant
 that other sizes fall back to.
 
@@ -511,7 +513,7 @@ that other sizes fall back to.
 templates:
   weather_current:
     variants:
-      - name: 240x240             # exact size match — wins on 240×240 panels
+      - name: 240x240             # exact size match, wins on 240×240 panels
         regions:
           - component: weather_current_240x240
             ...
@@ -527,7 +529,7 @@ specific match-rule variants first, leave the catch-all `default` last.
 
 ### Driver Overrides
 
-Place a `layout.yaml` file inside the driver's asset folder. The file uses the same format as the base — it only needs to contain what differs. Components and templates not mentioned in the override are inherited unchanged from the base.
+Place a `layout.yaml` file inside the driver's asset folder. The file uses the same format as the base, it only needs to contain what differs. Components and templates not mentioned in the override are inherited unchanged from the base.
 
 **Example**: add artist and title to the Pip-Boy easter egg on the wide gray4 display, which shows only a clock by default:
 
@@ -538,7 +540,7 @@ templates:
     variants:
       - name: default
         fields:
-          - name: artist          # new — not in base template
+          - name: artist          # new, not in base template
             type: label
             x: "140"
             y: "3"
@@ -546,7 +548,7 @@ templates:
             height: "28"
             font: font_4x6
             horizontal_alignment: Center
-          - name: title           # new — not in base template
+          - name: title           # new, not in base template
             type: label
             x: "140"
             y: "33"
@@ -554,12 +556,12 @@ templates:
             height: "20"
             font: font_4x6
             horizontal_alignment: Center
-          # time field is inherited from base — no need to redeclare it
+          # time field is inherited from base, no need to redeclare it
 ```
 
 ### Easter Egg Field Names
 
-Each easter egg template supports any combination of the following named fields. Fields not present in the template are simply not rendered — add whichever ones make sense for the available screen space on each display.
+Each easter egg template supports any combination of the following named fields. Fields not present in the template are simply not rendered, add whichever ones make sense for the available screen space on each display.
 
 | Field name | Content |
 |---|---|
@@ -567,7 +569,7 @@ Each easter egg template supports any combination of the following named fields.
 | `title` | Track title |
 | `album` | Album name |
 | `album_artist` | Album artist |
-| `combination` | `"Artist — Title"` combined scroller |
+| `combination` | `"Artist, Title"` combined scroller |
 | `year` | Release year |
 | `time` | Elapsed or remaining track time |
 
@@ -582,13 +584,13 @@ Layout errors are reported at startup with enough context to find the problem qu
 ERROR layout: YAML error in ./assets/ssd1322/layout.yaml:
 ERROR   unknown variant `font_4x66`, expected one of `font_4x6`, `font_5x7`, ...
 ERROR   (in template 'easter_egg_pipboy')
-WARN  layout: driver override ignored — using base layout only
+WARN  layout: driver override ignored, using base layout only
 ```
 
 **Expression evaluation error** (e.g. typo in a variable name, forward reference):
 ```
 WARN  layout: easter_egg_reel2reel/default/time [x="display.widht - 43"]:
-              unknown variable 'display.widht' — using 0
+              unknown variable 'display.widht', using 0
 ```
 
 ## Like The App - Git The Shirt
