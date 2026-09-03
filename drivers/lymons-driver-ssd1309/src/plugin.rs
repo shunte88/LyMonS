@@ -4,11 +4,20 @@
 
 use std::ffi::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use linux_embedded_hal::I2cdev;
+use linux_embedded_hal::{I2cdev, SpidevDevice};
 use crate::ffi::*;
 
+/// SSD1309 supports both I2C and SPI; keep the opened bus handle alive so the
+/// device stays claimed for the driver's lifetime. Held for its Drop, not read
+/// (real rendering is a TODO stub).
+#[allow(dead_code)]
+enum BusHandle {
+    I2c(I2cdev),
+    Spi(SpidevDevice),
+}
+
 pub struct Ssd1309PluginDriver {
-    _i2c: I2cdev,
+    _bus: BusHandle,
     capabilities: LyMonsDisplayCapabilities,
     brightness: u8,
     inverted: bool,
@@ -16,15 +25,24 @@ pub struct Ssd1309PluginDriver {
 
 impl Ssd1309PluginDriver {
     pub fn new(config: &LyMonsDisplayConfig) -> Result<Self, String> {
-        if config.bus.bus_type != LyMonsBusType::I2c {
-            return Err("SSD1309 requires I2C bus".to_string());
-        }
-
-        let i2c_config = unsafe { &config.bus.config.i2c };
-        let bus_path = extract_string_from_buffer(&i2c_config.bus_path);
-
-        let i2c = I2cdev::new(&bus_path)
-            .map_err(|e| format!("Failed to open I2C: {:?}", e))?;
+        // Open whichever bus the host selected (SPI rendering is a TODO stub;
+        // the DC/RST GPIO lines are configured when real I/O is implemented).
+        let bus = match config.bus.bus_type {
+            LyMonsBusType::I2c => {
+                let i2c_config = unsafe { &config.bus.config.i2c };
+                let bus_path = extract_string_from_buffer(&i2c_config.bus_path);
+                let i2c = I2cdev::new(&bus_path)
+                    .map_err(|e| format!("Failed to open I2C: {:?}", e))?;
+                BusHandle::I2c(i2c)
+            }
+            LyMonsBusType::Spi => {
+                let spi_config = unsafe { &config.bus.config.spi };
+                let bus_path = extract_string_from_buffer(&spi_config.bus_path);
+                let spi = SpidevDevice::open(&bus_path)
+                    .map_err(|e| format!("Failed to open SPI: {:?}", e))?;
+                BusHandle::Spi(spi)
+            }
+        };
 
         let capabilities = LyMonsDisplayCapabilities {
             width: 128,
@@ -37,7 +55,7 @@ impl Ssd1309PluginDriver {
         };
 
         Ok(Self {
-            _i2c: i2c,
+            _bus: bus,
             capabilities,
             brightness: if config.has_brightness { config.brightness } else { 128 },
             inverted: config.inverted,

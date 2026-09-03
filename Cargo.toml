@@ -1,6 +1,6 @@
 [package]
 name = "LyMonS"
-version = "0.4.12"
+version = "0.4.14"
 edition = "2024"
 description = "An LMS Monitor For The Future — This LyMonS worth the squeeze"
 license = "Apache-2.0"

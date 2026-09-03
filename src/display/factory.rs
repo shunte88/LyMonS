@@ -121,6 +121,11 @@ impl DisplayDriverFactory {
                 Ok(Box::new(Ssd1306Driver::new_i2c(bus, *address, config)?))
             }
 
+            #[cfg(feature = "driver-ssd1306")]
+            (DriverKind::Ssd1306, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
+                Ok(Box::new(Ssd1306Driver::new_spi(bus, *dc_pin, *rst_pin, config)?))
+            }
+
             #[cfg(feature = "driver-ssd1309")]
             (DriverKind::Ssd1309, BusConfig::I2c { bus, address, .. }) => {
                 Ok(Box::new(Ssd1309Driver::new_i2c(bus, *address, config)?))
@@ -146,6 +151,11 @@ impl DisplayDriverFactory {
             #[cfg(feature = "driver-sh1106")]
             (DriverKind::Sh1106, BusConfig::I2c { bus, address, .. }) => {
                 Ok(Box::new(Sh1106Driver::new_i2c(bus, *address, config)?))
+            }
+
+            #[cfg(feature = "driver-sh1106")]
+            (DriverKind::Sh1106, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
+                Ok(Box::new(Sh1106Driver::new_spi(bus, *dc_pin, *rst_pin, config)?))
             }
 
             #[cfg(feature = "driver-sh1122")]

@@ -7,22 +7,46 @@
 use std::ffi::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use ssd1306::{
+    mode::BufferedGraphicsMode,
     prelude::*,
     I2CDisplayInterface,
     Ssd1306,
 };
-use linux_embedded_hal::I2cdev;
+use linux_embedded_hal::{I2cdev, SpidevDevice, CdevPin};
+use linux_embedded_hal::spidev::{SpidevOptions, SpiModeFlags};
+use linux_embedded_hal::gpio_cdev::{self, Chip, LineRequestFlags};
+use embedded_hal::digital::OutputPin;
 
 use crate::ffi::*;
 
+/// Default SPI clock when the host supplies 0
+const DEFAULT_SPI_SPEED_HZ: u32 = 8_000_000;
+/// Fallback GPIO character device if the header controller can't be detected
+/// by label (see `open_header_gpio_chip`).
+const DEFAULT_GPIO_CHIP: &str = "/dev/gpiochip0";
+
+/// The SSD1306 controller supports both I2C and SPI; the concrete interface
+/// type differs, so the live display is held in a small enum.
+enum Ssd1306Display {
+    I2c(Ssd1306<I2CInterface<I2cdev>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>),
+    Spi(Ssd1306<SPIInterface<SpidevDevice, CdevPin>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>),
+}
+
+/// Run an expression against the active display regardless of bus type.
+/// The body is type-checked per arm, so identical source serves both interfaces.
+macro_rules! disp {
+    ($self:ident, $d:ident => $body:expr) => {
+        match &mut $self.display {
+            Ssd1306Display::I2c($d) => $body,
+            Ssd1306Display::Spi($d) => $body,
+        }
+    };
+}
+
 /// Internal SSD1306 driver state
 pub struct Ssd1306PluginDriver {
-    /// The actual SSD1306 driver from the ssd1306 crate
-    display: Ssd1306<
-        I2CInterface<I2cdev>,
-        DisplaySize128x64,
-        ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>
-    >,
+    /// The actual SSD1306 driver from the ssd1306 crate, over the selected bus
+    display: Ssd1306Display,
 
     /// Display capabilities
     capabilities: LyMonsDisplayCapabilities,
@@ -32,74 +56,37 @@ pub struct Ssd1306PluginDriver {
 
     /// Current inversion state
     inverted: bool,
+
+    /// Reset line held high for the driver's lifetime (SPI only)
+    _rst: Option<CdevPin>,
 }
 
 impl Ssd1306PluginDriver {
-    /// Create a new SSD1306 driver from configuration
+    /// Create a new SSD1306 driver from configuration (I2C or SPI)
     pub fn new(config: &LyMonsDisplayConfig) -> Result<Self, String> {
-        // Extract I2C configuration
-        if config.bus.bus_type != LyMonsBusType::I2c {
-            return Err("SSD1306 requires I2C bus".to_string());
-        }
+        // Open whichever bus the host selected and build the display
+        let (display, rst) = match config.bus.bus_type {
+            LyMonsBusType::I2c => {
+                let i2c_config = unsafe { &config.bus.config.i2c };
+                let bus_path = extract_string_from_buffer(&i2c_config.bus_path);
 
-        let i2c_config = unsafe { &config.bus.config.i2c };
-
-        // Extract bus path
-        let bus_path = extract_string_from_buffer(&i2c_config.bus_path);
-        let _address = i2c_config.address;
-
-        // Open I2C device
-        let i2c = I2cdev::new(&bus_path)
-            .map_err(|e| format!("Failed to open I2C device {}: {:?}", bus_path, e))?;
-
-        // Create display interface
-        let interface = I2CDisplayInterface::new(i2c);
-
-        // Create display driver
-        let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-            .into_buffered_graphics_mode();
-
-        // Initialize the display
-        display.init()
-            .map_err(|e| format!("Failed to initialize display: {:?}", e))?;
-
-        // Apply initial configuration
-        let brightness = if config.has_brightness {
-            config.brightness
-        } else {
-            128
+                let i2c = I2cdev::new(&bus_path)
+                    .map_err(|e| format!("Failed to open I2C device {}: {:?}", bus_path, e))?;
+                let interface = I2CDisplayInterface::new(i2c);
+                let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
+                    .into_buffered_graphics_mode();
+                display.init()
+                    .map_err(|e| format!("Failed to initialize display: {:?}", e))?;
+                (Ssd1306Display::I2c(display), None)
+            }
+            LyMonsBusType::Spi => {
+                let spi_config = unsafe { &config.bus.config.spi };
+                let bus_path = extract_string_from_buffer(&spi_config.bus_path);
+                Self::open_spi(&bus_path, spi_config.dc_pin, spi_config.rst_pin, spi_config.speed_hz)?
+            }
         };
 
-        // Map brightness (0-255) to Brightness enum (BRIGHTEST, NORMAL, DIM, DIMMEST)
-        let brightness_level = match brightness {
-            0..=63 => Brightness::DIMMEST,
-            64..=127 => Brightness::DIM,
-            128..=191 => Brightness::NORMAL,
-            192..=255 => Brightness::BRIGHTEST,
-        };
-
-        display.set_brightness(brightness_level)
-            .map_err(|e| format!("Failed to set brightness: {:?}", e))?;
-
-        // Apply rotation if specified
-        if config.has_rotation {
-            let rotation = match config.rotation {
-                0 => DisplayRotation::Rotate0,
-                90 => DisplayRotation::Rotate90,
-                180 => DisplayRotation::Rotate180,
-                270 => DisplayRotation::Rotate270,
-                _ => return Err(format!("Invalid rotation: {}", config.rotation)),
-            };
-
-            display.set_rotation(rotation)
-                .map_err(|e| format!("Failed to set rotation: {:?}", e))?;
-        }
-
-        // Apply inversion if specified
-        if config.inverted {
-            display.set_display_on(true)
-                .map_err(|e| format!("Failed to set display on: {:?}", e))?;
-        }
+        let brightness = if config.has_brightness { config.brightness } else { 128 };
 
         let capabilities = LyMonsDisplayCapabilities {
             width: 128,
@@ -111,20 +98,121 @@ impl Ssd1306PluginDriver {
             supports_invert: true,
         };
 
-        Ok(Self {
+        let mut driver = Self {
             display,
             capabilities,
             brightness,
             inverted: config.inverted,
-        })
+            _rst: rst,
+        };
+
+        // Apply initial configuration through the shared, bus-agnostic methods
+        driver.set_brightness(brightness)?;
+        if config.has_rotation {
+            driver.set_rotation(config.rotation)?;
+        }
+        if config.inverted {
+            driver.set_invert(true)?;
+        }
+
+        Ok(driver)
+    }
+
+    /// Open and configure the SPI bus + DC/RST GPIO lines, then build the display.
+    /// A `rst_pin` of 0 means no hardware reset line is wired.
+    fn open_spi(
+        bus_path: &str,
+        dc_pin: u8,
+        rst_pin: u8,
+        speed_hz: u32,
+    ) -> Result<(Ssd1306Display, Option<CdevPin>), String> {
+        let speed = if speed_hz == 0 { DEFAULT_SPI_SPEED_HZ } else { speed_hz };
+
+        let mut spi = SpidevDevice::open(bus_path)
+            .map_err(|e| format!("Failed to open SPI {}: {:?}", bus_path, e))?;
+        let options = SpidevOptions::new()
+            .bits_per_word(8)
+            .max_speed_hz(speed)
+            .mode(SpiModeFlags::SPI_MODE_0)
+            .build();
+        spi.0.configure(&options)
+            .map_err(|e| format!("Failed to configure SPI: {:?}", e))?;
+
+        let mut chip = Self::open_header_gpio_chip()?;
+        let dc = Self::request_output(&mut chip, dc_pin as u32, 0, "lymons-ssd1306-dc")?;
+
+        // Hardware reset pulse, held high afterwards for the driver's lifetime
+        let rst = if rst_pin != 0 {
+            let mut rst = Self::request_output(&mut chip, rst_pin as u32, 1, "lymons-ssd1306-rst")?;
+            rst.set_high().ok();
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            rst.set_low().ok();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            rst.set_high().ok();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            Some(rst)
+        } else {
+            None
+        };
+
+        let interface = SPIInterface::new(spi, dc);
+        let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
+            .into_buffered_graphics_mode();
+        display.init()
+            .map_err(|e| format!("Failed to initialize display: {:?}", e))?;
+
+        Ok((Ssd1306Display::Spi(display), rst))
+    }
+
+    /// Open the GPIO chip that drives the Raspberry Pi 40-pin header.
+    ///
+    /// The gpiochip *number* for the header has moved between Pi generations and
+    /// kernel versions (Pi 5 was gpiochip4, then gpiochip0 on kernel 6.6+), so we
+    /// match on the controller's stable label instead of a hardcoded path.
+    /// Falls back to `DEFAULT_GPIO_CHIP` if no known controller is present.
+    fn open_header_gpio_chip() -> Result<Chip, String> {
+        // 40-pin header controllers, most specific (newest) first
+        const HEADER_LABELS: [&str; 4] = [
+            "pinctrl-rp1",     // Pi 5
+            "pinctrl-bcm2711", // Pi 4 / CM4
+            "pinctrl-bcm2835", // Pi 0/1/2/3 / Zero
+            "pinctrl-bcm2708", // very old kernels
+        ];
+
+        if let Ok(chips) = gpio_cdev::chips() {
+            let mut found: Vec<Chip> = chips.flatten().collect();
+            for label in HEADER_LABELS {
+                if let Some(pos) = found.iter().position(|c| c.label() == label) {
+                    return Ok(found.swap_remove(pos));
+                }
+            }
+        }
+
+        Chip::new(DEFAULT_GPIO_CHIP)
+            .map_err(|e| format!("Failed to open {}: {:?}", DEFAULT_GPIO_CHIP, e))
+    }
+
+    /// Request a GPIO line as an output with the given default level.
+    fn request_output(
+        chip: &mut Chip,
+        pin: u32,
+        default: u8,
+        consumer: &str,
+    ) -> Result<CdevPin, String> {
+        let line = chip.get_line(pin)
+            .map_err(|e| format!("GPIO line {}: {:?}", pin, e))?;
+        let handle = line.request(LineRequestFlags::OUTPUT, default, consumer)
+            .map_err(|e| format!("GPIO request {}: {:?}", pin, e))?;
+        CdevPin::new(handle)
+            .map_err(|e| format!("GPIO pin {}: {:?}", pin, e))
     }
 
     /// Initialize the display (called after creation)
     pub fn init(&mut self) -> Result<(), String> {
-        self.display.clear_buffer();
-        self.display.flush()
-            .map_err(|e| format!("Failed to flush display: {:?}", e))?;
-        Ok(())
+        disp!(self, d => {
+            d.clear_buffer();
+            d.flush().map_err(|e| format!("Failed to flush display: {:?}", e))
+        })
     }
 
     /// Set display brightness (0-255)
@@ -138,23 +226,23 @@ impl Ssd1306PluginDriver {
             192..=255 => Brightness::BRIGHTEST,
         };
 
-        self.display.set_brightness(brightness_level)
-            .map_err(|e| format!("Failed to set brightness: {:?}", e))?;
-
-        Ok(())
+        disp!(self, d =>
+            d.set_brightness(brightness_level)
+                .map_err(|e| format!("Failed to set brightness: {:?}", e))
+        )
     }
 
     /// Flush the framebuffer to the display
     pub fn flush(&mut self) -> Result<(), String> {
-        self.display.flush()
-            .map_err(|e| format!("Failed to flush: {:?}", e))
+        disp!(self, d => d.flush().map_err(|e| format!("Failed to flush: {:?}", e)))
     }
 
     /// Clear the display
     pub fn clear(&mut self) -> Result<(), String> {
-        self.display.clear_buffer();
-        self.display.flush()
-            .map_err(|e| format!("Failed to clear: {:?}", e))
+        disp!(self, d => {
+            d.clear_buffer();
+            d.flush().map_err(|e| format!("Failed to clear: {:?}", e))
+        })
     }
 
     /// Write raw buffer to display
@@ -170,33 +258,24 @@ impl Ssd1306PluginDriver {
             ));
         }
 
-        // Copy buffer to display buffer
-        // The ssd1306 crate doesn't expose direct buffer access, so we need to
-        // draw pixels individually or use the buffer if available
-        // For now, we'll clear and redraw
-        self.display.clear_buffer();
-
-        // Convert buffer to pixels
-        for (byte_idx, &byte) in buffer.iter().enumerate() {
-            let page = byte_idx / 128; // 8 pages (8 pixels high each)
-            let col = byte_idx % 128;
-
-            for bit in 0..8 {
-                let y = (page * 8 + bit) as i32;
-                let x = col as i32;
-
-                if (byte >> bit) & 1 == 1 {
-                    let _ = self.display.set_pixel(
-                        x as u32,
-                        y as u32,
-                        true
-                    );
+        // Copy buffer to display buffer. The ssd1306 crate doesn't expose direct
+        // buffer access, so we clear and redraw pixel-by-pixel. Resolve the active
+        // display once so the enum match isn't repeated per pixel.
+        disp!(self, d => {
+            d.clear_buffer();
+            for (byte_idx, &byte) in buffer.iter().enumerate() {
+                let page = byte_idx / 128; // 8 pages (8 pixels high each)
+                let col = byte_idx % 128;
+                for bit in 0..8 {
+                    let y = (page * 8 + bit) as u32;
+                    let x = col as u32;
+                    if (byte >> bit) & 1 == 1 {
+                        let _ = d.set_pixel(x, y, true);
+                    }
                 }
             }
-        }
-
-        self.display.flush()
-            .map_err(|e| format!("Failed to write buffer: {:?}", e))
+            d.flush().map_err(|e| format!("Failed to write buffer: {:?}", e))
+        })
     }
 
     /// Set display inversion
@@ -204,8 +283,10 @@ impl Ssd1306PluginDriver {
         self.inverted = inverted;
 
         // SSD1306 supports inversion via command
-        self.display.set_display_on(!inverted)
-            .map_err(|e| format!("Failed to set invert: {:?}", e))
+        disp!(self, d =>
+            d.set_display_on(!inverted)
+                .map_err(|e| format!("Failed to set invert: {:?}", e))
+        )
     }
 
     /// Set display rotation
@@ -218,8 +299,10 @@ impl Ssd1306PluginDriver {
             _ => return Err(format!("Invalid rotation: {}", degrees)),
         };
 
-        self.display.set_rotation(rotation)
-            .map_err(|e| format!("Failed to set rotation: {:?}", e))
+        disp!(self, d =>
+            d.set_rotation(rotation)
+                .map_err(|e| format!("Failed to set rotation: {:?}", e))
+        )
     }
 
     /// Get display capabilities
