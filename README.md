@@ -33,6 +33,7 @@ tar xzf lymons-latest-pcp-armv7.tgz
 # Install
 cd lymons-*-pcp-armv7
 sudo ./install.sh
+
 # and follow the directions...
 
 ```
@@ -596,7 +597,7 @@ WARN  layout: easter_egg_reel2reel/default/time [x="display.widht - 43"]:
 
 ## Like The App - Git The Shirt
 
-Team Badger shirts and other goodies are available at [shunte88](https://www.zazzle.com/team_badger_t_shirt-235604841593837420)
+Team Badger shirts and other goodies available at [shunte88](https://www.zazzle.com/team_badger_t_shirt-235604841593837420)
 
 ---
 
