@@ -25,10 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target:
-          - armv6-unknown-linux-gnueabihf  # Pi 1/3 and zero's 32-bit (most compatible)
-          - armv7-unknown-linux-gnueabihf  # Pi 3/4 32-bit (most compatible)
-          - aarch64-unknown-linux-gnu       # Pi 4/5 64-bit
+        include:
+          - target: arm-unknown-linux-gnueabihf      # Pi 1 / Zero / Zero W (ARMv6)
+            arch: armv6
+          - target: armv7-unknown-linux-gnueabihf    # Pi 2/3/4 32-bit (ARMv7)
+            arch: armv7
+          - target: aarch64-unknown-linux-gnu        # Pi 3/4/5 64-bit
+            arch: aarch64
 
     steps:
     - name: Checkout code
@@ -72,8 +75,8 @@ jobs:
     - name: Get package info
       id: package_info
       run: |
-        # Extract architecture name
-        ARCH=$(echo "${{ matrix.target }}" | cut -d'-' -f1)
+        # Architecture label comes from the matrix (arm triple -> armv6 label)
+        ARCH="${{ matrix.arch }}"
         # Get version from Cargo.toml
         VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
         # Construct package name

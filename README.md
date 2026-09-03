@@ -17,13 +17,14 @@ OLED information display control program for [piCorePlayer](https://www.picorepl
 
 Pre-compiled binaries for Raspberry Pi are available on the [binaries branch](https://github.com/shunte88/LyMonS/tree/binaries):
 
-- **32-bit (armv7)** - Pi 3, 4, Zero 2 W: [lymons-latest-pcp-armv7.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv7.tgz)
+- **32-bit (armv6)** - Pi 1, Zero, Zero W: [lymons-latest-pcp-armv6.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv6.tgz)
+- **32-bit (armv7)** - Pi 2, 3, 4, Zero 2 W: [lymons-latest-pcp-armv7.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv7.tgz)
 - **64-bit (aarch64)** - Pi 4, 5, 400: [lymons-latest-pcp-aarch64.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-aarch64.tgz)
 
 ### Quick Install
 
 ```bash
-# Download for your Pi (32-bit example)
+# Download for your Pi (32-bit Pi 3, 4, Zero 2 W example)
 wget https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv7.tgz
 
 # Extract
@@ -322,7 +323,7 @@ regardless of physical dimensions.
 |---------------|---------|--------------|--------------------------------------------|
 | `ssd1306`     | I²C/SPI | Mono (1bpp)  | 128×64                                     |
 | `ssd1309`     | I²C/SPI | Mono (1bpp)  | 128×64                                     |
-| `sh1106`      | I²C     | Mono (1bpp)  | 132×64                                     |
+| `sh1106`      | I²C/SPI | Mono (1bpp)  | 132×64                                     |
 | `ssd1322`     | SPI     | Gray4 (4bpp) | 256×64                                     |
 | `sh1122`      | SPI     | Gray4 (4bpp) | 256×64                                     |
 | `st7789`      | SPI     | Rgb565 (16bpp) | 320×240, 320×170, 280×240, 240×240, 240×135, 160×80 |

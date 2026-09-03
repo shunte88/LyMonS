@@ -8,13 +8,15 @@ set -e
 TARGET="${1:-armv7-unknown-linux-gnueabihf}"
 VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 ARCH=$(echo "${TARGET}" | cut -d'-' -f1)
+# The ARMv6 target triple is "arm-*"; present it to users as "armv6"
+[ "${ARCH}" = "arm" ] && ARCH="armv6"
 PACKAGE_NAME="lymons-${VERSION}-pcp-${ARCH}"
 BUILD_DIR="/tmp/${PACKAGE_NAME}"
 
 case "${TARGET}" in
-    armv7-*)   STRIP_TOOL="arm-linux-gnueabihf-strip" ;;
-    aarch64-*) STRIP_TOOL="aarch64-linux-gnu-strip" ;;
-    *)         STRIP_TOOL="strip" ;;
+    arm-*|armv7-*) STRIP_TOOL="arm-linux-gnueabihf-strip" ;;
+    aarch64-*)     STRIP_TOOL="aarch64-linux-gnu-strip" ;;
+    *)             STRIP_TOOL="strip" ;;
 esac
 
 echo "Creating universal deployment package..."
