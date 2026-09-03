@@ -4,6 +4,7 @@ Pre-compiled binaries for Raspberry Pi (TinyCore Linux / PiCorePlayer).
 
 ## Download Latest
 
+- **32-bit (armv6)** - Raspberry Pi 1, 2, 3, Zero: [lymons-latest-pcp-armv6.tgz](latest/lymons-latest-pcp-armv6.tgz)
 - **32-bit (armv7)** - Raspberry Pi 3, 4, Zero 2 W: [lymons-latest-pcp-armv7.tgz](latest/lymons-latest-pcp-armv7.tgz)
 - **64-bit (aarch64)** - Raspberry Pi 4, 5, 400: [lymons-latest-pcp-aarch64.tgz](latest/lymons-latest-pcp-aarch64.tgz)
 
@@ -16,7 +17,7 @@ Pre-compiled binaries for Raspberry Pi (TinyCore Linux / PiCorePlayer).
 
 ## Versioned Builds
 
-See the `armv7/` and `aarch64/` directories for specific versions.
+See the `armv6/`, `armv7/` and `aarch64/` directories for specific versions.
 
 ---
 *Built automatically by GitHub Actions*
