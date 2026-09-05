@@ -106,7 +106,7 @@ Options:
       --i2c-bus <I2C_BUS>
           I2C bus device path [default: /dev/i2c-1]
   -d, --driver <DRIVER>
-          Display driver (emulator / config override) [possible values: ssd1306, ssd1309, ssd1322, sh1106, sh1122, sharpmemory, st7789, st7796s]
+          Display driver (emulator / config override) [possible values: ssd1306, ssd1309, ssd1322, sh1106, sh1107, sh1122, sharpmemory, st7789, st7796s]
   -a, --viz <VIZ>
           Visualizer type [possible values: combination, hist_aio, hist_mono, hist_stereo, peak_mono, peak_stereo, vu_aio, vu_mono, vu_stereo, waveform_spectrum, no_viz]
       --hist-scheme <HIST_SCHEME>
@@ -127,12 +127,14 @@ LMS monitor
 
 Supported OLED types:
     SH1106
+    SH1107
     SH1122
     SSD1306
     SSD1309
     SSD1322
     SHARP-memory
     ST7789
+    ST7796S
 
 OLED Clock Fonts:
     7seg ........: Classic LCD Clock Font
@@ -325,6 +327,7 @@ regardless of physical dimensions.
 | `ssd1306`     | I²C/SPI | Mono (1bpp)  | 128×64                                     |
 | `ssd1309`     | I²C/SPI | Mono (1bpp)  | 128×64                                     |
 | `sh1106`      | I²C/SPI | Mono (1bpp)  | 132×64                                     |
+| `sh1107`      | I²C/SPI | Mono (1bpp)  | 128×128, 128×64                            |
 | `ssd1322`     | SPI     | Gray4 (4bpp) | 256×64                                     |
 | `sh1122`      | SPI     | Gray4 (4bpp) | 256×64                                     |
 | `st7789`      | SPI     | Rgb565 (16bpp) | 320×240, 320×170, 280×240, 240×240, 240×135, 160×80 |
@@ -333,8 +336,8 @@ regardless of physical dimensions.
 
 ### Specifying Panel Size
 
-For drivers with more than one panel option (currently `st7789`; `st7796s`
-will follow if/when alternative panel sizes are supported), set
+For drivers with more than one panel option (currently `st7789` and `sh1107`;
+`st7796s` will follow if/when alternative panel sizes are supported), set
 `width` and `height` in the `display:` block of your config file:
 
 ```yaml
@@ -347,6 +350,25 @@ display:
 The configurator validates the requested size against the supported list and
 fails fast with a clear message if it doesn't match. For drivers with a single
 panel (e.g. `ssd1322`) the size is fixed and the values are ignored.
+
+### SH1107 Mounting
+
+The SH1107 carries a full 128×128 of display RAM whatever the panel in front of
+it, and it has no hardware 90° rotation, only segment remap and COM scan
+direction. LyMonS therefore rotates in software while packing the framebuffer
+into controller RAM, so all four angles are available:
+
+```yaml
+display:
+  driver: sh1107
+  width:  128
+  height: 64
+  rotate_deg: 90     # 0 | 90 | 180 | 270
+```
+
+Many 128×64 SH1107 modules are a portrait 64×128 panel mounted sideways. Start
+at `rotate_deg: 0`; if the image reads sideways, try `90`, then `270`. The
+128×128 panels are square and need no rotation.
 
 ### Orientation and Rotation
 

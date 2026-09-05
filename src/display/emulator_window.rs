@@ -34,7 +34,7 @@ use winit::{
 use winit_input_helper::WinitInputHelper;
 
 #[cfg(feature = "emulator")]
-use crate::display::drivers::emulator::{EmulatorState, EmulatorColor};
+use crate::display::drivers::emulator::{EmulatorState, EmulatorColor, SHOT_DIR};
 #[cfg(feature = "emulator")]
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "emulator")]
@@ -169,7 +169,7 @@ impl EmulatorWindow {
         println!("    G         - Toggle pixel grid");
         println!("    F         - Toggle FPS counter");
         println!("    H         - Toggle help overlay");
-        println!("    S         - Save screenshot");
+        println!("    S         - Save frame to ./shots/");
         println!("    B         - Cycle brightness");
         println!("    R         - Cycle rotation");
         println!("    I         - Toggle invert");
@@ -221,9 +221,13 @@ impl EmulatorWindow {
                     println!("Help overlay: {}", if self.config.show_help { "ON" } else { "OFF" });
                 }
 
-                // Save screenshot
+                // Save a frame dump of exactly what the panel is showing
                 if input.key_pressed(VirtualKeyCode::S) {
-                    println!("Screenshot saved (TODO: implement)");
+                    let state = self.state.lock().unwrap();
+                    match state.save_png(std::path::Path::new(SHOT_DIR), self.config.scale) {
+                        Ok(path) => println!("Frame saved: {}", path.display()),
+                        Err(e)   => eprintln!("Frame dump failed: {e}"),
+                    }
                 }
 
                 // Cycle brightness

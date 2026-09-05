@@ -108,6 +108,70 @@ pub struct EmulatorState {
     pub cycle_visualization: bool,
 }
 
+/// Directory frame dumps are written to (created on first use).
+#[cfg(feature = "emulator")]
+pub const SHOT_DIR: &str = "./shots";
+
+#[cfg(feature = "emulator")]
+impl EmulatorState {
+    /// Write the current framebuffer to a PNG under `dir`, applying the same
+    /// brightness and inversion the window renderer applies.
+    ///
+    /// `scale` replicates each display pixel into a scale×scale block (nearest
+    /// neighbour, 1 = native panel size).  The file is named
+    /// `{driver}_{mode}_{HHMMSS}.png` so successive captures of the same page
+    /// don't overwrite each other.
+    ///
+    /// Frames are written from inside the process, so this needs no desktop
+    /// access and works over SSH — unlike an external screen grabber.
+    pub fn save_png(&self, dir: &std::path::Path, scale: u32)
+        -> Result<std::path::PathBuf, String>
+    {
+        let scale = scale.max(1);
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+
+        let mode = format!("{:?}", self.current_display_mode).to_lowercase();
+        let path = dir.join(format!(
+            "{}_{}_{}.png",
+            self.display_type.to_lowercase(),
+            mode,
+            chrono::Local::now().format("%H%M%S"),
+        ));
+
+        let (w, h) = (self.width, self.height);
+        let brightness_factor = self.brightness as f32 / 255.0;
+        let mut img = image::RgbImage::new(w * scale, h * scale);
+
+        for y in 0..h {
+            for x in 0..w {
+                let mut rgba = self.buffer
+                    .get((y * w + x) as usize)
+                    .map(|c| c.to_rgba())
+                    .unwrap_or([0, 0, 0, 255]);
+
+                for c in rgba.iter_mut().take(3) {
+                    *c = (*c as f32 * brightness_factor) as u8;
+                    if self.inverted {
+                        *c = 255 - *c;
+                    }
+                }
+
+                let px = image::Rgb([rgba[0], rgba[1], rgba[2]]);
+                for dy in 0..scale {
+                    for dx in 0..scale {
+                        img.put_pixel(x * scale + dx, y * scale + dy, px);
+                    }
+                }
+            }
+        }
+
+        img.save(&path)
+            .map_err(|e| format!("could not write {}: {e}", path.display()))?;
+        Ok(path)
+    }
+}
+
 /// Emulator display driver
 ///
 /// This driver renders to a desktop window instead of physical hardware.
@@ -532,5 +596,73 @@ impl DrawTarget for EmulatorDriver {
 impl OriginDimensions for EmulatorDriver {
     fn size(&self) -> Size {
         Size::new(self.capabilities.width, self.capabilities.height)
+    }
+}
+
+#[cfg(all(test, feature = "emulator"))]
+mod tests {
+    use super::*;
+
+    fn state(width: u32, height: u32, on: &[(u32, u32)]) -> EmulatorState {
+        let mut buffer = vec![EmulatorColor::Mono(BinaryColor::Off); (width * height) as usize];
+        for &(x, y) in on {
+            buffer[(y * width + x) as usize] = EmulatorColor::Mono(BinaryColor::On);
+        }
+        EmulatorState {
+            buffer,
+            width,
+            height,
+            brightness: 255,
+            rotation: 0,
+            inverted: false,
+            frame_count: 0,
+            display_type: "SH1107".to_string(),
+            requested_mode: None,
+            manual_mode_override: false,
+            current_display_mode: crate::display::DisplayMode::Clock,
+            cycle_easter_egg: false,
+            cycle_visualization: false,
+        }
+    }
+
+    #[test]
+    fn save_png_writes_scaled_frame() {
+        let dir = std::env::temp_dir().join("lymons-shot-test-scaled");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let path = state(4, 2, &[(1, 0)]).save_png(&dir, 3).expect("frame written");
+        assert!(path.exists());
+        assert!(path.file_name().unwrap().to_string_lossy().starts_with("sh1107_clock_"));
+
+        let img = image::open(&path).unwrap().to_rgb8();
+        assert_eq!(img.dimensions(), (12, 6), "4x2 panel at scale 3");
+
+        // The lit pixel fills its whole 3x3 block; its neighbours stay dark.
+        assert_eq!(img.get_pixel(3, 0).0, [0, 255, 128]);
+        assert_eq!(img.get_pixel(5, 2).0, [0, 255, 128]);
+        assert_eq!(img.get_pixel(2, 0).0, [0, 0, 0]);
+        assert_eq!(img.get_pixel(6, 0).0, [0, 0, 0]);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_png_applies_brightness_and_invert() {
+        let dir = std::env::temp_dir().join("lymons-shot-test-bright");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let mut st = state(2, 1, &[(0, 0)]);
+        st.brightness = 128;
+        st.inverted = true;
+
+        let path = st.save_png(&dir, 1).expect("frame written");
+        let img = image::open(&path).unwrap().to_rgb8();
+
+        // lit: [0,255,128] * 128/255 = [0,128,64], inverted -> [255,127,191]
+        assert_eq!(img.get_pixel(0, 0).0, [255, 127, 191]);
+        // unlit black inverts to white
+        assert_eq!(img.get_pixel(1, 0).0, [255, 255, 255]);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

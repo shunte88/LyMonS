@@ -456,4 +456,42 @@ templates:
         assert_eq!(page.fields()[0].bounds.top_left.x, 170);
         assert_eq!(page.fields()[0].bounds.size.width, 150);
     }
+
+    /// The SH1107 override must supply an exact "128x128" variant for every page
+    /// it customises, and every resolved field must land inside the panel.
+    #[test]
+    fn sh1107_square_override_resolves_in_bounds() {
+        let templates = LayoutTemplates::load_with_driver_override("./assets/sh1107/");
+        let resolver = LayoutResolver::new(&templates);
+        let profile = DisplayProfile {
+            width: 128,
+            height: 128,
+            color_depth: ColorDepth::Monochrome,
+            category: LayoutCategory::Small,
+        };
+
+        for name in ["playback", "aio", "clock", "weather_current", "weather_forecast", "warning"] {
+            let page = resolver.resolve(name, profile).expect("template resolves");
+            assert!(page.name.ends_with(":128x128"),
+                    "{name} picked variant '{}' instead of the 128x128 override", page.name);
+            assert!(!page.fields().is_empty(), "{name} resolved with no fields");
+            for f in page.fields() {
+                let (tl, sz) = (f.bounds.top_left, f.bounds.size);
+                assert!(tl.x >= 0 && tl.y >= 0,
+                        "{name}/{} starts off-screen at {:?}", f.name, tl);
+                assert!(tl.x + sz.width as i32 <= 128 && tl.y + sz.height as i32 <= 128,
+                        "{name}/{} overflows the panel: {:?} {:?}", f.name, tl, sz);
+            }
+        }
+    }
+
+    /// A 128x64 SH1107 panel must fall through to the shared base layout — the
+    /// square override has no "128x64" variant and must not shadow it.
+    #[test]
+    fn sh1107_64_high_falls_back_to_base() {
+        let templates = LayoutTemplates::load_with_driver_override("./assets/sh1107/");
+        let resolver = LayoutResolver::new(&templates);
+        let page = resolver.resolve("playback", profile_128()).unwrap();
+        assert_eq!(page.name, "playback:default");
+    }
 }

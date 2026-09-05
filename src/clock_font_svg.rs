@@ -195,17 +195,20 @@ pub fn set_clock_font(font_name: &str, display_width: u32, display_height: u32) 
     let mut layout = ClockDigitLayout::StandardTime;
     let (mut width, mut height) = if display_height > 70 { SIZE_LARGE } else { SIZE_NORMAL };
 
-    if 5*width > display_width {
-        warn!("Display width {} too small for font width {}, scaling down", display_width, width);
-        let scale = display_width as f32 / (6.0 * width as f32); // 6 as we need buffer at start end
-        width  = (width  as f32 * scale) as u32;
-        height = (height as f32 * scale) as u32;
-    }
-
+    // Square panels stack HH over MM, so the digit box comes from the panel
+    // itself — a third of each axis — and the width-fit rule below never
+    // applies.  Checked first so a square display doesn't warn about a fit it
+    // was never going to use (SH1107 128×128 sized 60 wide, warned, scaled,
+    // then had both values overwritten here).
     if display_width==display_height {
         layout = ClockDigitLayout::SquareTime;
         width  = (display_width  as f32 / 3.0) as u32;
         height = (display_height as f32 / 3.0) as u32;
+    } else if 5*width > display_width {
+        warn!("Display width {} too small for font width {}, scaling down", display_width, width);
+        let scale = display_width as f32 / (6.0 * width as f32); // 6 as we need buffer at start end
+        width  = (width  as f32 * scale) as u32;
+        height = (height as f32 * scale) as u32;
     }
     info!("Load SVG clock font: {} @ {}×{}", font_name, width, height);
 
@@ -225,4 +228,35 @@ pub fn set_clock_font(font_name: &str, display_width: u32, display_height: u32) 
         });
 
     ClockFontData { digit_width: width, digit_height: height, digit_layout: layout, chars }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Square panels take the stacked HH/MM digit box (a third of each axis)
+    /// and must not go through the width-fit scaler on the way.
+    #[test]
+    fn square_display_uses_stacked_digits() {
+        let f = set_clock_font("7seg", 128, 128);
+        assert_eq!(f.digit_layout, ClockDigitLayout::SquareTime);
+        assert_eq!((f.digit_width, f.digit_height), (42, 42));
+    }
+
+    /// A tall-but-narrow panel still gets the large digit set scaled down to fit.
+    #[test]
+    fn narrow_tall_display_scales_down() {
+        let f = set_clock_font("7seg", 160, 80);
+        assert_eq!(f.digit_layout, ClockDigitLayout::StandardTime);
+        assert!(f.digit_width < SIZE_LARGE.0,
+                "expected scale-down from {}, got {}", SIZE_LARGE.0, f.digit_width);
+    }
+
+    /// The classic 128×64 panel fits SIZE_NORMAL exactly — no scaling, no stacking.
+    #[test]
+    fn standard_128x64_is_unscaled() {
+        let f = set_clock_font("7seg", 128, 64);
+        assert_eq!(f.digit_layout, ClockDigitLayout::StandardTime);
+        assert_eq!((f.digit_width, f.digit_height), SIZE_NORMAL);
+    }
 }

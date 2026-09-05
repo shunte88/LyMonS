@@ -854,6 +854,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(config::DriverKind::Ssd1306)     => (128, 64,  display::ColorDepth::Monochrome, "SSD1306"),
             Some(config::DriverKind::Ssd1309)     => (128, 64,  display::ColorDepth::Monochrome, "SSD1309"),
             Some(config::DriverKind::Sh1106)      => (132, 64,  display::ColorDepth::Monochrome, "SH1106"),
+            Some(config::DriverKind::Sh1107)      => (128, 128, display::ColorDepth::Monochrome, "SH1107"),
             Some(config::DriverKind::Ssd1322)     => (256, 64,  display::ColorDepth::Gray4,      "SSD1322"),
             Some(config::DriverKind::Sh1122)      => (256, 64,  display::ColorDepth::Gray4,      "SH1122"),
             Some(config::DriverKind::SharpMemory) => (400, 240, display::ColorDepth::Monochrome, "SharpMemory"),
@@ -877,6 +878,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map_err(|e| format!("{}", e))?;
                 if (raw_w, raw_h) != (w, h) {
                     info!("ST7789: normalised input {}x{} → {}x{} (long axis first)",
+                          raw_w, raw_h, w, h);
+                }
+                wh = (w, h);
+            }
+            #[cfg(feature = "driver-sh1107")]
+            if matches!(display_config.driver, Some(config::DriverKind::Sh1107)) {
+                use display::drivers::sh1107::Sh1107Driver;
+                let (w, h) = Sh1107Driver::validate_size(raw_w, raw_h)
+                    .map_err(|e| format!("{}", e))?;
+                if (raw_w, raw_h) != (w, h) {
+                    info!("SH1107: normalised input {}x{} → {}x{} (long axis first)",
                           raw_w, raw_h, w, h);
                 }
                 wh = (w, h);

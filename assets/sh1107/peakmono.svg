@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="128"
+   height="64"
+   viewBox="0 0 128 64"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <rect
+     style="fill:#000000;fill-opacity:1"
+     id="rect2"
+     width="128"
+     height="64"
+     x="0"
+     y="0" />
+  <path
+     id="PEAK_00"
+     d="m 21.076491,30.52945 c -0.0019,0 -0.0033,0.01957 -0.0033,0.04031 v 9.772775 c 0,0.02192 0.0014,0.04031 0.0033,0.04031 h 3.850318 v -9.85369 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_00}}" />
+  <path
+     id="PEAK_01"
+     d="m 27.0765,30.5295 c -0.0019,0 -0.0033,0.0196 -0.0033,0.0403 v 9.7728 c 0,0.0219 0.0014,0.0403 0.0033,0.0403 h 3.8503 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_01}}" />
+  <path
+     id="PEAK_02"
+     d="m 33.0764,30.5295 c -0.0019,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0013,0.0403 0.0032,0.0403 h 3.8504 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_02}}" />
+  <path
+     id="PEAK_03"
+     d="m 39.07645,30.5295 c -0.0019,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0013,0.0403 0.0032,0.0403 h 3.8503 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_03}}" />
+  <path
+     id="PEAK_04"
+     d="m 45.07645,30.5295 c -0.002,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0012,0.0403 0.0032,0.0403 h 3.8503 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_04}}" />
+  <path
+     id="PEAK_05"
+     d="m 51.0764,30.5295 c -0.0019,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0013,0.0403 0.0032,0.0403 h 3.8504 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_05}}" />
+  <path
+     id="PEAK_06"
+     d="m 57.07645,30.5295 c -0.0019,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0013,0.0403 0.0032,0.0403 h 3.8503 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_06}}" />
+  <path
+     id="PEAK_07"
+     d="m 63.07645,30.5295 c -0.002,0 -0.0032,0.0196 -0.0032,0.0403 v 9.7728 c 0,0.0219 0.0012,0.0403 0.0032,0.0403 h 3.8503 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_07}}" />
+  <path
+     id="PEAK_08"
+     d="m 69.07635,30.5295 c -0.0019,0 -0.0031,0.0196 -0.0031,0.0403 v 9.7728 c 0,0.0219 0.0012,0.0403 0.0031,0.0403 h 3.8504 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_08}}" />
+  <path
+     id="PEAK_09"
+     d="m 75.0764,30.5295 c -0.002,0 -0.0031,0.0196 -0.0031,0.0403 v 9.7728 c 0,0.0219 0.0011,0.0403 0.0031,0.0403 h 3.8503 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_09}}" />
+  <path
+     id="PEAK_10"
+     d="m 81.0764,30.5295 c -0.002,0 -0.0031,0.0196 -0.0031,0.0403 v 9.7728 c 0,0.0219 0.0011,0.0403 0.0031,0.0403 h 3.8503 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_10}}" />
+  <path
+     id="PEAK_11"
+     d="m 87.0763,30.5295 c -0.0019,0 -0.003,0.0196 -0.003,0.0403 v 9.7728 c 0,0.0219 0.0011,0.0403 0.003,0.0403 h 3.8504 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_11}}" />
+  <path
+     id="PEAK_12"
+     d="m 93.0764,30.5295 c -0.002,0 -0.0031,0.0196 -0.0031,0.0403 v 9.7728 c 0,0.0219 0.0011,0.0403 0.0031,0.0403 h 3.8503 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_12}}" />
+  <path
+     id="PEAK_13"
+     d="m 99.0765,30.5295 c -0.002,0 -0.003,0.0196 -0.003,0.0403 v 9.7728 c 0,0.0219 0.001,0.0403 0.003,0.0403 h 3.85 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_13}}" />
+  <path
+     id="PEAK_14"
+     d="m 105.0765,30.5295 c -0.002,0 -0.003,0.0196 -0.003,0.0403 v 9.7728 c 0,0.0219 0.001,0.0403 0.003,0.0403 h 3.85 v -9.8537 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_14}}" />
+  <path
+     id="PEAK_15"
+     d="m 112.07635,30.529521 c -0.002,0 -0.003,0.01957 -0.003,0.04031 v 9.772775 c 0,0.02192 10e-4,0.04031 0.003,0.04031 h 3.8503 v -9.85369 z"
+     style="fill:#d6fffb;fill-opacity:{{peak_15}}" />
+  <path
+     id="SCALE_TICKS"
+     style="fill:#ffffff;fill-opacity:1"
+     d="m 114.5,25.771653 v 2.456693 h -1 v -2.456693 z m -7,16 v 4.456693 h -1 v -4.456693 z m -6,-16 v 2.456693 h -1 v -2.456693 z m -6,16 v 4.456693 h -1 v -4.456693 z m -6,-16 v 2.456693 h -1 v -2.456693 z m -6,16 v 4.456694 h -1 v -4.456694 z m -12,0 v 4.456693 h -1 v -4.456693 z m -6,-16 v 2.456693 h -1 v -2.456693 z m -6,16 v 4.456693 h -1 v -4.456693 z m -6,-16 v 2.456693 h -1 v -2.456693 z m -6,16 v 4.456693 h -1 v -4.456693 z m -6,-16 v 2.456693 h -1 v -2.456693 z m -6,16 v 4.456694 h -1 v -4.456694 z m -6,-16 v 2.456693 h -1 v -2.456693 z m -6,16 v 4.456693 h -1 v -4.456693 z" />
+  <path
+     fill="#ffffff"
+     d="m 20,21 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 6,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 3,-2 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 6,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 6,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 6,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 10,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 10,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 7,-4 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z"
+     id="TOP_SCALE" />
+  <path
+     fill="#ffffff"
+     d="m 24,8 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 5,-5 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 3,-5 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m 2,-5 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m 7,-5 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-5 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-5 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 3,-5 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-5 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 7.000003,-5 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 3,0 h 1 v 1 h -1 z m 2,-5 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-5 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 4,-5 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -3,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-5 H 100 V 9 H 99.000003 Z M 100,8 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z M 99.000003,9 H 100 v 1 H 99.000003 Z M 102,9 h 1 v 1 h -1 z m -2.999997,1 H 100 v 1 H 99.000003 Z M 100,10 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -1.999997,1 H 100 v 1 H 99.000003 Z M 101,11 h 1 v 1 h -1 z m -1.999997,1 H 100 v 1 H 99.000003 Z M 102,12 h 1 v 1 h -1 z m -2.999997,1 H 100 v 1 H 99.000003 Z M 102,13 h 1 v 1 h -1 z"
+     id="PEAK_LEVEL_METER" />
+  <path
+     fill="#ffffff"
+     d="m 10,33 h 1.000001 v 1 H 10 Z m 0,1 h 1.000001 v 1 H 10 Z m -2,1 h 1 v 1 H 8 Z m 1,0 h 1 v 1 H 9 Z m 1,0 h 1.000001 v 1 H 10 Z m -3,1 h 1 v 1 H 7 Z m 3,0 h 1.000001 v 1 H 10 Z m -3,1 h 1 v 1 H 7 Z m 3,0 h 1.000001 v 1 H 10 Z m -2,1 h 1 v 1 H 8 Z m 1,0 h 1 v 1 H 9 Z m 1,0 h 1.000001 v 1 H 10 Z m 2.000001,-5 H 13 v 1 H 12.000001 Z M 13,33 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -1.999999,1 H 13 v 1 H 12.000001 Z M 15,34 h 1 v 1 h -1 z m -2.999999,1 H 13 v 1 H 12.000001 Z M 13,35 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -1.999999,1 H 13 v 1 H 12.000001 Z M 15,36 h 1 v 1 h -1 z m -2.999999,1 H 13 v 1 H 12.000001 Z M 15,37 h 1 v 1 h -1 z m -2.999999,1 H 13 v 1 H 12.000001 Z M 13,38 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z"
+     id="dB_TITLE" />
+  <path
+     fill="#ffffff"
+     d="m 13,51 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 2,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 6,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 3,-2 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 6,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 7,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 2,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 6,-2 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 3,-2 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 9,-4 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 10,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -2,1 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 10,-4 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 1,0 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m -1,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z m 0,1 h 1 v 1 h -1 z"
+     id="BOTTOM_SCALE" />
+</svg>

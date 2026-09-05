@@ -37,6 +37,9 @@ pub mod sh1122;
 #[cfg(feature = "driver-sh1106")]
 pub mod sh1106;
 
+#[cfg(feature = "driver-sh1107")]
+pub mod sh1107;
+
 #[cfg(feature = "driver-st7789")]
 pub mod st7789;
 

@@ -1,0 +1,757 @@
+#
+#  assets/sh1107/layout.yaml
+#
+#  LyMonS — SH1107 display override (128×128 monochrome)
+#
+#  Merged on top of assets/layout.yaml at runtime.  Every variant here is named
+#  "128x128", which the resolver treats as an exact dimensional match and picks
+#  ahead of any category match.  A 128×64 SH1107 panel finds no "128x64" variant
+#  and falls through to the base 128×64 layout unchanged — so this file only
+#  ever affects the square panel.
+#
+#  Geometry (128×128 mono):
+#    status bar   y=2..11   (9px, font_4x6 — same as the 128×64 base)
+#    scrollers    y=14..97  (5 rows, font_6x13 in 15px fields, 2px gaps)
+#    progress     y=103     (5px)
+#    info line    y=114..126
+#
+#  Known gaps for the emulator pass:
+#    * Full-screen (non-AIO) visualizers stretch their 128×64 SVG panel over the
+#      full 128×128 frame — the Visual rect comes from display size, not layout.
+#    * Easter eggs draw their SVG into a fixed 128×64 box at the origin, so the
+#      base egg text overlays still line up; the bottom half stays empty.
+#
+
+components:
+
+  # P l a y b a c k   —   f i v e   s c r o l l e r s
+  scroller_panel_128sq:
+    fields:
+      - name: status_bar
+        type: status_bar
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_4x6
+
+      - name: album_artist
+        type: scrolling_text
+        x: "status_bar.left"
+        y: "status_bar.bottom + 3"
+        width: "parent.width - 4"
+        height: "15"
+        font: font_6x13
+        fg_color: Cyan
+        scrollable: true
+
+      - name: album
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album_artist.bottom + 2"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_6x13
+        fg_color: Cyan
+        scrollable: true
+
+      - name: title
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "album.bottom + 2"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_6x13
+        fg_color: Cyan
+        scrollable: true
+
+      - name: artist
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "title.bottom + 2"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_6x13
+        fg_color: Cyan
+        scrollable: true
+
+      - name: year
+        type: scrolling_text
+        x: "album_artist.left"
+        y: "artist.bottom + 2"
+        width: "album_artist.width"
+        height: "album_artist.height"
+        font: font_6x13
+        fg_color: Cyan
+        scrollable: true
+
+      # y = 103 on a 128px display
+      - name: track_progress_bar
+        type: track_progress_bar
+        x: "status_bar.left"
+        y: "parent.height - 25"
+        width: "parent.width - 4"
+        height: "5"
+
+      # y = 114 on a 128px display
+      - name: info_line
+        type: info_line
+        x: "status_bar.left"
+        y: "parent.height - 14"
+        width: "parent.width - 4"
+        height: "12"
+        font: font_5x8
+
+  # A I O   —   t o p   h a l f   i n f o ,   b o t t o m   h a l f   m e t e r
+  #
+  # The square panel splits horizontally rather than vertically: the info block
+  # occupies the top 64px and the visualizer panel the bottom 64px, which is the
+  # native aspect of the VU/peak SVG faces.
+  aio_panel_128sq:
+    fields:
+      - name: status_bar_small
+        type: status_bar_small
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_6x9
+
+      - name: current_time
+        type: label
+        x: "status_bar_small.left + 27"
+        y: "status_bar_small.bottom + 2"
+        width: "parent.width - 31"
+        height: "14"
+        font: font_7x13_bold
+
+      - name: duration_time
+        type: label
+        x: "current_time.left"
+        y: "current_time.bottom + 1"
+        width: "current_time.width"
+        height: "current_time.height"
+        font: font_7x13_bold
+
+      - name: track_time
+        type: label
+        x: "current_time.left"
+        y: "duration_time.bottom + 1"
+        width: "current_time.width"
+        height: "current_time.height"
+        font: font_7x13_bold
+
+      # y = 50 within the 64px top half
+      - name: track_progress_bar
+        type: track_progress_bar
+        x: "status_bar_small.left"
+        y: "parent.height - 14"
+        width: "parent.width - 4"
+        height: "3"
+
+      # y = 54 within the 64px top half
+      - name: combination
+        type: scrolling_text_combination
+        x: "status_bar_small.left"
+        y: "parent.height - 10"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        scrollable: true
+
+  # C l o c k   —   H H   o v e r   M M
+  #
+  # set_clock_font() switches to the SquareTime digit set whenever width == height,
+  # giving 42×42 digits stacked as HH / MM with a 10px gap: 94px total from
+  # clock_digits.top.  seconds_progress must sit below that or render_core clamps
+  # the digits upward.
+  clock_face_128sq:
+    fields:
+      - name: clock_digits
+        type: clock_digits
+        x: "2"
+        y: "12"
+        width: "42"
+        height: "94"
+
+      - name: date
+        type: date
+        x: "2"
+        y: "parent.height - 10"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: seconds_progress
+        type: seconds_progress
+        x: "2"
+        y: "date.top - 7"
+        width: "parent.width - 4"
+        height: "4"
+
+      # CPU/temperature strip — only drawn with --metrics
+      - name: metrics
+        type: label
+        x: "2"
+        y: "2"
+        width: "parent.width - 4"
+        height: "8"
+        font: font_5x8
+        horizontal_alignment: Center
+
+  # C u r r e n t   w e a t h e r
+  #
+  #   icon 56×56 left, metric column right, conditions strip, astral block below.
+  weather_current_128sq:
+    fields:
+      - name: weather_icon
+        type: weather_icon
+        x: "4"
+        y: "12"
+        width: "56"
+        height: "56"
+
+      - name: temp_glyph
+        type: weather_glyph
+        x: "64"
+        y: "4"
+        width: "14"
+        height: "14"
+        fg_color: Cyan
+      - name: temperature
+        type: label
+        x: "temp_glyph.right + 2"
+        y: "4"
+        width: "parent.width - temp_glyph.right - 4"
+        height: "14"
+        font: font_6x13_bold
+        fg_color: Cyan
+
+      - name: humidity_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "temp_glyph.bottom + 2"
+        width: "14"
+        height: "14"
+        fg_color: Cyan
+      - name: humidity
+        type: label
+        x: "temperature.left"
+        y: "humidity_glyph.top + 3"
+        width: "temperature.width"
+        height: "10"
+        font: font_5x8
+        fg_color: Cyan
+
+      - name: wind_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "humidity_glyph.bottom + 2"
+        width: "14"
+        height: "14"
+        fg_color: Cyan
+      - name: wind
+        type: label
+        x: "temperature.left"
+        y: "wind_glyph.top + 3"
+        width: "temperature.width"
+        height: "10"
+        font: font_5x8
+        fg_color: Cyan
+
+      - name: precip_glyph
+        type: weather_glyph
+        x: "temp_glyph.left"
+        y: "wind_glyph.bottom + 2"
+        width: "14"
+        height: "14"
+        fg_color: Cyan
+      - name: precipitation
+        type: label
+        x: "temperature.left"
+        y: "precip_glyph.top + 3"
+        width: "temperature.width"
+        height: "10"
+        font: font_5x8
+        fg_color: Cyan
+
+      # y = 72 — spans the full width below the icon and metric column
+      - name: conditions
+        type: label
+        x: "2"
+        y: "parent.height - 56"
+        width: "parent.width - 4"
+        height: "14"
+        font: font_7x14
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+  # A s t r a l   b l o c k   —   b o t t o m   t h i r d
+  #
+  # Sun on the left, moon on the right, moon phase text across the foot.
+  # Placed as a second full-display region on the weather_current page.
+  weather_astral_128sq:
+    fields:
+      - name: sunrise_glyph
+        type: weather_glyph
+        x: "4"
+        y: "88"
+        width: "12"
+        height: "12"
+        fg_color: Yellow
+      - name: sunrise_text
+        type: label
+        x: "sunrise_glyph.right + 2"
+        y: "sunrise_glyph.top + 2"
+        width: "40"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      - name: sunset_glyph
+        type: weather_glyph
+        x: "sunrise_glyph.left"
+        y: "sunrise_glyph.bottom + 2"
+        width: "12"
+        height: "12"
+        fg_color: Yellow
+      - name: sunset_text
+        type: label
+        x: "sunrise_text.left"
+        y: "sunset_glyph.top + 2"
+        width: "sunrise_text.width"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      - name: moonrise_glyph
+        type: weather_glyph
+        x: "66"
+        y: "sunrise_glyph.top"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+      - name: moonrise_text
+        type: label
+        x: "moonrise_glyph.right + 2"
+        y: "moonrise_glyph.top + 2"
+        width: "40"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: moonset_glyph
+        type: weather_glyph
+        x: "moonrise_glyph.left"
+        y: "sunset_glyph.top"
+        width: "12"
+        height: "12"
+        fg_color: Cyan
+      - name: moonset_text
+        type: label
+        x: "moonrise_text.left"
+        y: "moonset_glyph.top + 2"
+        width: "moonrise_text.width"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: moonphase_text
+        type: label
+        x: "2"
+        y: "sunset_glyph.bottom + 2"
+        width: "parent.width - 4"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+  # F o r e c a s t   —   6   d a y s ,   2   r o w s   o f   3
+  #
+  # Columns are 42px wide at x = 1 / 43 / 85; each 28×28 icon is centred with a
+  # 7px inset.  Row 2 repeats row 1 shifted down 64px.
+  weather_forecast_128sq:
+    fields:
+      # r o w   1
+      - name: day1_icon
+        type: weather_icon
+        x: "8"
+        y: "2"
+        width: "28"
+        height: "28"
+      - name: day1_name
+        type: label
+        x: "1"
+        y: "32"
+        width: "42"
+        height: "10"
+        font: font_4x6
+        horizontal_alignment: Center
+        vertical_alignment: Middle
+        fg_color: Cyan
+        border: 1
+      - name: day1_data_box
+        type: custom
+        x: "day1_name.left"
+        y: "day1_name.bottom"
+        width: "day1_name.width"
+        height: "20"
+        border: 1
+      - name: day1_temp
+        type: label
+        x: "day1_name.left + 1"
+        y: "day1_data_box.top + 3"
+        width: "day1_name.width"
+        height: "7"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: day1_precip
+        type: label
+        x: "day1_temp.left"
+        y: "day1_temp.bottom + 1"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day2_icon
+        type: weather_icon
+        x: "day1_icon.left + 42"
+        y: "day1_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
+      - name: day2_name
+        type: label
+        x: "day1_name.right"
+        y: "day1_name.top"
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        vertical_alignment: Middle
+        fg_color: Cyan
+        border: 1
+      - name: day2_data_box
+        type: custom
+        x: "day1_data_box.right"
+        y: "day1_data_box.top"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
+        border: 1
+      - name: day2_temp
+        type: label
+        x: "day1_temp.left + 42"
+        y: "day1_temp.top"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: day2_precip
+        type: label
+        x: "day2_temp.left"
+        y: "day1_precip.top"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day3_icon
+        type: weather_icon
+        x: "day2_icon.left + 42"
+        y: "day1_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
+      - name: day3_name
+        type: label
+        x: "day2_name.right"
+        y: "day1_name.top"
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        vertical_alignment: Middle
+        fg_color: Cyan
+        border: 1
+      - name: day3_data_box
+        type: custom
+        x: "day2_data_box.right"
+        y: "day1_data_box.top"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
+        border: 1
+      - name: day3_temp
+        type: label
+        x: "day2_temp.left + 42"
+        y: "day1_temp.top"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: day3_precip
+        type: label
+        x: "day3_temp.left"
+        y: "day1_precip.top"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      # r o w   2   —   r o w   1   s h i f t e d   d o w n   6 4 p x
+      - name: day4_icon
+        type: weather_icon
+        x: "day1_icon.left"
+        y: "day1_icon.top + 64"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
+      - name: day4_name
+        type: label
+        x: "day1_name.left"
+        y: "day1_name.top + 64"
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        vertical_alignment: Middle
+        fg_color: Cyan
+        border: 1
+      - name: day4_data_box
+        type: custom
+        x: "day1_data_box.left"
+        y: "day4_name.bottom"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
+        border: 1
+      - name: day4_temp
+        type: label
+        x: "day1_temp.left"
+        y: "day4_data_box.top + 3"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: day4_precip
+        type: label
+        x: "day4_temp.left"
+        y: "day4_temp.bottom + 1"
+        width: "day4_temp.width"
+        height: "day4_temp.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day5_icon
+        type: weather_icon
+        x: "day2_icon.left"
+        y: "day4_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
+      - name: day5_name
+        type: label
+        x: "day2_name.left"
+        y: "day4_name.top"
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        vertical_alignment: Middle
+        fg_color: Cyan
+        border: 1
+      - name: day5_data_box
+        type: custom
+        x: "day2_data_box.left"
+        y: "day4_data_box.top"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
+        border: 1
+      - name: day5_temp
+        type: label
+        x: "day2_temp.left"
+        y: "day4_temp.top"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: day5_precip
+        type: label
+        x: "day5_temp.left"
+        y: "day4_precip.top"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+      - name: day6_icon
+        type: weather_icon
+        x: "day3_icon.left"
+        y: "day4_icon.top"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
+      - name: day6_name
+        type: label
+        x: "day3_name.left"
+        y: "day4_name.top"
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        vertical_alignment: Middle
+        fg_color: Cyan
+        border: 1
+      - name: day6_data_box
+        type: custom
+        x: "day3_data_box.left"
+        y: "day4_data_box.top"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
+        border: 1
+      - name: day6_temp
+        type: label
+        x: "day3_temp.left"
+        y: "day4_temp.top"
+        width: "day1_temp.width"
+        height: "day1_temp.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+      - name: day6_precip
+        type: label
+        x: "day6_temp.left"
+        y: "day4_precip.top"
+        width: "day1_precip.width"
+        height: "day1_precip.height"
+        font: font_4x6
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+  # W a r n i n g   p a g e
+  warning_panel_128sq:
+    fields:
+      - name: warn_icon
+        type: custom
+        x: "parent.width/2 - 12"
+        y: "20"
+        width: "24"
+        height: "24"
+
+      - name: warn_title
+        type: label
+        x: "2"
+        y: "warn_icon.bottom + 8"
+        width: "parent.width - 4"
+        height: "13"
+        font: font_6x13_bold
+        horizontal_alignment: Center
+        fg_color: Yellow
+
+      - name: warn_detail
+        type: label
+        x: "2"
+        y: "warn_title.bottom + 4"
+        width: "parent.width - 4"
+        height: "10"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: White
+
+      - name: retry_info
+        type: label
+        x: "2"
+        y: "parent.height - 12"
+        width: "parent.width - 4"
+        height: "9"
+        font: font_5x8
+        horizontal_alignment: Center
+        fg_color: Cyan
+
+
+templates:
+
+  # Variants named "{width}x{height}" win outright in the resolver, so each of
+  # these applies to the 128×128 panel only.
+
+  playback:
+    variants:
+      - name: 128x128
+        regions:
+          - component: scroller_panel_128sq
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  aio:
+    variants:
+      - name: 128x128
+        regions:
+          - component: aio_panel_128sq
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height/2"
+        fields:
+          - name: visualizer_panel
+            type: custom
+            x: "0"
+            y: "display.height/2"
+            width: "display.width"
+            height: "display.height/2"
+
+  clock:
+    variants:
+      - name: 128x128
+        regions:
+          - component: clock_face_128sq
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  weather_current:
+    variants:
+      - name: 128x128
+        regions:
+          - component: weather_current_128sq
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+          - component: weather_astral_128sq
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  weather_forecast:
+    variants:
+      - name: 128x128
+        regions:
+          - component: weather_forecast_128sq
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"
+
+  warning:
+    variants:
+      - name: 128x128
+        regions:
+          - component: warning_panel_128sq
+            x: "0"
+            y: "0"
+            width: "display.width"
+            height: "display.height"

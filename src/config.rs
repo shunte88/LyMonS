@@ -84,6 +84,7 @@ pub enum DriverKind {
     Ssd1309,
     Ssd1322,
     Sh1106,
+    Sh1107,
     Sh1122,
     SharpMemory,
     St7789,
@@ -227,7 +228,7 @@ pub struct Cli {
 
     /// Display driver (emulator / config override)
     #[arg(short = 'd', long = "driver",
-          value_parser = ["ssd1306","ssd1309","ssd1322","sh1106","sh1122","sharpmemory","st7789","st7796s"])]
+          value_parser = ["ssd1306","ssd1309","ssd1322","sh1106","sh1107","sh1122","sharpmemory","st7789","st7796s"])]
     pub driver: Option<String>,
 
     /// Visualizer type
@@ -410,6 +411,7 @@ fn apply_cli_overrides(cfg: &mut Config, cli: &Cli) {
             "ssd1309"     => DriverKind::Ssd1309,
             "ssd1322"     => DriverKind::Ssd1322,
             "sh1106"      => DriverKind::Sh1106,
+            "sh1107"      => DriverKind::Sh1107,
             "sh1122"      => DriverKind::Sh1122,
             "sharpmemory" => DriverKind::SharpMemory,
             "st7789"      => DriverKind::St7789,

@@ -258,6 +258,9 @@ impl LayoutConfig {
     fn driver_asset_path(driver_name: &str) -> String {
         match driver_name {
             "ssd1306" | "ssd1309" | "sh1106" => "./assets/ssd1309/".to_string(),
+            // SH1107 ships as 128×128 and 128×64 — its own folder carries the
+            // 128×128 layout override alongside the shared 128-wide panels.
+            "sh1107"                          => "./assets/sh1107/".to_string(),
             "ssd1322" | "sh1122"              => "./assets/ssd1322/".to_string(),
             "st7789"                          => "./assets/st7789/".to_string(),
             "st7796s"                         => "./assets/st7796s/".to_string(),
