@@ -620,12 +620,19 @@ impl Eggs {
         let height = self.rect.size.height;
         // Scale SVG 2× on displays taller than 70px (e.g. ST7789 320×170)
         let display_h = display.bounding_box().size.height;
+        let display_w = display.bounding_box().size.width;
         self.render_scale = if display_h > 70 { 2.0 } else { 1.0 };
-        let (render_w, render_h) = if self.render_scale != 1.0 {
+        let (mut render_w, mut render_h) = if self.render_scale != 1.0 {
             ((width as f32 * self.render_scale) as u32, (height as f32 * self.render_scale) as u32)
         } else {
             (width, height)
         };
+        // fix for bogus dimensions - the 128x128 and 128x64 variants
+        if render_w > display_w {
+            self.render_scale = (display_w as f32 * 0.98) / width as f32;
+            render_w = (width as f32 * self.render_scale) as u32;
+            render_h = (height as f32 * self.render_scale) as u32;
+        }
         if self.egg_type != EGGS_TYPE_UNKNOWN {
             if self.update(artist, title, album_artist, album, level, track_percent, track_time).is_ok() {
                 let data = self.modified_svg_data.clone();
