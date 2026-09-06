@@ -317,8 +317,8 @@ components:
         type: clock_digits
         x: "2"
         y: "12"
-        width: "display.width - 24"
-        height: "50"
+        width: "42"
+        height: "48"
 
       - name: date
         type: date
