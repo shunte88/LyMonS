@@ -1131,7 +1131,33 @@ templates:
 
   easter_egg_pipboy:
     variants:
-      - name: default
+      - name: 128x128
+        fields:
+          - name: artist          # new, not in base template
+            type: label
+            x: "140"
+            y: "3"
+            width: "114"
+            height: "28"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: title           # new, not in base template
+            type: label
+            x: "140"
+            y: "33"
+            width: "114"
+            height: "20"
+            font: font_4x6
+            horizontal_alignment: Center
+          - name: time
+            type: label
+            x: "display.width - 43"
+            y: "display.height - 11"
+            width: "43"
+            height: "11"
+            font: font_6x10
+            horizontal_alignment: Right
+      - name: 128x64
         fields:
           - name: time
             type: label
@@ -1297,7 +1323,7 @@ templates:
             type: scrolling_text
             x: "4"
             y: "2"
-            width: "display.width - 6"
+            width: "display.width - 8"
             height: "7"
             font: font_4x6
             scrollable: true
