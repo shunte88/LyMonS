@@ -385,8 +385,8 @@ at `rotate_deg: 0`; if the image reads sideways, try `90`, then `270`. The
 
 ### Orange Pi and other non-Pi boards
 
-LyMonS talks to hardware through the generic Linux character devices —
-`/dev/i2c-*`, `/dev/spidev*` and `/dev/gpiochip*` — so it is not tied to
+LyMonS talks to hardware through the generic Linux character devices - 
+`/dev/i2c-*`, `/dev/spidev*` and `/dev/gpiochip*`  - so it is not tied to
 Broadcom silicon and runs unmodified on Orange Pi. Everything that differs is
 configuration, not code.
 
@@ -401,7 +401,7 @@ configuration, not code.
 | Orange Pi Zero / Zero LTS, PC, PC Plus, One     | H2+ / H3         | `-pcp-armv7`        | Allwinner   |
 
 Every current Orange Pi is 64-bit, so one `-opi-aarch64` package covers the
-Rockchip and Allwinner boards alike — they differ only in GPIO line numbering.
+Rockchip and Allwinner boards alike  - they differ only in GPIO line numbering.
 The older 32-bit H2+/H3 boards take the Raspberry Pi `armv7` package; the binary
 is architecture-compatible and the bus setup below still applies.
 
@@ -422,8 +422,8 @@ bus paths, generates a `gomonitor` launch script, and adds you to the `i2c`,
 #### 1. Enable the bus
 
 There is no `raspi-config` and no `/boot/config.txt`. On Armbian, enable an
-overlay in `/boot/armbianEnv.txt` — `armbian-config` → System → Hardware lists
-the overlays your board supports — then reboot:
+overlay in `/boot/armbianEnv.txt`  - `armbian-config` → System → Hardware lists
+the overlays your board supports  - then reboot:
 
 ```
 overlays=i2c5-m3 spi4-m0-cs1-spidev
@@ -464,7 +464,7 @@ On a Pi the whole 40-pin header is a single GPIO controller whose cdev line
 offsets happen to equal the BCM numbers, so `dc_pin: 24` means BCM 24 and no
 controller needs naming. Orange Pi has neither property.
 
-**Rockchip** (5 family, 3B, 4) registers one controller per bank — `gpio0` …
+**Rockchip** (5 family, 3B, 4) registers one controller per bank  - `gpio0` …
 `gpio4`, 32 lines each:
 
 ```
@@ -472,8 +472,8 @@ line = group * 8 + index        (group A=0, B=1, C=2, D=3)
 PC7  = 2 * 8 + 7 = 23           on bank 3
 ```
 
-**Allwinner** (Zero 3, Zero 2W) has two controllers — the main pinctrl and the
-R_PIO carrying the PL bank — each numbered flat across its banks:
+**Allwinner** (Zero 3, Zero 2W) has two controllers  - the main pinctrl and the
+R_PIO carrying the PL bank  - each numbered flat across its banks:
 
 ```
 line = bank * 32 + index        (bank A=0, B=1, C=2 … I=8)
