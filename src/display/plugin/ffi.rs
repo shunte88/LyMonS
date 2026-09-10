@@ -316,7 +316,7 @@ pub fn display_config_to_ffi(config: &DisplayConfig) -> Result<LyMonsDisplayConf
             }
         }
 
-        BusConfig::Spi { bus, dc_pin, rst_pin, speed_hz, cs_pin: _ } => {
+        BusConfig::Spi { bus, dc_pin, rst_pin, speed_hz, .. } => {
             let mut bus_path = [0 as c_char; 256];
             let bytes = bus.as_bytes();
             let len = bytes.len().min(255);

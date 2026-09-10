@@ -1,7 +1,7 @@
 # LyMonS Makefile
 # Build targets for main binary and plugins
 
-.PHONY: all build plugins install-plugins clean help pcp cross_pi release_pi
+.PHONY: all build plugins install-plugins clean help pcp cross_pi release_pi cross_pi64 release_pi64 cross_opi release_opi
 
 # Default target
 all: build plugins
@@ -102,6 +102,19 @@ release_pi64: cross_pi64
 	@echo "Package created successfully!"
 	@ls -lh lymons-*-pcp-aarch64.tgz 2>/dev/null || echo "Package file not found"
 
+# Cross-compile for Orange Pi (aarch64 - Rockchip RK3588/RK3566/RK3399)
+cross_opi:
+	@echo "Cross-compiling for Orange Pi (aarch64)..."
+	@./scripts/cross-compile-opi.sh aarch64-unknown-linux-gnu
+
+# Create Orange Pi release package
+release_opi: cross_opi
+	@echo "Creating Orange Pi deployment package..."
+	@./scripts/create-opi-package.sh aarch64-unknown-linux-gnu
+	@echo ""
+	@echo "Package created successfully!"
+	@ls -lh lymons-*-opi-aarch64.tgz 2>/dev/null || echo "Package file not found"
+
 # Show help
 help:
 	@echo "LyMonS Build System"
@@ -116,6 +129,8 @@ help:
 	@echo "  cross_pi64           - Cross-compile for Raspberry Pi (aarch64 64-bit)"
 	@echo "  release_pi           - Build and package for Raspberry Pi (armv7)"
 	@echo "  release_pi64         - Build and package for Raspberry Pi (aarch64)"
+	@echo "  cross_opi            - Cross-compile for Orange Pi (aarch64 Rockchip)"
+	@echo "  release_opi          - Build and package for Orange Pi (aarch64 Rockchip)"
 	@echo "  install-plugins      - Install plugins system-wide (requires sudo)"
 	@echo "  install-plugins-user - Install plugins to user directory"
 	@echo "  build-minimal        - Build minimal binary (plugin-only mode)"

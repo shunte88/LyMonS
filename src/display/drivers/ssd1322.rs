@@ -87,6 +87,7 @@ impl Ssd1322Driver {
                 dc_pin: DEFAULT_DC_PIN,
                 rst_pin: Some(DEFAULT_RST_PIN),
                 cs_pin: None,
+                gpio_chip: None,
             }),
             brightness: Some(200),
             invert: Some(false),

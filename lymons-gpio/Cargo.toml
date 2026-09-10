@@ -1,0 +1,11 @@
+[package]
+name = "lymons-gpio"
+version = "0.1.0"
+edition = "2021"
+authors = ["Stuart Hunter"]
+description = "Shared Linux gpiochip selection for LyMonS display drivers (Raspberry Pi, Orange Pi / Rockchip, Allwinner)"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+linux-embedded-hal = "0.4.0"
+log = "0.4"

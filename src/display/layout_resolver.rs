@@ -457,6 +457,13 @@ templates:
         assert_eq!(page.fields()[0].bounds.size.width, 150);
     }
 
+    /// The layouts park fields they do not want on a given page at a negative
+    /// origin (e.g. `x: "-10"`), which is the file's own idiom for "not needed
+    /// here".  Those are intentional and exempt from the bounds check.
+    fn is_parked(tl: embedded_graphics::prelude::Point) -> bool {
+        tl.x < 0 || tl.y < 0
+    }
+
     /// The SH1107 override must supply an exact "128x128" variant for every page
     /// it customises, and every resolved field must land inside the panel.
     #[test]
@@ -477,21 +484,51 @@ templates:
             assert!(!page.fields().is_empty(), "{name} resolved with no fields");
             for f in page.fields() {
                 let (tl, sz) = (f.bounds.top_left, f.bounds.size);
-                assert!(tl.x >= 0 && tl.y >= 0,
-                        "{name}/{} starts off-screen at {:?}", f.name, tl);
+                if is_parked(tl) {
+                    continue;
+                }
                 assert!(tl.x + sz.width as i32 <= 128 && tl.y + sz.height as i32 <= 128,
                         "{name}/{} overflows the panel: {:?} {:?}", f.name, tl, sz);
             }
         }
     }
 
-    /// A 128x64 SH1107 panel must fall through to the shared base layout — the
-    /// square override has no "128x64" variant and must not shadow it.
+    /// The SH1107 override also carries hand-tuned "128x64" variants for the
+    /// pages that need them.  Those must win at 128x64, and every field must
+    /// land inside the shorter panel.
     #[test]
-    fn sh1107_64_high_falls_back_to_base() {
+    fn sh1107_64_high_uses_its_own_variant() {
         let templates = LayoutTemplates::load_with_driver_override("./assets/sh1107/");
         let resolver = LayoutResolver::new(&templates);
-        let page = resolver.resolve("playback", profile_128()).unwrap();
-        assert_eq!(page.name, "playback:default");
+
+        for name in ["playback", "aio", "clock"] {
+            let page = resolver.resolve(name, profile_128()).expect("template resolves");
+            assert!(page.name.ends_with(":128x64"),
+                    "{name} picked variant '{}' instead of the 128x64 override", page.name);
+            assert!(!page.fields().is_empty(), "{name} resolved with no fields");
+            for f in page.fields() {
+                let (tl, sz) = (f.bounds.top_left, f.bounds.size);
+                if is_parked(tl) {
+                    continue;
+                }
+                assert!(tl.x + sz.width as i32 <= 128 && tl.y + sz.height as i32 <= 64,
+                        "{name}/{} overflows the panel: {:?} {:?}", f.name, tl, sz);
+            }
+        }
+    }
+
+    /// Pages the override does not size for 128x64 must still fall through to
+    /// the shared 128x64 base rather than being shadowed by a square variant.
+    #[test]
+    fn sh1107_64_high_falls_back_where_unsized() {
+        let templates = LayoutTemplates::load_with_driver_override("./assets/sh1107/");
+        let resolver = LayoutResolver::new(&templates);
+
+        for name in ["weather_current", "weather_forecast", "warning"] {
+            let page = resolver.resolve(name, profile_128()).expect("template resolves");
+            assert!(!page.name.ends_with(":128x128"),
+                    "{name} resolved the square override at 128x64: '{}'", page.name);
+            assert!(!page.fields().is_empty(), "{name} resolved with no fields");
+        }
     }
 }

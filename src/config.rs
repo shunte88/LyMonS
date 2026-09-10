@@ -74,6 +74,15 @@ pub enum BusConfig {
         rst_pin:  Option<u32>,
         cs_pin:   Option<u32>,
         speed_hz: Option<u32>,
+        /// GPIO controller carrying `dc_pin` / `rst_pin`, as a device node
+        /// (`/dev/gpiochip3`), a chip number (`3`) or a controller label
+        /// (`gpio3` on Rockchip, `pinctrl-rp1` on a Pi 5).
+        ///
+        /// Leave unset on a Raspberry Pi — the header controller is detected
+        /// by label and `dc_pin`/`rst_pin` are plain BCM numbers.  On Orange
+        /// Pi / Rockchip each bank is its own controller, so name the bank
+        /// here and give bank-relative line numbers for the pins.
+        gpio_chip: Option<String>,
     },
 }
 
@@ -445,3 +454,51 @@ fn validate(cfg: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A Pi config written before `gpio_chip` existed must still load, with the
+    /// controller left to header autodetection.
+    #[test]
+    fn spi_bus_without_gpio_chip_still_parses() {
+        let yaml = r#"
+type: spi
+bus: "/dev/spidev0.0"
+dc_pin: 24
+rst_pin: 25
+"#;
+        let bus: BusConfig = serde_yaml::from_str(yaml).expect("legacy SPI block should parse");
+        match bus {
+            BusConfig::Spi { dc_pin, gpio_chip, .. } => {
+                assert_eq!(dc_pin, 24);
+                assert_eq!(gpio_chip, None);
+            }
+            other => panic!("expected SPI bus, got {:?}", other),
+        }
+    }
+
+    /// Orange Pi / Rockchip names the GPIO bank explicitly; the pins are then
+    /// bank-relative line offsets rather than BCM numbers.
+    #[test]
+    fn spi_bus_carries_gpio_chip() {
+        let yaml = r#"
+type: spi
+bus: "/dev/spidev4.0"
+gpio_chip: "gpio3"
+dc_pin: 23
+rst_pin: 24
+"#;
+        let bus: BusConfig = serde_yaml::from_str(yaml).expect("SPI block should parse");
+        match bus {
+            BusConfig::Spi { bus, gpio_chip, dc_pin, rst_pin, .. } => {
+                assert_eq!(bus, "/dev/spidev4.0");
+                assert_eq!(gpio_chip.as_deref(), Some("gpio3"));
+                assert_eq!(dc_pin, 23);
+                assert_eq!(rst_pin, Some(24));
+            }
+            other => panic!("expected SPI bus, got {:?}", other),
+        }
+    }
+}

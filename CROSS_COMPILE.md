@@ -1,6 +1,7 @@
-# Cross-Compilation for Raspberry Pi
+# Cross-Compilation for Raspberry Pi and Orange Pi
 
-This document explains how to build LyMonS for Raspberry Pi using cross-compilation.
+This document explains how to build LyMonS for Raspberry Pi and for the current
+Rockchip Orange Pi boards using cross-compilation.
 
 ## Quick Start
 
@@ -17,6 +18,13 @@ make release_pi64
 ```
 
 This creates: `lymons-X.Y.Z-pcp-aarch64.tgz`
+
+### Build for Orange Pi (Rockchip, 64-bit)
+```bash
+make release_opi
+```
+
+This creates: `lymons-X.Y.Z-opi-aarch64.tgz`
 
 ## Prerequisites
 
@@ -55,6 +63,27 @@ The workflow automatically builds for both armv7 and aarch64.
 
 **Recommendation**: Use `armv7` for maximum compatibility unless you specifically need 64-bit features.
 
+### Orange Pi
+
+| Target | Architecture | Orange Pi Models | SoC | Package |
+|--------|-------------|------------------|-----|---------|
+| `aarch64-unknown-linux-gnu` | 64-bit ARM | 5 / 5B / 5 Plus / 5 Pro / 5 Max / CM5 | RK3588 / RK3588S | `-opi-aarch64` |
+| `aarch64-unknown-linux-gnu` | 64-bit ARM | 3B | RK3566 | `-opi-aarch64` |
+| `aarch64-unknown-linux-gnu` | 64-bit ARM | 4 / 4 LTS | RK3399 | `-opi-aarch64` |
+| `aarch64-unknown-linux-gnu` | 64-bit ARM | Zero 3 / Zero 2W | Allwinner H618 | `-opi-aarch64` |
+| `armv7-unknown-linux-gnueabihf` | 32-bit ARM | Zero / Zero LTS, PC, PC Plus, One | H2+ / H3 | `-pcp-armv7` |
+
+One aarch64 package covers every current Orange Pi, Rockchip and Allwinner
+alike — they differ only in GPIO line numbering, which is configuration.  Only
+the older 32-bit H2+/H3 boards fall outside it and take the Raspberry Pi
+`armv7` package instead.
+
+Orange Pi builds are a separate arm rather than a rename of the aarch64 Pi
+package: the binary is the same, but the package ships an Armbian-only
+installer, a `show-buses.sh` discovery helper, and an example config with
+Orange Pi bus paths and GPIO bank numbering instead of Pi conventions.  See
+[Orange Pi board setup](#orange-pi-board-setup) below.
+
 ## Manual Cross-Compilation
 
 ### Step 1: Cross-compile binaries
@@ -80,6 +109,13 @@ The workflow automatically builds for both armv7 and aarch64.
 tar tzf lymons-*-pcp-armv7.tgz
 ```
 
+### Orange Pi
+```bash
+./scripts/cross-compile-opi.sh aarch64-unknown-linux-gnu
+./scripts/create-opi-package.sh aarch64-unknown-linux-gnu
+tar tzf lymons-*-opi-aarch64.tgz
+```
+
 ## Makefile Targets
 
 | Target | Description |
@@ -88,6 +124,8 @@ tar tzf lymons-*-pcp-armv7.tgz
 | `make cross_pi64` | Cross-compile for aarch64 (64-bit) |
 | `make release_pi` | Build complete package for armv7 |
 | `make release_pi64` | Build complete package for aarch64 |
+| `make cross_opi` | Cross-compile for Orange Pi (aarch64 Rockchip) |
+| `make release_opi` | Build complete package for Orange Pi |
 
 ## GitHub Actions Workflow
 
@@ -101,12 +139,17 @@ The workflow triggers on:
 
 ### Workflow Jobs
 
-1. **build-pi**: Cross-compiles for both armv7 and aarch64
+1. **build-pi**: Cross-compiles for armv6, armv7 and aarch64
    - Caches cargo registry and build artifacts
    - Creates deployment packages
    - Uploads artifacts
 
-2. **build-summary**: Reports overall build status
+2. **build-opi**: Cross-compiles for Orange Pi (aarch64 Rockchip)
+   - Same binary as the Pi aarch64 build, packaged with the Armbian installer
+
+3. **publish-binaries**: Pushes all packages to the `binaries` branch
+
+4. **build-summary**: Reports overall build status
 
 ### Creating a Release
 
@@ -123,6 +166,7 @@ The workflow triggers on:
    - Navigate to: `https://github.com/YOUR_ORG/LyMonS/releases`
    - Download: `lymons-X.Y.Z-pcp-armv7.tgz`
    - Download: `lymons-X.Y.Z-pcp-aarch64.tgz`
+   - Download: `lymons-X.Y.Z-opi-aarch64.tgz`
 
 ## Package Contents
 
@@ -172,6 +216,65 @@ sudo nano /etc/lymons/lymons.yaml
 LyMonS
 ```
 
+## Orange Pi board setup
+
+Orange Pi has no `raspi-config` and no `/boot/config.txt`.  Enable the bus you
+need in `/boot/armbianEnv.txt` (`armbian-config` → System → Hardware lists the
+overlays your board supports), then reboot:
+
+```
+overlays=i2c5-m3 spi4-m0-cs1-spidev
+```
+
+The package ships `show-buses.sh`, which lists the resulting `/dev/i2c-*`,
+`/dev/spidev*` and GPIO controllers — run it before editing `lymons.yaml`.
+
+### GPIO pins are not BCM numbers
+
+On a Raspberry Pi the whole 40-pin header is one GPIO controller whose cdev line
+offsets happen to equal the BCM numbers, so `dc_pin: 24` means BCM 24 and no
+chip needs naming.
+
+**Rockchip** (OPi 5 family, 3B, 4) registers one controller per bank — `gpio0` …
+`gpio4`, 32 lines each — so there is no single header chip and no global
+numbering.  Name the bank with `gpio_chip` and give a bank-relative line:
+
+```
+line = group * 8 + index        (group A=0, B=1, C=2, D=3)
+PC7  = 2 * 8 + 7 = 23           on bank 3
+```
+
+**Allwinner** (OPi Zero 3, Zero 2W) has two controllers — the main pinctrl and
+the R_PIO carrying the PL bank — each numbered flat across its banks:
+
+```
+line = bank * 32 + index        (bank A=0, B=1, C=2 … I=8)
+PC7  = 2 * 32 + 7 = 71          on the main pinctrl
+PL10 = 10                       on the R_PIO controller
+```
+
+Controller labels are device-tree node names (`gpio3` on Rockchip,
+`300b000.pinctrl` on H618) and vary by SoC, so read them off the board with
+`show-buses.sh` rather than assuming.
+
+```yaml
+display:
+  bus:
+    type: spi
+    bus: "/dev/spidev4.0"
+    gpio_chip: "gpio3"    # bank label; also accepts "/dev/gpiochip3" or "3"
+    dc_pin: 23            # bank-relative line, NOT a BCM number
+    rst_pin: 24
+```
+
+`gpio_chip` is optional and ignored on a Pi, where the header controller is
+still detected by label (`pinctrl-rp1`, `pinctrl-bcm2711`, …).  If nothing
+matches, LyMonS falls back to `/dev/gpiochip0` and logs every controller the
+kernel exposes so you can see what to configure.
+
+Plugin drivers are loaded as shared objects and never see the YAML config — set
+`LYMONS_GPIO_CHIP=gpio3` in the environment for those.
+
 ## Troubleshooting
 
 ### cross not found
@@ -190,6 +293,19 @@ sudo usermod -aG docker $USER
   - `armv7l` → Use `armv7` package
   - `aarch64` → Use `aarch64` package
 - Verify target matches Pi OS (32-bit vs 64-bit)
+
+### Binary won't run on Orange Pi
+- `uname -m` should report `aarch64` for the RK3588/RK3566/RK3399 boards
+- A `GLIBC_x.y not found` error means the Armbian image is older than the
+  `cross` build image; check `ldd --version` on both and either update Armbian
+  or build on a host matching its glibc
+
+### Display never appears on Orange Pi
+- Run `show-buses.sh` — an empty `/dev/i2c-*` or `/dev/spidev*` means the
+  overlay is not enabled in `/boot/armbianEnv.txt`
+- For SPI, check the log for `No Raspberry Pi header GPIO controller found`;
+  that means `gpio_chip` is unset and the fallback `/dev/gpiochip0` (bank 0) is
+  almost certainly the wrong bank
 
 ### Missing dependencies on Pi
 ```bash

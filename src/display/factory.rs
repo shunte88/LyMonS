@@ -410,6 +410,7 @@ impl DisplayDriverFactory {
                         dc_pin: 24,
                         rst_pin: None,
                         cs_pin: None,
+                        gpio_chip: None,
                     }),
                     brightness: Some(255),
                     invert: Some(false),

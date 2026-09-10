@@ -39,6 +39,7 @@ fn main() -> Result<(), DisplayError> {
             dc_pin: 24,
             rst_pin: 25,
             cs_pin: None,
+            gpio_chip: None,
         }),
         width: Some(256),
         height: Some(64),

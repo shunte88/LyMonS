@@ -2,24 +2,37 @@
 
 [![Build Status](https://github.com/shunte88/LyMonS/actions/workflows/release-pi.yml/badge.svg)](https://github.com/shunte88/LyMonS/actions/workflows/release-pi.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red.svg)](https://www.raspberrypi.org/)
+[![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%20%7C%20Orange%20Pi-red.svg)](https://www.raspberrypi.org/)
 ![version](version.svg)
 
 [![Buy Me A Coffee](assets/github/bmc-red-button.svg) Like my work, then Buy Me A Coffee](https://buymeacoffee.com/shunte88)
 
 **An LMS Monitor For The Future**
 
-OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
+OLED information display control program for [piCorePlayer](https://www.picoreplayer.org/) or other Raspberry Pi, Orange Pi and Lyrion Music Server (formerly Logitech Media Server) based audio device.
 
 <img width="800" src="assets/lymons.webp" align="center" />
 
 ## Download
 
-Pre-compiled binaries for Raspberry Pi are available on the [binaries branch](https://github.com/shunte88/LyMonS/tree/binaries):
+Pre-compiled binaries are available on the [binaries branch](https://github.com/shunte88/LyMonS/tree/binaries):
+
+**Raspberry Pi**
 
 - **32-bit (armv6)** - Pi 1, Zero, Zero W: [lymons-latest-pcp-armv6.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv6.tgz)
 - **32-bit (armv7)** - Pi 2, 3, 4, Zero 2 W: [lymons-latest-pcp-armv7.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv7.tgz)
 - **64-bit (aarch64)** - Pi 4, 5, 400: [lymons-latest-pcp-aarch64.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-aarch64.tgz)
+
+**Orange Pi** (Armbian / Debian / Ubuntu)
+
+- **64-bit (aarch64)** - 5 / 5B / 5 Plus / 5 Pro / 5 Max / CM5 (RK3588), 3B (RK3566), 4 (RK3399), Zero 3 / Zero 2W (H618): [lymons-latest-opi-aarch64.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-opi-aarch64.tgz)
+
+One package covers every current Orange Pi, Rockchip and Allwinner alike. Only
+the older 32-bit boards (Zero / Zero LTS on H2+/H3, PC, PC Plus, One) fall
+outside it and run the `armv7` package above.
+
+See [Orange Pi and other non-Pi boards](#orange-pi-and-other-non-pi-boards) for
+bus and GPIO setup, which differs from the Pi.
 
 ### Quick Install
 
@@ -369,6 +382,152 @@ display:
 Many 128×64 SH1107 modules are a portrait 64×128 panel mounted sideways. Start
 at `rotate_deg: 0`; if the image reads sideways, try `90`, then `270`. The
 128×128 panels are square and need no rotation.
+
+### Orange Pi and other non-Pi boards
+
+LyMonS talks to hardware through the generic Linux character devices —
+`/dev/i2c-*`, `/dev/spidev*` and `/dev/gpiochip*` — so it is not tied to
+Broadcom silicon and runs unmodified on Orange Pi. Everything that differs is
+configuration, not code.
+
+#### Supported boards
+
+| Board                                           | SoC              | Package             | GPIO layout |
+|-------------------------------------------------|------------------|---------------------|-------------|
+| Orange Pi 5 / 5B / 5 Plus / 5 Pro / 5 Max / CM5 | RK3588 / RK3588S | `-opi-aarch64`      | Rockchip    |
+| Orange Pi 3B                                    | RK3566           | `-opi-aarch64`      | Rockchip    |
+| Orange Pi 4 / 4 LTS                             | RK3399           | `-opi-aarch64`      | Rockchip    |
+| Orange Pi Zero 3 / Zero 2W                      | Allwinner H618   | `-opi-aarch64`      | Allwinner   |
+| Orange Pi Zero / Zero LTS, PC, PC Plus, One     | H2+ / H3         | `-pcp-armv7`        | Allwinner   |
+
+Every current Orange Pi is 64-bit, so one `-opi-aarch64` package covers the
+Rockchip and Allwinner boards alike — they differ only in GPIO line numbering.
+The older 32-bit H2+/H3 boards take the Raspberry Pi `armv7` package; the binary
+is architecture-compatible and the bus setup below still applies.
+
+#### Install
+
+```bash
+wget https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-opi-aarch64.tgz
+tar xzf lymons-latest-opi-aarch64.tgz
+cd lymons-*-opi-aarch64
+sudo ./install.sh
+```
+
+The installer deploys to `/usr/local/bin`, `~/lymons` and
+`/usr/local/lib/lymons/drivers`, writes a starter `lymons.yaml` with Orange Pi
+bus paths, generates a `gomonitor` launch script, and adds you to the `i2c`,
+`spi` and `gpio` groups.
+
+#### 1. Enable the bus
+
+There is no `raspi-config` and no `/boot/config.txt`. On Armbian, enable an
+overlay in `/boot/armbianEnv.txt` — `armbian-config` → System → Hardware lists
+the overlays your board supports — then reboot:
+
+```
+overlays=i2c5-m3 spi4-m0-cs1-spidev
+```
+
+#### 2. Find your buses
+
+The package ships **`show-buses.sh`** (installed to `~/lymons/show-buses.sh`),
+which is the fastest way to fill in the `bus:` block. It lists the `/dev/i2c-*`
+buses, `/dev/spidev*` nodes and GPIO controllers your board actually exposes,
+scans each I²C bus for devices if `i2c-tools` is installed, and prints the line
+numbering rule for your SoC:
+
+```bash
+~/lymons/show-buses.sh
+```
+
+Orange Pi does not put the header I²C on `/dev/i2c-1`. The Orange Pi 5 family
+commonly exposes `i2c5` on header pins 3/5; the 3B and Zero 3 use `i2c3`.
+
+```yaml
+display:
+  driver: sh1107
+  width:  128
+  height: 128
+  bus:
+    type: i2c
+    bus: "/dev/i2c-5"
+    address: 0x3C
+```
+
+#### 3. GPIO pins are not BCM numbers
+
+For SPI panels this is the one thing that will silently drive the wrong pin if
+you carry a Raspberry Pi config across.
+
+On a Pi the whole 40-pin header is a single GPIO controller whose cdev line
+offsets happen to equal the BCM numbers, so `dc_pin: 24` means BCM 24 and no
+controller needs naming. Orange Pi has neither property.
+
+**Rockchip** (5 family, 3B, 4) registers one controller per bank — `gpio0` …
+`gpio4`, 32 lines each:
+
+```
+line = group * 8 + index        (group A=0, B=1, C=2, D=3)
+PC7  = 2 * 8 + 7 = 23           on bank 3
+```
+
+**Allwinner** (Zero 3, Zero 2W) has two controllers — the main pinctrl and the
+R_PIO carrying the PL bank — each numbered flat across its banks:
+
+```
+line = bank * 32 + index        (bank A=0, B=1, C=2 … I=8)
+PC7  = 2 * 32 + 7 = 71          on the main pinctrl
+PL10 = 10                       on the R_PIO controller
+```
+
+Name the controller with `gpio_chip` and give the matching line:
+
+```yaml
+display:
+  driver: sh1107
+  bus:
+    type: spi
+    bus: "/dev/spidev4.0"
+    gpio_chip: "gpio3"    # Rockchip bank label; "300b000.pinctrl" on H618
+    dc_pin: 23            # bank-relative line, NOT a BCM number
+    rst_pin: 24
+    speed_hz: 8000000
+```
+
+`gpio_chip` accepts a controller label (`gpio3`, `300b000.pinctrl`,
+`pinctrl-rp1`), a device node (`/dev/gpiochip3`) or a bare number (`3`). Labels
+are device-tree node names and vary by SoC, so read them from `show-buses.sh`
+rather than assuming.
+
+The field is optional and unnecessary on a Pi, where the header controller is
+still found by label (`pinctrl-rp1`, `pinctrl-bcm2711`, `pinctrl-bcm2835`,
+`pinctrl-bcm2708`) whatever number the kernel gave it. When no known controller
+matches, LyMonS falls back to `/dev/gpiochip0` and logs every controller the
+kernel exposes, so the fix is visible in the startup log:
+
+```
+WARN  No Raspberry Pi header GPIO controller found; falling back to /dev/gpiochip0
+WARN  On Orange Pi / Rockchip, Allwinner and other boards set display.bus.gpio_chip ...
+WARN    available GPIO controller: gpio0 (/dev/gpiochip0, 32 lines)
+WARN    available GPIO controller: gpio3 (/dev/gpiochip3, 32 lines)
+```
+
+Plugin drivers are loaded as shared objects and never see the YAML config; set
+`LYMONS_GPIO_CHIP=gpio3` in the environment for those.
+
+#### Helper scripts
+
+| Script | Where | Purpose |
+|--------|-------|---------|
+| `show-buses.sh` | in the package, installed to `~/lymons/` | List I²C buses, SPI nodes and GPIO controllers; scan I²C for devices; print the SoC's line-numbering rule |
+| `install.sh` | in the package | Deploy binary, drivers and assets; write starter config and `gomonitor`; join the `i2c`/`spi`/`gpio` groups |
+| `scripts/cross-compile-opi.sh` | repo | Cross-compile the workspace for `aarch64-unknown-linux-gnu` |
+| `scripts/create-opi-package.sh` | repo | Build the `lymons-X.Y.Z-opi-aarch64.tgz` deployment package |
+
+From a source checkout, `make cross_opi` builds and `make release_opi` builds
+and packages. CI does the same in the `build-opi` job. Full detail in
+[CROSS_COMPILE.md](CROSS_COMPILE.md).
 
 ### Orientation and Rotation
 

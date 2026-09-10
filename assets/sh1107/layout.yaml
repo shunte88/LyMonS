@@ -200,7 +200,7 @@ components:
         height: "current_time.height"
         font: font_7x13_bold
 
-      # y = 104 - 128px - 20
+      # y = 108, bottom = 114
       - name: track_progress_bar
         type: track_progress_bar
         x: "status_bar_small.left"
@@ -208,13 +208,14 @@ components:
         width: "display.width - 4"
         height: "6"
 
-      # y = 118 within the 128px top half
+      # y = 115, and the height is the font height exactly — 14 would put the
+      # bottom edge at 129 on a 128px panel.
       - name: combination
         type: scrolling_text_combination
         x: "status_bar_small.left"
         y: "track_progress_bar.bottom + 1"
         width: "display.width - 4"
-        height: "14"
+        height: "13"
         font: font_7x13_bold
         scrollable: true
 
@@ -252,7 +253,7 @@ components:
         height: "current_time.height"
         font: font_6x9
 
-      # y = 104 - 128px - 20
+      # y = 50, bottom = 53
       - name: track_progress_bar
         type: track_progress_bar
         x: "status_bar_small.left"
@@ -260,7 +261,7 @@ components:
         width: "display.width - 4"
         height: "3"
 
-      # y = 118 within the 128px top half
+      # y = 54, bottom = 64 — flush with the panel edge
       - name: combination
         type: scrolling_text_combination
         x: "status_bar_small.left"

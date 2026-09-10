@@ -16,6 +16,7 @@ ssd1306 = "0.10.0"
 # Embedded HAL
 embedded-hal = "1.0.0"
 linux-embedded-hal = "0.4.0"
+lymons-gpio = { path = "../../lymons-gpio" }
 
 # Graphics
 embedded-graphics = "0.8.1"

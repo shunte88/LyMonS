@@ -14,16 +14,13 @@ use ssd1306::{
 };
 use linux_embedded_hal::{I2cdev, SpidevDevice, CdevPin};
 use linux_embedded_hal::spidev::{SpidevOptions, SpiModeFlags};
-use linux_embedded_hal::gpio_cdev::{self, Chip, LineRequestFlags};
+use lymons_gpio as gpio;
 use embedded_hal::digital::OutputPin;
 
 use crate::ffi::*;
 
 /// Default SPI clock when the host supplies 0
 const DEFAULT_SPI_SPEED_HZ: u32 = 8_000_000;
-/// Fallback GPIO character device if the header controller can't be detected
-/// by label (see `open_header_gpio_chip`).
-const DEFAULT_GPIO_CHIP: &str = "/dev/gpiochip0";
 
 /// The SSD1306 controller supports both I2C and SPI; the concrete interface
 /// type differs, so the live display is held in a small enum.
@@ -138,12 +135,16 @@ impl Ssd1306PluginDriver {
         spi.0.configure(&options)
             .map_err(|e| format!("Failed to configure SPI: {:?}", e))?;
 
-        let mut chip = Self::open_header_gpio_chip()?;
-        let dc = Self::request_output(&mut chip, dc_pin as u32, 0, "lymons-ssd1306-dc")?;
+        // Plugins do not see the application's YAML, so a non-Pi board selects
+        // its GPIO controller through the LYMONS_GPIO_CHIP environment variable.
+        let mut chip = gpio::open_header_chip(None).map_err(|e| e.into_message())?;
+        let dc = gpio::request_output(&mut chip, dc_pin as u32, 0, "lymons-ssd1306-dc")
+            .map_err(|e| e.into_message())?;
 
         // Hardware reset pulse, held high afterwards for the driver's lifetime
         let rst = if rst_pin != 0 {
-            let mut rst = Self::request_output(&mut chip, rst_pin as u32, 1, "lymons-ssd1306-rst")?;
+            let mut rst = gpio::request_output(&mut chip, rst_pin as u32, 1, "lymons-ssd1306-rst")
+                .map_err(|e| e.into_message())?;
             rst.set_high().ok();
             std::thread::sleep(std::time::Duration::from_millis(1));
             rst.set_low().ok();
@@ -164,48 +165,6 @@ impl Ssd1306PluginDriver {
         Ok((Ssd1306Display::Spi(display), rst))
     }
 
-    /// Open the GPIO chip that drives the Raspberry Pi 40-pin header.
-    ///
-    /// The gpiochip *number* for the header has moved between Pi generations and
-    /// kernel versions (Pi 5 was gpiochip4, then gpiochip0 on kernel 6.6+), so we
-    /// match on the controller's stable label instead of a hardcoded path.
-    /// Falls back to `DEFAULT_GPIO_CHIP` if no known controller is present.
-    fn open_header_gpio_chip() -> Result<Chip, String> {
-        // 40-pin header controllers, most specific (newest) first
-        const HEADER_LABELS: [&str; 4] = [
-            "pinctrl-rp1",     // Pi 5
-            "pinctrl-bcm2711", // Pi 4 / CM4
-            "pinctrl-bcm2835", // Pi 0/1/2/3 / Zero
-            "pinctrl-bcm2708", // very old kernels
-        ];
-
-        if let Ok(chips) = gpio_cdev::chips() {
-            let mut found: Vec<Chip> = chips.flatten().collect();
-            for label in HEADER_LABELS {
-                if let Some(pos) = found.iter().position(|c| c.label() == label) {
-                    return Ok(found.swap_remove(pos));
-                }
-            }
-        }
-
-        Chip::new(DEFAULT_GPIO_CHIP)
-            .map_err(|e| format!("Failed to open {}: {:?}", DEFAULT_GPIO_CHIP, e))
-    }
-
-    /// Request a GPIO line as an output with the given default level.
-    fn request_output(
-        chip: &mut Chip,
-        pin: u32,
-        default: u8,
-        consumer: &str,
-    ) -> Result<CdevPin, String> {
-        let line = chip.get_line(pin)
-            .map_err(|e| format!("GPIO line {}: {:?}", pin, e))?;
-        let handle = line.request(LineRequestFlags::OUTPUT, default, consumer)
-            .map_err(|e| format!("GPIO request {}: {:?}", pin, e))?;
-        CdevPin::new(handle)
-            .map_err(|e| format!("GPIO pin {}: {:?}", pin, e))
-    }
 
     /// Initialize the display (called after creation)
     pub fn init(&mut self) -> Result<(), String> {
