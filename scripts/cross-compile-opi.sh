@@ -8,9 +8,16 @@
 #   Orange Pi Zero 3 / Zero 2W                         (Allwinner H618)
 #
 # All of these are aarch64, so there is a single target.  Only the older 32-bit
-# Allwinner boards (Zero / Zero LTS on H2+/H3, PC, PC Plus, One) fall outside it
-# — build those with ./scripts/cross-compile-pi.sh armv7-unknown-linux-gnueabihf,
+# Allwinner boards (Zero / Zero LTS on H2+/H3, PC, PC Plus, One) fall outside
+# it. Build those with:
+#
+#   ./scripts/cross-compile-pi.sh armv7-unknown-linux-gnueabihf
+#
 # which produces a compatible armv7 binary.
+#
+# Every display driver is built regardless of board.  Bus wiring (I2C, SPI and
+# the GPIO controller carrying DC/RST) is chosen at runtime from lymons.yaml,
+# not at compile time, so one binary covers every panel this release supports.
 
 set -e
 

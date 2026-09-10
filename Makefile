@@ -1,7 +1,7 @@
 # LyMonS Makefile
 # Build targets for main binary and plugins
 
-.PHONY: all build plugins install-plugins clean help pcp cross_pi release_pi cross_pi64 release_pi64 cross_opi release_opi
+.PHONY: all build plugins install-plugins clean help pcp cross_pi release_pi cross_pi64 release_pi64 cross_pi_armv6 release_pi_armv6 cross_opi release_opi
 
 # Default target
 all: build plugins
@@ -76,12 +76,28 @@ clean:
 	cargo clean
 	@echo "Clean complete!"
 
-# Cross-compile for Raspberry Pi (armv7 - Pi 3/4 32-bit)
+# Cross-compile for Raspberry Pi (armv6 - Pi 1, Zero and Zero W)
+# Rust has no armv6-* triple; arm-unknown-linux-gnueabihf is the ARMv6 build and
+# is labelled "armv6" in the package name and release assets.
+cross_pi_armv6:
+	@echo "Cross-compiling for Raspberry Pi (armv6)..."
+	@./scripts/cross-compile-pi.sh arm-unknown-linux-gnueabihf
+
+# Create Raspberry Pi armv6 release package (Pi 1, Zero, Zero W)
+release_pi_armv6: cross_pi_armv6
+	@echo "Creating Raspberry Pi armv6 deployment package..."
+	@./scripts/create-pi-package.sh arm-unknown-linux-gnueabihf
+	@echo ""
+	@echo "Package created successfully!"
+	@ls -lh lymons-*-pi-armv6.tgz 2>/dev/null || echo "Package file not found"
+
+# Cross-compile for Raspberry Pi (armv7 - Pi 2/3/4 on a 32-bit OS)
+# Also runs on the 32-bit Allwinner Orange Pi boards (Zero/PC/One, H2+/H3)
 cross_pi:
 	@echo "Cross-compiling for Raspberry Pi (armv7)..."
 	@./scripts/cross-compile-pi.sh armv7-unknown-linux-gnueabihf
 
-# Cross-compile for Raspberry Pi (aarch64 - Pi 4/5 64-bit)
+# Cross-compile for Raspberry Pi (aarch64 - Pi 3/4/5 and Zero 2 W on a 64-bit OS)
 cross_pi64:
 	@echo "Cross-compiling for Raspberry Pi (aarch64)..."
 	@./scripts/cross-compile-pi.sh aarch64-unknown-linux-gnu
@@ -92,7 +108,7 @@ release_pi: cross_pi
 	@./scripts/create-pi-package.sh armv7-unknown-linux-gnueabihf
 	@echo ""
 	@echo "Package created successfully!"
-	@ls -lh lymons-*-pcp-armv7.tgz 2>/dev/null || echo "Package file not found"
+	@ls -lh lymons-*-pi-armv7.tgz 2>/dev/null || echo "Package file not found"
 
 # Create Raspberry Pi 64-bit release package
 release_pi64: cross_pi64
@@ -100,9 +116,10 @@ release_pi64: cross_pi64
 	@./scripts/create-pi-package.sh aarch64-unknown-linux-gnu
 	@echo ""
 	@echo "Package created successfully!"
-	@ls -lh lymons-*-pcp-aarch64.tgz 2>/dev/null || echo "Package file not found"
+	@ls -lh lymons-*-pi-aarch64.tgz 2>/dev/null || echo "Package file not found"
 
-# Cross-compile for Orange Pi (aarch64 - Rockchip RK3588/RK3566/RK3399)
+# Cross-compile for Orange Pi (aarch64 - Rockchip RK3588/RK3566/RK3399 and
+# Allwinner H618; covers OPi 5 family, 3B, 4, Zero 3 and Zero 2W)
 cross_opi:
 	@echo "Cross-compiling for Orange Pi (aarch64)..."
 	@./scripts/cross-compile-opi.sh aarch64-unknown-linux-gnu
@@ -125,12 +142,14 @@ help:
 	@echo "  plugins              - Build all plugins"
 	@echo "  workspace            - Build everything using workspace"
 	@echo "  pcp                  - Create PiCorePlayer deployment package (.tgz)"
+	@echo "  cross_pi_armv6       - Cross-compile for Raspberry Pi (armv6, Pi 1/Zero/Zero W)"
 	@echo "  cross_pi             - Cross-compile for Raspberry Pi (armv7 32-bit)"
 	@echo "  cross_pi64           - Cross-compile for Raspberry Pi (aarch64 64-bit)"
+	@echo "  release_pi_armv6     - Build and package for Raspberry Pi (armv6)"
 	@echo "  release_pi           - Build and package for Raspberry Pi (armv7)"
 	@echo "  release_pi64         - Build and package for Raspberry Pi (aarch64)"
-	@echo "  cross_opi            - Cross-compile for Orange Pi (aarch64 Rockchip)"
-	@echo "  release_opi          - Build and package for Orange Pi (aarch64 Rockchip)"
+	@echo "  cross_opi            - Cross-compile for Orange Pi (aarch64, Rockchip + Allwinner)"
+	@echo "  release_opi          - Build and package for Orange Pi (aarch64, Rockchip + Allwinner)"
 	@echo "  install-plugins      - Install plugins system-wide (requires sudo)"
 	@echo "  install-plugins-user - Install plugins to user directory"
 	@echo "  build-minimal        - Build minimal binary (plugin-only mode)"
@@ -144,5 +163,10 @@ help:
 	@echo "  System:      /usr/local/lib/lymons/drivers/"
 	@echo ""
 	@echo "Cross-compilation:"
-	@echo "  Raspberry Pi (armv7):  make release_pi"
+	@echo "  Raspberry Pi (armv6):   make release_pi_armv6"
+	@echo "  Raspberry Pi (armv7):   make release_pi"
 	@echo "  Raspberry Pi (aarch64): make release_pi64"
+	@echo "  Orange Pi (aarch64):    make release_opi"
+	@echo ""
+	@echo "Every display driver is built into every package. The panel, bus"
+	@echo "(I2C or SPI) and GPIO controller are chosen at runtime in lymons.yaml."

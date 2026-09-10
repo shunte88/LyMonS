@@ -56,17 +56,51 @@ else
     echo "Warning: No plugin drivers found in target/${TARGET}/release/drivers/"
 fi
 
+# Copy the bus discovery helper (shared with the pCP and Orange Pi packages)
+if [ ! -f scripts/show-buses.sh ]; then
+    echo "Error: scripts/show-buses.sh not found (run this from the repo root)"
+    exit 1
+fi
+cp scripts/show-buses.sh "${BUILD_DIR}/${RUNTIME_DIR}/show-buses.sh"
+chmod +x "${BUILD_DIR}/${RUNTIME_DIR}/show-buses.sh"
+
 # Copy configuration template (config lives in the application folder)
 cat > "${BUILD_DIR}/${RUNTIME_DIR}/config/lymons.yaml.example" <<'EOF'
 # LyMonS Configuration Example for Raspberry Pi
 
 display:
   folder: /usr/local/share/lymons/drivers/
-  driver: ssd1306          # Options: ssd1306, ssd1309, sh1106, ssd1322
+
+  # Options: ssd1306, ssd1309, sh1106, sh1107, ssd1322, sh1122,
+  #          st7789, st7796s, sharpmemory
+  driver: ssd1306
+
+  # Only needed for drivers offering more than one panel size (sh1107, st7789).
+  # Single-size drivers ignore these. See the Supported Displays table in
+  # README.md for the sizes each driver accepts.
+  # width: 128
+  # height: 64
+
+  # --- I2C: ssd1306, ssd1309, sh1106, sh1107 ---------------------------------
   bus:
     type: i2c
-    bus: "/dev/i2c-1"
+    bus: "/dev/i2c-1"      # Pi header I2C is bus 1
     address: 0x3C          # Common: 0x3C or 0x3D
+
+  # --- SPI: any driver above, plus ssd1322, sh1122, st7789, st7796s and
+  #          sharpmemory, which are SPI only ------------------------------
+  # Replace the i2c block above with this for a 4-wire SPI panel. On a Pi the
+  # whole 40-pin header is a single GPIO controller whose line offsets are the
+  # BCM numbers, so dc_pin/rst_pin below are BCM 24 and BCM 25 and gpio_chip
+  # can be left unset (the header controller is detected automatically).
+  #
+  # bus:
+  #   type: spi
+  #   bus: "/dev/spidev0.0"
+  #   dc_pin: 24
+  #   rst_pin: 25
+  #   speed_hz: 8000000
+
   brightness: 128          # 0-255
   rotate_deg: 0            # 0, 90, 180, 270
   invert: false
@@ -140,6 +174,7 @@ chmod +xX /usr/local/bin/LyMonS
 mkdir -p "${RUNTIME_DIR}"
 cp -vfr ${RUNTIME_DIR}/. "/${RUNTIME_DIR}/"
 chmod +xX "${RUNTIME_DIR}/gomonitor"
+chmod +xX "${RUNTIME_DIR}/show-buses.sh"
 
 # Create config from example if not already present
 if [ ! -f "/${RUNTIME_DIR}/config/lymons.yaml" ]; then
@@ -162,9 +197,10 @@ echo ""
 echo "Installation complete!"
 echo ""
 echo "Next steps:"
-echo "1. Edit /${RUNTIME_DIR}/config/lymons.yaml with your settings"
-echo "2. Test: /${RUNTIME_DIR}/gomonitor"
-echo "3. Add to autostart if desired"
+echo "1. See what buses this board exposes: /${RUNTIME_DIR}/show-buses.sh"
+echo "2. Edit /${RUNTIME_DIR}/config/lymons.yaml with your settings"
+echo "3. Test: /${RUNTIME_DIR}/gomonitor"
+echo "4. Add to autostart if desired"
 EOF
 chmod +xX "${BUILD_DIR}/install.sh"
 
@@ -199,17 +235,48 @@ Dynamic OLED display driver for Lyrion Media Server.
    /usr/local/share/lymons/gomonitor
    \`\`\`
 
+If the display stays dark, run the bus discovery helper first, it prints the
+I2C buses, SPI nodes and GPIO controllers this board actually has:
+
+\`\`\`bash
+/usr/local/share/lymons/show-buses.sh
+\`\`\`
+
 ## Supported Displays
 
-- **SSD1306** - 128x64 I2C (most common)
-- **SSD1309** - 128x64 I2C
-- **SH1106**  - 132x64 I2C
-- **SSD1322** - 256x64 SPI (grayscale)
+Color depth is a property of the driver, not the panel size.
+
+| Driver        | Bus     | Color depth    | Panel sizes                                         |
+|---------------|---------|----------------|-----------------------------------------------------|
+| \`ssd1306\`     | I2C/SPI | Mono (1bpp)    | 128x64                                              |
+| \`ssd1309\`     | I2C/SPI | Mono (1bpp)    | 128x64                                              |
+| \`sh1106\`      | I2C/SPI | Mono (1bpp)    | 132x64                                              |
+| \`sh1107\`      | I2C/SPI | Mono (1bpp)    | 128x128, 128x64                                     |
+| \`ssd1322\`     | SPI     | Gray4 (4bpp)   | 256x64                                              |
+| \`sh1122\`      | SPI     | Gray4 (4bpp)   | 256x64                                              |
+| \`st7789\`      | SPI     | Rgb565 (16bpp) | 320x240, 320x170, 280x240, 240x240, 240x135, 160x80 |
+| \`st7796s\`     | SPI     | Rgb565 (16bpp) | 480x320                                             |
+| \`sharpmemory\` | SPI     | Mono (1bpp)    | 400x240                                             |
+
+Set \`width\` and \`height\` in the \`display:\` block for the drivers that offer more
+than one panel size. The rest fix their own size and ignore the values.
+
+## Bus Interfaces
+
+Enable the bus you need with \`sudo raspi-config\` (Interface Options), then reboot.
+Run \`show-buses.sh\` afterwards to confirm the device nodes appeared.
+
+- **I2C**: \`/dev/i2c-1\` on the 40-pin header. Address is usually 0x3C, sometimes 0x3D.
+- **SPI**: \`/dev/spidev0.0\` or \`/dev/spidev0.1\`, plus two GPIO lines for DC and
+  reset. Pi header pins are BCM numbers, so \`dc_pin: 24\` is BCM 24; the header
+  GPIO controller is detected automatically and \`gpio_chip\` is not needed.
+  On non-Pi boards it is, see the Orange Pi package or README.md.
 
 ## Files
 
 - \`/usr/local/bin/LyMonS\` - Main binary
 - \`/usr/local/share/lymons/gomonitor\` - Launch script
+- \`/usr/local/share/lymons/show-buses.sh\` - Bus and GPIO discovery helper
 - \`/usr/local/share/lymons/drivers/\` - Plugin drivers
 - \`/usr/local/share/lymons/data/\` - Runtime data
 - \`/usr/local/share/lymons/assets/\` - Runtime assets

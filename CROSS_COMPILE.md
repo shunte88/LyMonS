@@ -1,7 +1,7 @@
 # Cross-Compilation for Raspberry Pi and Orange Pi
 
 This document explains how to build LyMonS for Raspberry Pi and for the current
-Rockchip Orange Pi boards using cross-compilation.
+64-bit Orange Pi boards, Rockchip and Allwinner alike, using cross-compilation.
 
 ## Quick Start
 
@@ -10,21 +10,38 @@ Rockchip Orange Pi boards using cross-compilation.
 make release_pi
 ```
 
-This creates: `lymons-X.Y.Z-pcp-armv7.tgz`
+This creates: `lymons-X.Y.Z-pi-armv7.tgz`
 
 ### Build for Raspberry Pi (64-bit, Pi 4/5)
 ```bash
 make release_pi64
 ```
 
-This creates: `lymons-X.Y.Z-pcp-aarch64.tgz`
+This creates: `lymons-X.Y.Z-pi-aarch64.tgz`
 
-### Build for Orange Pi (Rockchip, 64-bit)
+### Build for Raspberry Pi 1 / Zero / Zero W (armv6)
+```bash
+make release_pi_armv6
+```
+
+This creates: `lymons-X.Y.Z-pi-armv6.tgz`
+
+### Build for Orange Pi (64-bit)
 ```bash
 make release_opi
 ```
 
 This creates: `lymons-X.Y.Z-opi-aarch64.tgz`
+
+### A note on package names
+
+The `make` targets above call `create-pi-package.sh`, which produces
+`-pi-<arch>` packages that install into `/usr/local/share/lymons`. The GitHub
+Actions release job instead calls `create-pcp-package.sh`, which produces the
+`-pcp-<arch>` packages published on the `binaries` branch: same binaries and
+same drivers, but with the universal installer that detects piCorePlayer and
+TinyCore versus Raspberry Pi OS and deploys accordingly. Both ship
+`show-buses.sh`.
 
 ## Prerequisites
 
@@ -52,16 +69,23 @@ git tag -a v0.2.4 -m "Release v0.2.4"
 git push origin v0.2.4
 ```
 
-The workflow automatically builds for both armv7 and aarch64.
+The workflow automatically builds armv6, armv7 and aarch64 for Raspberry Pi,
+plus the aarch64 Orange Pi package.
 
 ## Architecture Support
 
 | Target | Architecture | Raspberry Pi Models | Recommended |
 |--------|-------------|---------------------|-------------|
-| `armv7-unknown-linux-gnueabihf` | 32-bit ARM | Pi 2, 3, 4, Zero 2 W | ✅ Most compatible |
-| `aarch64-unknown-linux-gnu` | 64-bit ARM | Pi 4, 5, 400 | ⚡ Better performance |
+| `arm-unknown-linux-gnueabihf` | 32-bit ARMv6 | Pi 1, Zero, Zero W | Only choice on ARMv6 |
+| `armv7-unknown-linux-gnueabihf` | 32-bit ARMv7 | Pi 2, 3, 4, Zero 2 W | ✅ Most compatible |
+| `aarch64-unknown-linux-gnu` | 64-bit ARM | Pi 3, 4, 5, 400, Zero 2 W | ⚡ Better performance |
 
 **Recommendation**: Use `armv7` for maximum compatibility unless you specifically need 64-bit features.
+
+Rust has no `armv6-*` target triple. The ARMv6 build uses
+`arm-unknown-linux-gnueabihf`, and the packaging scripts and release assets
+relabel it `armv6` so users are not handed an armv7 binary that will not run on
+a Pi 1 or original Zero.
 
 ### Orange Pi
 
@@ -74,7 +98,7 @@ The workflow automatically builds for both armv7 and aarch64.
 | `armv7-unknown-linux-gnueabihf` | 32-bit ARM | Zero / Zero LTS, PC, PC Plus, One | H2+ / H3 | `-pcp-armv7` |
 
 One aarch64 package covers every current Orange Pi, Rockchip and Allwinner
-alike — they differ only in GPIO line numbering, which is configuration.  Only
+alike. They differ only in GPIO line numbering, which is configuration. Only
 the older 32-bit H2+/H3 boards fall outside it and take the Raspberry Pi
 `armv7` package instead.
 
@@ -88,7 +112,10 @@ Orange Pi bus paths and GPIO bank numbering instead of Pi conventions.  See
 
 ### Step 1: Cross-compile binaries
 ```bash
-# 32-bit (armv7)
+# 32-bit ARMv6 (Pi 1 / Zero / Zero W)
+./scripts/cross-compile-pi.sh arm-unknown-linux-gnueabihf
+
+# 32-bit ARMv7
 ./scripts/cross-compile-pi.sh armv7-unknown-linux-gnueabihf
 
 # 64-bit (aarch64)
@@ -97,7 +124,10 @@ Orange Pi bus paths and GPIO bank numbering instead of Pi conventions.  See
 
 ### Step 2: Create package
 ```bash
-# 32-bit
+# 32-bit ARMv6, packaged as -pi-armv6
+./scripts/create-pi-package.sh arm-unknown-linux-gnueabihf
+
+# 32-bit ARMv7
 ./scripts/create-pi-package.sh armv7-unknown-linux-gnueabihf
 
 # 64-bit
@@ -106,7 +136,7 @@ Orange Pi bus paths and GPIO bank numbering instead of Pi conventions.  See
 
 ### Step 3: Verify package
 ```bash
-tar tzf lymons-*-pcp-armv7.tgz
+tar tzf lymons-*-pi-armv7.tgz
 ```
 
 ### Orange Pi
@@ -120,11 +150,13 @@ tar tzf lymons-*-opi-aarch64.tgz
 
 | Target | Description |
 |--------|-------------|
+| `make cross_pi_armv6` | Cross-compile for armv6 (Pi 1 / Zero / Zero W) |
+| `make release_pi_armv6` | Build complete package for armv6 |
 | `make cross_pi` | Cross-compile for armv7 (32-bit) |
 | `make cross_pi64` | Cross-compile for aarch64 (64-bit) |
 | `make release_pi` | Build complete package for armv7 |
 | `make release_pi64` | Build complete package for aarch64 |
-| `make cross_opi` | Cross-compile for Orange Pi (aarch64 Rockchip) |
+| `make cross_opi` | Cross-compile for Orange Pi (aarch64, Rockchip + Allwinner) |
 | `make release_opi` | Build complete package for Orange Pi |
 
 ## GitHub Actions Workflow
@@ -144,7 +176,7 @@ The workflow triggers on:
    - Creates deployment packages
    - Uploads artifacts
 
-2. **build-opi**: Cross-compiles for Orange Pi (aarch64 Rockchip)
+2. **build-opi**: Cross-compiles for Orange Pi (aarch64, Rockchip + Allwinner)
    - Same binary as the Pi aarch64 build, packaged with the Armbian installer
 
 3. **publish-binaries**: Pushes all packages to the `binaries` branch
@@ -226,8 +258,8 @@ overlays your board supports), then reboot:
 overlays=i2c5-m3 spi4-m0-cs1-spidev
 ```
 
-The package ships `show-buses.sh`, which lists the resulting `/dev/i2c-*`,
-`/dev/spidev*` and GPIO controllers — run it before editing `lymons.yaml`.
+Every package ships `show-buses.sh`, which lists the resulting `/dev/i2c-*`,
+`/dev/spidev*` and GPIO controllers. Run it before editing `lymons.yaml`.
 
 ### GPIO pins are not BCM numbers
 
@@ -235,20 +267,20 @@ On a Raspberry Pi the whole 40-pin header is one GPIO controller whose cdev line
 offsets happen to equal the BCM numbers, so `dc_pin: 24` means BCM 24 and no
 chip needs naming.
 
-**Rockchip** (OPi 5 family, 3B, 4) registers one controller per bank — `gpio0` …
-`gpio4`, 32 lines each — so there is no single header chip and no global
-numbering.  Name the bank with `gpio_chip` and give a bank-relative line:
+**Rockchip** (OPi 5 family, 3B, 4) registers one controller per bank, `gpio0`
+through `gpio4` with 32 lines each, so there is no single header chip and no
+global numbering. Name the bank with `gpio_chip` and give a bank-relative line:
 
 ```
 line = group * 8 + index        (group A=0, B=1, C=2, D=3)
 PC7  = 2 * 8 + 7 = 23           on bank 3
 ```
 
-**Allwinner** (OPi Zero 3, Zero 2W) has two controllers — the main pinctrl and
-the R_PIO carrying the PL bank — each numbered flat across its banks:
+**Allwinner** (OPi Zero 3, Zero 2W) has two controllers, the main pinctrl and
+the R_PIO carrying the PL bank, each numbered flat across its banks:
 
 ```
-line = bank * 32 + index        (bank A=0, B=1, C=2 … I=8)
+line = bank * 32 + index        (bank A=0, B=1, C=2 ... I=8)
 PC7  = 2 * 32 + 7 = 71          on the main pinctrl
 PL10 = 10                       on the R_PIO controller
 ```
@@ -268,12 +300,12 @@ display:
 ```
 
 `gpio_chip` is optional and ignored on a Pi, where the header controller is
-still detected by label (`pinctrl-rp1`, `pinctrl-bcm2711`, …).  If nothing
+still detected by label (`pinctrl-rp1`, `pinctrl-bcm2711` and so on). If nothing
 matches, LyMonS falls back to `/dev/gpiochip0` and logs every controller the
 kernel exposes so you can see what to configure.
 
-Plugin drivers are loaded as shared objects and never see the YAML config — set
-`LYMONS_GPIO_CHIP=gpio3` in the environment for those.
+Plugin drivers are loaded as shared objects and never see the YAML config, so
+set `LYMONS_GPIO_CHIP=gpio3` in the environment for those.
 
 ## Troubleshooting
 
@@ -301,7 +333,7 @@ sudo usermod -aG docker $USER
   or build on a host matching its glibc
 
 ### Display never appears on Orange Pi
-- Run `show-buses.sh` — an empty `/dev/i2c-*` or `/dev/spidev*` means the
+- Run `show-buses.sh`. An empty `/dev/i2c-*` or `/dev/spidev*` means the
   overlay is not enabled in `/boot/armbianEnv.txt`
 - For SPI, check the log for `No Raspberry Pi header GPIO controller found`;
   that means `gpio_chip` is unset and the fallback `/dev/gpiochip0` (bank 0) is

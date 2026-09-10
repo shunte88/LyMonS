@@ -21,7 +21,7 @@ Pre-compiled binaries are available on the [binaries branch](https://github.com/
 
 - **32-bit (armv6)** - Pi 1, Zero, Zero W: [lymons-latest-pcp-armv6.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv6.tgz)
 - **32-bit (armv7)** - Pi 2, 3, 4, Zero 2 W: [lymons-latest-pcp-armv7.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-armv7.tgz)
-- **64-bit (aarch64)** - Pi 4, 5, 400: [lymons-latest-pcp-aarch64.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-aarch64.tgz)
+- **64-bit (aarch64)** - Pi 3, 4, 5, 400, Zero 2 W: [lymons-latest-pcp-aarch64.tgz](https://github.com/shunte88/LyMonS/raw/binaries/latest/lymons-latest-pcp-aarch64.tgz)
 
 **Orange Pi** (Armbian / Debian / Ubuntu)
 
@@ -50,6 +50,12 @@ sudo ./install.sh
 # and follow the directions...
 
 ```
+
+Every package ships a `show-buses.sh` helper next to the runtime assets. Run it
+before editing `lymons.yaml`: it prints the I2C buses, SPI nodes and GPIO
+controllers the board actually exposes, an `i2cdetect` scan so you can confirm
+the panel is answering, and the GPIO line-numbering rule for the detected SoC.
+It is read-only and safe to run at any time.
 
 **Building from source?** See [CROSS_COMPILE.md](CROSS_COMPILE.md) for cross-compilation instructions.
 
@@ -464,8 +470,8 @@ On a Pi the whole 40-pin header is a single GPIO controller whose cdev line
 offsets happen to equal the BCM numbers, so `dc_pin: 24` means BCM 24 and no
 controller needs naming. Orange Pi has neither property.
 
-**Rockchip** (5 family, 3B, 4) registers one controller per bank  - `gpio0` …
-`gpio4`, 32 lines each:
+**Rockchip** (5 family, 3B, 4) registers one controller per bank, `gpio0`
+through `gpio4`, 32 lines each:
 
 ```
 line = group * 8 + index        (group A=0, B=1, C=2, D=3)
@@ -476,7 +482,7 @@ PC7  = 2 * 8 + 7 = 23           on bank 3
 R_PIO carrying the PL bank  - each numbered flat across its banks:
 
 ```
-line = bank * 32 + index        (bank A=0, B=1, C=2 … I=8)
+line = bank * 32 + index        (bank A=0, B=1, C=2 ... I=8)
 PC7  = 2 * 32 + 7 = 71          on the main pinctrl
 PL10 = 10                       on the R_PIO controller
 ```
