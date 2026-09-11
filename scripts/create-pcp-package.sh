@@ -51,6 +51,10 @@ echo "Copying plugins..."
 if ls target/${TARGET}/release/drivers/liblymons_driver_*.so 1>/dev/null 2>&1; then
     cp target/${TARGET}/release/drivers/liblymons_driver_*.so "${BUILD_DIR}/drivers/"
     ${STRIP_TOOL} "${BUILD_DIR}/drivers/"*.so 2>/dev/null || echo "Strip plugins failed (non-fatal)"
+    echo "Plugins included:"
+    for so in "${BUILD_DIR}/drivers/"*.so; do
+        echo "  $(basename "${so}")"
+    done
 else
     echo "Warning: No plugin drivers found in target/${TARGET}/release/drivers/"
 fi
@@ -234,7 +238,11 @@ echo "Squeezelite running. Starting LyMonS${PNAME:+ for \${PNAME}}..."
 modprobe i2c_dev > /dev/null 2>&1
 modprobe i2c-dev > /dev/null 2>&1
 
-cd "\${BINDIR}"
+cd "\${BINDIR}" || {
+    echo "Error: runtime folder \${BINDIR} not found."
+    echo "LyMonS resolves assets, data and fonts relative to it."
+    exit 1
+}
 exec sudo "\${BINDIR}/LyMonS" \
     \${PNAME:+--name "\${PNAME}"} \
     --config="${CONFIG_DIR}/lymons.yaml" \
@@ -259,7 +267,11 @@ while [ \$WAIT -lt 30 ]; do
     WAIT=\$((WAIT + 1))
 done
 
-cd "\${RUNTIME_DIR}"
+cd "\${RUNTIME_DIR}" || {
+    echo "Error: runtime folder \${RUNTIME_DIR} not found."
+    echo "LyMonS resolves assets, data and fonts relative to it."
+    exit 1
+}
 exec sudo LyMonS \
     --config="${CONFIG_DIR}/lymons.yaml" \
     "\$@" > /dev/null 2>&1 &

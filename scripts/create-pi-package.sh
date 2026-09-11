@@ -52,9 +52,17 @@ if ls target/${TARGET}/release/drivers/liblymons_driver_*.so 1>/dev/null 2>&1; t
     if command -v strip &> /dev/null; then
         strip "${BUILD_DIR}/${RUNTIME_DIR}/drivers/"*.so 2>/dev/null || echo "Strip plugins failed (non-fatal)"
     fi
+    echo "Plugins included:"
+    for so in "${BUILD_DIR}/${RUNTIME_DIR}/drivers/"*.so; do
+        echo "  $(basename "${so}")"
+    done
 else
     echo "Warning: No plugin drivers found in target/${TARGET}/release/drivers/"
 fi
+# Plugins are a fallback for binaries built without a given driver.  Every
+# driver is compiled into the standard binary, so a driver with no plugin here
+# is not a missing feature.  See "Supported Displays" in the README.
+echo "All display drivers are built into the binary; plugins are optional."
 
 # Copy the bus discovery helper (shared with the pCP and Orange Pi packages)
 if [ ! -f scripts/show-buses.sh ]; then
@@ -133,7 +141,7 @@ sudo killall LyMonS > /dev/null 2>&1
 sudo killall LyMonS > /dev/null 2>&1
 sudo killall LyMonS > /dev/null 2>&1
 
-if [ "${PNAME}_" ne "_"]; then
+if [ -n "${PNAME}" ]; then
   # wait for squeeze to come online
   until pids=$(pidof squeezelite squeezelite-dsd)
   do
@@ -143,13 +151,17 @@ if [ "${PNAME}_" ne "_"]; then
 fi
 echo "Start LyMonS. Player: ${PNAME}"
 
-if [ "$PNAME_" ne "_"]; then
+if [ -n "${PNAME}" ]; then
   sudo modprobe i2c_dev > /dev/null 2>&1
   sudo modprobe i2c-dev > /dev/null 2>&1
 fi
 
-cd "${BINDIR}"
-CMD="sudo LyMonS --config=${BINDIR}/config/lymons.yaml $@"
+cd "${BINDIR}" || {
+    echo "Error: runtime folder ${BINDIR} not found."
+    echo "LyMonS resolves assets, data and fonts relative to it."
+    exit 1
+}
+CMD="sudo /usr/local/bin/LyMonS --config=${BINDIR}/config/lymons.yaml $@"
 echo $CMD
 eval $CMD > /dev/null &
 exit
@@ -163,31 +175,69 @@ cat > "${BUILD_DIR}/install.sh" <<'EOF'
 # This LyMonS worth the squeeze
 # Run as: sudo ./install.sh
 
-echo "Installing LyMonS for Raspberry Pi..."
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="/usr/local/share/lymons"
+BIN_DIR="/usr/local/bin"
+PAYLOAD="${SCRIPT_DIR}/usr/local/share/lymons"
 
-# Copy binary
-cp -v usr/local/bin/LyMonS /usr/local/bin/
-chmod +xX /usr/local/bin/LyMonS
+echo "Installing LyMonS for Raspberry Pi..."
+echo ""
+echo "  Runtime : ${RUNTIME_DIR}"
+echo "  Binary  : ${BIN_DIR}/LyMonS"
+echo "  Config  : ${RUNTIME_DIR}/config/lymons.yaml"
+echo ""
 
-# Copy runtime folder (data, assets, fonts, drivers, gomonitor, config)
+# The payload travels with this script.  Copying from anywhere else silently
+# installs nothing, which shows up much later as a missing asset at runtime.
+if [ ! -d "${PAYLOAD}" ]; then
+    echo "Error: package payload not found at ${PAYLOAD}"
+    echo "Run install.sh from the directory the tarball extracted into."
+    exit 1
+fi
+
+# Deploy binary
+mkdir -p "${BIN_DIR}"
+cp -f "${SCRIPT_DIR}/usr/local/bin/LyMonS" "${BIN_DIR}/LyMonS"
+chmod +x "${BIN_DIR}/LyMonS"
+echo "Installed binary: ${BIN_DIR}/LyMonS"
+
+# Deploy runtime folder (data, assets, fonts, drivers, gomonitor, config)
 mkdir -p "${RUNTIME_DIR}"
-cp -vfr ${RUNTIME_DIR}/. "/${RUNTIME_DIR}/"
-chmod +xX "${RUNTIME_DIR}/gomonitor"
-chmod +xX "${RUNTIME_DIR}/show-buses.sh"
+cp -fr "${PAYLOAD}/." "${RUNTIME_DIR}/"
+chmod +x "${RUNTIME_DIR}/gomonitor"
+chmod +x "${RUNTIME_DIR}/show-buses.sh"
+echo "Installed runtime resources to ${RUNTIME_DIR}/"
 
 # Create config from example if not already present
-if [ ! -f "/${RUNTIME_DIR}/config/lymons.yaml" ]; then
-    cp "${RUNTIME_DIR}/config/lymons.yaml.example" "/${RUNTIME_DIR}/config/lymons.yaml"
-    echo "Created default configuration at /${RUNTIME_DIR}/config/lymons.yaml"
+if [ ! -f "${RUNTIME_DIR}/config/lymons.yaml" ]; then
+    cp "${RUNTIME_DIR}/config/lymons.yaml.example" "${RUNTIME_DIR}/config/lymons.yaml"
+    echo "Created default configuration at ${RUNTIME_DIR}/config/lymons.yaml"
     echo "Please edit this file with your settings"
 fi
 
+# Confirm the runtime tree landed.  LyMonS resolves assets, data and fonts
+# relative to its working directory, so a partial copy is not visible until
+# the display is already up and a page asks for a file that is not there.
+MISSING=""
+for d in assets data fonts drivers config; do
+    [ -d "${RUNTIME_DIR}/${d}" ] || MISSING="${MISSING} ${d}/"
+done
+for f in assets/layout.yaml assets/none.svg data/7seg.zip; do
+    [ -f "${RUNTIME_DIR}/${f}" ] || MISSING="${MISSING} ${f}"
+done
+if [ -n "${MISSING}" ]; then
+    echo ""
+    echo "Error: installation incomplete, missing:${MISSING}"
+    exit 1
+fi
+
 # piCorePlayer persistence (if applicable)
-if [ -f /usr/local/sbin/filetool.sh ]; then
-    grep -v "^${RUNTIME_DIR}" /opt/.filetool.lst > /tmp/.filetool.lst.tmp \
-        && mv /tmp/.filetool.lst.tmp /opt/.filetool.lst
-    echo "/usr/local/bin/LyMonS" >> /opt/.filetool.lst
+if [ -f /usr/local/sbin/filetool.sh ] && [ -f /opt/.filetool.lst ]; then
+    grep -v "^${RUNTIME_DIR}" /opt/.filetool.lst > /tmp/.filetool.lst.tmp || true
+    mv /tmp/.filetool.lst.tmp /opt/.filetool.lst
+    echo "${BIN_DIR}/LyMonS" >> /opt/.filetool.lst
     echo "${RUNTIME_DIR}" >> /opt/.filetool.lst
     echo "Added to piCorePlayer backup list"
     filetool.sh -b
@@ -197,12 +247,12 @@ echo ""
 echo "Installation complete!"
 echo ""
 echo "Next steps:"
-echo "1. See what buses this board exposes: /${RUNTIME_DIR}/show-buses.sh"
-echo "2. Edit /${RUNTIME_DIR}/config/lymons.yaml with your settings"
-echo "3. Test: /${RUNTIME_DIR}/gomonitor"
+echo "1. See what buses this board exposes: ${RUNTIME_DIR}/show-buses.sh"
+echo "2. Edit ${RUNTIME_DIR}/config/lymons.yaml with your settings"
+echo "3. Test: ${RUNTIME_DIR}/gomonitor"
 echo "4. Add to autostart if desired"
 EOF
-chmod +xX "${BUILD_DIR}/install.sh"
+chmod +x "${BUILD_DIR}/install.sh"
 
 # Create package README
 cat > "${BUILD_DIR}/README.md" <<EOF

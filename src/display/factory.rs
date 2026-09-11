@@ -107,17 +107,11 @@ impl DisplayDriverFactory {
         let bus_config = config.bus.as_ref()
             .ok_or(DisplayFactoryError::NoBusConfiguration)?;
 
-        // Try plugin loading first if plugin system is enabled
-        #[cfg(feature = "plugin-system")]
-        {
-            if let Some(plugin_driver) = Self::try_load_plugin(config, driver_kind) {
-                info!("Using plugin driver for {:?}", driver_kind);
-                return Ok(plugin_driver);
-            }
-            debug!("Plugin not found, falling back to built-in driver");
-        }
-
-        // Fall back to built-in static drivers
+        // Built-in drivers take priority over plugins.  A compiled-in driver
+        // reads the whole BusConfig, including gpio_chip and cs_pin, and it
+        // reports a driver_name so the layout system can select the matching
+        // asset folder.  The plugin ABI carries neither, so a plugin is the
+        // fallback for drivers this binary was not built with.
         match (driver_kind, bus_config) {
             #[cfg(feature = "driver-ssd1306")]
             (DriverKind::Ssd1306, BusConfig::I2c { bus, address, .. }) => {
@@ -207,8 +201,19 @@ impl DisplayDriverFactory {
                 )?))
             }
 
-            // Catch-all for unsupported combinations or disabled features
+            // Catch-all: no built-in driver matched, either because the
+            // driver was not compiled in or because the bus type does not
+            // suit it.  A plugin is the last chance before we give up.
             _ => {
+                #[cfg(feature = "plugin-system")]
+                {
+                    if let Some(plugin_driver) = Self::try_load_plugin(config, driver_kind) {
+                        info!("Using plugin driver for {:?}", driver_kind);
+                        return Ok(plugin_driver);
+                    }
+                    debug!("No built-in driver and no plugin for {:?}", driver_kind);
+                }
+
                 #[cfg(not(feature = "driver-ssd1306"))]
                 if matches!(driver_kind, DriverKind::Ssd1306) {
                     return Err(DisplayFactoryError::ConfigError(

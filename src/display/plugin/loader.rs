@@ -111,27 +111,37 @@ impl PluginLoader {
 
     /// Get possible plugin filenames for a driver type
     ///
+    /// The plugin crates are named `lymons-driver-<type>`, so cargo emits
+    /// `liblymons_driver_<type>.so` and that is what the packaging scripts
+    /// install.  That name is tried first; the shorter `liblymons_<type>`
+    /// forms are kept so hand-built or third party plugins still resolve.
+    ///
     /// For example, for "ssd1306" this returns:
-    /// - Linux: ["liblymons_ssd1306.so", "liblymons-ssd1306.so"]
-    /// - macOS: ["liblymons_ssd1306.dylib", "liblymons-ssd1306.dylib"]
-    /// - Windows: ["lymons_ssd1306.dll", "lymons-ssd1306.dll"]
+    /// - Linux: ["liblymons_driver_ssd1306.so", "liblymons-driver-ssd1306.so",
+    ///           "liblymons_ssd1306.so", "liblymons-ssd1306.so"]
     pub fn plugin_filenames(driver_type: &str) -> Vec<String> {
         let mut names = Vec::new();
 
         #[cfg(target_os = "linux")]
         {
+            names.push(format!("liblymons_driver_{}.so", driver_type));
+            names.push(format!("liblymons-driver-{}.so", driver_type));
             names.push(format!("liblymons_{}.so", driver_type));
             names.push(format!("liblymons-{}.so", driver_type));
         }
 
         #[cfg(target_os = "macos")]
         {
+            names.push(format!("liblymons_driver_{}.dylib", driver_type));
+            names.push(format!("liblymons-driver-{}.dylib", driver_type));
             names.push(format!("liblymons_{}.dylib", driver_type));
             names.push(format!("liblymons-{}.dylib", driver_type));
         }
 
         #[cfg(target_os = "windows")]
         {
+            names.push(format!("lymons_driver_{}.dll", driver_type));
+            names.push(format!("lymons-driver-{}.dll", driver_type));
             names.push(format!("lymons_{}.dll", driver_type));
             names.push(format!("lymons-{}.dll", driver_type));
         }
