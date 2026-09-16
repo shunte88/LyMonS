@@ -194,14 +194,14 @@ components:
       - name: track_progress_bar
         type: track_progress_bar
         x: "status_bar.left"
-        y: "display.height - 22"
+        y: "parent.height - 22"
         width: "status_bar.width"
         height: "8"
       - name: info_line
         type: info_line
         x: "status_bar.left"
-        y: "display.height - 14"
-        width: "display.width - 4"
+        y: "parent.height - 14"
+        width: "parent.width - 4"
         height: "15"
         font: font_7x13_bold
 
@@ -397,6 +397,7 @@ components:
   
   weather_forecast_400x240:
     fields:
+      # day 1 group
       - name: day1_icon
         type: weather_icon
         x: "24"
@@ -437,6 +438,7 @@ components:
         height: "day1_temp.height"
         font: font_5x7
         horizontal_alignment: Center
+      # day 2 group
       - name: day2_icon
         type: weather_icon
         x: "24 + display.width/3"
@@ -477,12 +479,13 @@ components:
         height: "day2_temp.height"
         font: font_5x7
         horizontal_alignment: Center
+      # day 3 group
       - name: day3_icon
         type: weather_icon
         x: "2 * (display.width/3) + day1_icon.left"
         y: "6"
-        width: "display.width/3 - 60"
-        height: "display.width/3 - 60"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
         horizontal_alignment: Center
       - name: day3_name
         type: label
@@ -517,43 +520,78 @@ components:
         height: "day3_temp.height"
         font: font_5x7
         horizontal_alignment: Center
+      # day 4 group - under day 1 group
       - name: day4_icon
         type: weather_icon
         x: "day1_icon.left"
         y: "6 + day1_data_box.bottom"
-        width: "display.width/3 - 60"
-        height: "display.width/3 - 60"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
         horizontal_alignment: Center
+      - name: day4_name
+        type: label
+        x: "day1_name.left"
+        y: "day4_icon.bottom + 2"
+        width: "day1_name.width"
+        height: "day1_name.height"
+        font: font_5x7
+        horizontal_alignment: Center
+        vertical_alignment: Middle
+        border: 1
+      - name: day4_data_box
+        type: custom
+        x: "day4_name.left"
+        y: "day4_icon.bottom + 11"
+        width: "day1_data_box.width"
+        height: "day1_data_box.height"
+        border: 1
+      - name: day4_temp
+        type: label
+        x: "day4_name.left"
+        y: "day4_data_box.top + 2"
+        width: "day4_name.width"
+        height: "day1_temp.height"
+        font: font_5x7
+        horizontal_alignment: Center
+      - name: day4_precip
+        type: label
+        x: "day4_name.left"
+        y: "day4_temp.bottom + 1"
+        width: "day4_name.width"
+        height: "day4_temp.height"
+        font: font_5x7
+        horizontal_alignment: Center
+      # day 5 group
       - name: day5_icon
         type: weather_icon
-        x: "(display.width/3) + day1_icon.left"
-        y: "6 + day1_data_box.bottom"
-        width: "display.width/3 - 60"
-        height: "display.width/3 - 60"
+        x: "day2_icon.left"
+        y: "6 + day2_data_box.bottom"
+        width: "day2_icon.width"
+        height: "day2_icon.height"
         horizontal_alignment: Center
       - name: day5_name
         type: label
-        x: "day2_name.right"
+        x: "day2_name.left"
         y: "day5_icon.bottom + 2"
-        width: "display.width/3"
-        height: "10"
+        width: "day2_name.width"
+        height: "day2_name.height"
         font: font_5x7
         horizontal_alignment: Center
         vertical_alignment: Middle
         border: 1
       - name: day5_data_box
         type: custom
-        x: "day5_name.left"
+        x: "day2_name.left"
         y: "day5_icon.bottom + 11"
         width: "day5_name.width"
-        height: "22"
+        height: "day2_data_box.height"
         border: 1
       - name: day5_temp
         type: label
         x: "day5_name.left"
         y: "day5_data_box.top + 2"
         width: "day5_name.width"
-        height: "7"
+        height: "day2_temp.height"
         font: font_5x7
         horizontal_alignment: Center
       - name: day5_precip
@@ -564,19 +602,20 @@ components:
         height: "day5_temp.height"
         font: font_5x7
         horizontal_alignment: Center
+      # day 6 group
       - name: day6_icon
         type: weather_icon
-        x: "2 * (display.width/3) + day1_icon.left"
-        y: "6 + day1_data_box.bottom"
-        width: "display.width/3 - 60"
-        height: "display.width/3 - 60"
+        x: "day3_icon.left"
+        y: "6 + day3_data_box.bottom"
+        width: "day1_icon.width"
+        height: "day1_icon.height"
         horizontal_alignment: Center
       - name: day6_name
         type: label
-        x: "day3_name.right"
+        x: "day3_name.left"
         y: "day6_icon.bottom + 2"
-        width: "display.width/3"
-        height: "10"
+        width: "day3_name.width"
+        height: "day3_name.height"
         font: font_5x7
         horizontal_alignment: Center
         vertical_alignment: Middle
@@ -586,14 +625,14 @@ components:
         x: "day6_name.left"
         y: "day6_icon.bottom + 11"
         width: "day6_name.width"
-        height: "22"
+        height: "day3_data_box.height"
         border: 1
       - name: day6_temp
         type: label
         x: "day6_name.left"
         y: "day6_data_box.top + 2"
         width: "day6_name.width"
-        height: "7"
+        height: "day3_temp.height"
         font: font_5x7
         horizontal_alignment: Center
       - name: day6_precip
@@ -603,243 +642,6 @@ components:
         width: "day6_name.width"
         height: "day6_temp.height"
         font: font_5x7
-        horizontal_alignment: Center
-
-  weather_forecast_400xxxx240:
-    fields:
-      - name: day1_icon
-        type: weather_icon
-        x: "12"
-        y: "6"
-        width: "display.width/3 - 60"
-        height: "display.width/3 - 60"
-      - name: day1_name
-        type: label
-        x: "1"
-        y: "day1_icon.bottom + 2"
-        width: "display.width/3"
-        height: "10"
-        font: font_5x7
-        horizontal_alignment: Center
-        vertical_alignment: Middle
-        border: 1
-      - name: day1_data_box
-        type: custom
-        x: "day1_name.left"
-        y: "day1_icon.bottom + 6"
-        width: "day1_name.width"
-        height: "22"
-        border: 1
-      - name: day1_temp
-        type: label
-        x: "day1_name.left"
-        y: "day1_icon.bottom + 14"
-        width: "day1_name.width"
-        height: "7"
-        font: font_5x7
-        horizontal_alignment: Center
-      - name: day1_precip
-        type: label
-        x: "day1_name.left1"
-        y: "day1_icon.bottom + 21"
-        width: "day1_name.width"
-        height: "day1_temp.height"
-        font: font_5x7
-        horizontal_alignment: Center
-      - name: day2_icon
-        type: weather_icon
-        x: "day1_name.right + 5"
-        y: "day1_icon.top"
-        width: "day1_icon.width"
-        height: "day1_icon.height"
-      - name: day2_name
-        type: label
-        x: "day1_name.right"
-        y: "day1_name.top"
-        width: "day1_name.width"
-        height: "day1_name.height"
-        font: font_4x6
-        horizontal_alignment: Center
-        vertical_alignment: Middle
-        border: 1
-      - name: day2_data_box
-        type: custom
-        x: "day1_data_box.right"
-        y: "day1_data_box.top"
-        width: "day1_data_box.width"
-        height: "day1_data_box.height"
-        border: 1
-      - name: day2_temp
-        type: label
-        x: "day1_name.right + 1"
-        y: "day1_temp.top"
-        width: "day1_temp.width"
-        height: "day1_temp.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day2_precip
-        type: label
-        x: "day1_name.right + 1"
-        y: "day1_precip.top"
-        width: "day1_precip.width"
-        height: "day1_precip.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day3_icon
-        type: weather_icon
-        x: "day2_name.right + 5"
-        y: "day1_icon.top"
-        width: "day1_icon.width"
-        height: "day1_icon.height"
-      - name: day3_name
-        type: label
-        x: "day2_name.right"
-        y: "day1_name.top"
-        width: "day1_name.width"
-        height: "day1_name.height"
-        font: font_4x6
-        horizontal_alignment: Center
-        vertical_alignment: Middle
-        border: 1
-      - name: day3_data_box
-        type: custom
-        x: "day2_data_box.right"
-        y: "day1_data_box.top"
-        width: "day1_data_box.width"
-        height: "day1_data_box.height"
-        border: 1
-      - name: day3_temp
-        type: label
-        x: "day2_name.right + 1"
-        y: "day1_temp.top"
-        width: "day1_temp.width"
-        height: "day1_temp.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day3_precip
-        type: label
-        x: "day2_name.right + 1"
-        y: "day1_precip.top"
-        width: "day1_precip.width"
-        height: "day1_precip.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day4_icon
-        type: weather_icon
-        x: "day1_name.right + 5"
-        y: "day1_icon.bottom + 48"
-        width: "day1_icon.width"
-        height: "day1_icon.height"
-      - name: day4_name
-        type: label
-        x: "day1_name.right"
-        y: "day1_name.bottom + 8"
-        width: "day1_name.width"
-        height: "day1_name.height"
-        font: font_4x6
-        horizontal_alignment: Center
-        vertical_alignment: Middle
-        border: 1
-      - name: day4_data_box
-        type: custom
-        x: "day1_data_box.right"
-        y: "day1_data_box.bottom + 8"
-        width: "day1_data_box.width"
-        height: "day1_data_box.height"
-        border: 1
-      - name: day4_temp
-        type: label
-        x: "day1_name.right + 1"
-        y: "day1_temp.bottom + 8"
-        width: "day1_temp.width"
-        height: "day1_temp.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day4_precip
-        type: label
-        x: "day1_name.right + 1"
-        y: "day1_precip.bottom + 8"
-        width: "day1_precip.width"
-        height: "day1_precip.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day5_icon
-        type: weather_icon
-        x: "day4_name.right + 5"
-        y: "day4_icon.top"
-        width: "day1_icon.width"
-        height: "day1_icon.height"
-      - name: day5_name
-        type: label
-        x: "day4_name.right"
-        y: "day4_name.top"
-        width: "day1_name.width"
-        height: "day1_name.height"
-        font: font_4x6
-        horizontal_alignment: Center
-        vertical_alignment: Middle
-        border: 1
-      - name: day5_data_box
-        type: custom
-        x: "day4_data_box.right"
-        y: "day4_data_box.top"
-        width: "day1_data_box.width"
-        height: "day1_data_box.height"
-        border: 1
-      - name: day5_temp
-        type: label
-        x: "day4_name.right + 1"
-        y: "day4_temp.top"
-        width: "day1_temp.width"
-        height: "day1_temp.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day5_precip
-        type: label
-        x: "day4_name.right + 1"
-        y: "day4_precip.top"
-        width: "day1_precip.width"
-        height: "day1_precip.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day6_icon
-        type: weather_icon
-        x: "day5_name.right + 5"
-        y: "day4_icon.top"
-        width: "day1_icon.width"
-        height: "day1_icon.height"
-      - name: day6_name
-        type: label
-        x: "day5_name.right"
-        y: "day4_name.top"
-        width: "day1_name.width"
-        height: "day1_name.height"
-        font: font_4x6
-        horizontal_alignment: Center
-        vertical_alignment: Middle
-        border: 1
-      - name: day6_data_box
-        type: custom
-        x: "day5_data_box.right"
-        y: "day4_data_box.top"
-        width: "day1_data_box.width"
-        height: "day1_data_box.height"
-        border: 1
-      - name: day6_temp
-        type: label
-        x: "day5_name.right + 1"
-        y: "day4_temp.top"
-        width: "day1_temp.width"
-        height: "day1_temp.height"
-        font: font_4x6
-        horizontal_alignment: Center
-      - name: day6_precip
-        type: label
-        x: "day5_name.right + 1"
-        y: "day4_precip.top"
-        width: "day1_precip.width"
-        height: "day1_precip.height"
-        font: font_4x6
         horizontal_alignment: Center
 
 
@@ -1026,9 +828,9 @@ templates:
   # Adjust x/width on visualizer_panel here to tune the split without recompiling.
   aio:
     variants:
-      - name: default
+      - name: 400x240
         regions:
-          - component: scroller_panel_main
+          - component: scroller_panel_400x240
             x: "0"
             y: "0"
             width: "display.width/2"
@@ -1245,7 +1047,7 @@ templates:
 
   easter_egg_vcr:
     variants:
-      - name: default
+      - name: 400x240
         fields:
           # combination text is not needed here - move out of bounds
           - name: combination
@@ -1257,7 +1059,7 @@ templates:
             x: "10"
             y: "6"
             width: "display.width - 20"
-            height: "11"
+            height: "10"
             font: font_6x10
             horizontal_alignment: Center
           - name: title
@@ -1276,7 +1078,6 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
-            # fg_color: Cyan
           - name: year
             type: label
             x: "artist.left"
@@ -1285,7 +1086,6 @@ templates:
             height: "artist.height"
             font: font_6x10
             horizontal_alignment: Center
-            # fg_color: Cyan
           - name: time
             type: label
             x: "display.width - 43"
@@ -1294,8 +1094,7 @@ templates:
             height: "13"
             font: font_7x13
             horizontal_alignment: Right
-            # fg_color: Yellow
-      - name: 400x240
+      - name: 165x144
         regions:
           - component: egg_tracks_400x240
             x: "0"

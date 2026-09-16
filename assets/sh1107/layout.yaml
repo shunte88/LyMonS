@@ -1,16 +1,16 @@
 #
 #  assets/sh1107/layout.yaml
 #
-#  LyMonS — SH1107 display override (128×128 monochrome)
+#  LyMonS - SH1107 display override (128×128 monochrome)
 #
 #  Merged on top of assets/layout.yaml at runtime.  Every variant here is named
 #  "128x128", which the resolver treats as an exact dimensional match and picks
 #  ahead of any category match.  A 128×64 SH1107 panel finds no "128x64" variant
-#  and falls through to the base 128×64 layout unchanged — so this file only
+#  and falls through to the base 128×64 layout unchanged - so this file only
 #  ever affects the square panel.
 #
 #  Geometry (128×128 mono):
-#    status bar   y=2..11   (9px, font_4x6 — same as the 128×64 base)
+#    status bar   y=2..11   (9px, font_4x6 - same as the 128×64 base)
 #    scrollers    y=14..97  (5 rows, font_6x13 in 15px fields, 2px gaps)
 #    progress     y=103     (5px)
 #    info line    y=114..126
@@ -22,7 +22,7 @@
 
 components:
 
-  # P l a y b a c k   —   f i v e   l i n e   s c r o l l e r s
+  # P l a y b a c k   -   f i v e   l i n e   s c r o l l e r s
   scroller_panel_128x128:
     fields:
       - name: status_bar
@@ -208,7 +208,7 @@ components:
         width: "display.width - 4"
         height: "6"
 
-      # y = 115, and the height is the font height exactly — 14 would put the
+      # y = 115, and the height is the font height exactly - 14 would put the
       # bottom edge at 129 on a 128px panel.
       - name: combination
         type: scrolling_text_combination
@@ -261,7 +261,7 @@ components:
         width: "display.width - 4"
         height: "3"
 
-      # y = 54, bottom = 64 — flush with the panel edge
+      # y = 54, bottom = 64 - flush with the panel edge
       - name: combination
         type: scrolling_text_combination
         x: "status_bar_small.left"
@@ -271,7 +271,7 @@ components:
         font: font_6x9
         scrollable: true
 
-  # C l o c k   —   H H   o v e r   M M
+  # C l o c k   -   H H   o v e r   M M
   #
   # set_clock_font() switches to the SquareTime digit set whenever width == height,
   # giving 42×42 digits stacked as HH / MM with a 10px gap: 94px total from
@@ -302,7 +302,7 @@ components:
         width: "display.width - 4"
         height: "4"
 
-      # CPU/temperature strip — only drawn with --metrics
+      # CPU/temperature strip - only drawn with --metrics
       - name: metrics
         type: label
         x: "2"
@@ -337,7 +337,7 @@ components:
         width: "display.width - 4"
         height: "4"
 
-      # CPU/temperature strip — only drawn with --metrics
+      # CPU/temperature strip - only drawn with --metrics
       - name: metrics
         type: label
         x: "2"
@@ -418,7 +418,7 @@ components:
         height: "10"
         font: font_5x8
 
-      # y = 72 — spans the full width below the icon and metric column
+      # y = 72 - spans the full width below the icon and metric column
       - name: conditions
         type: label
         x: "2"
@@ -428,7 +428,7 @@ components:
         font: font_7x14
         horizontal_alignment: Center
 
-  # A s t r a l   b l o c k   —   b o t t o m   t h i r d
+  # A s t r a l   b l o c k   -   b o t t o m   t h i r d
   #
   # Sun on the left, moon on the right, moon phase text across the foot.
   # Placed as a second full-display region on the weather_current page.
@@ -507,7 +507,7 @@ components:
         font: font_5x8
         horizontal_alignment: Center
 
-  # F o r e c a s t   —   6   d a y s ,   2   r o w s   o f   3
+  # F o r e c a s t   -   6   d a y s ,   2   r o w s   o f   3
   #
   # Columns are 42px wide at x = 1 / 43 / 85; each 28×28 icon is centred with a
   # 7px inset.  Row 2 repeats row 1 shifted down 64px.
@@ -637,7 +637,7 @@ components:
         font: font_4x6
         horizontal_alignment: Center
 
-      # r o w   2   —   r o w   1   s h i f t e d   d o w n   6 4 p x
+      # r o w   2   -   r o w   1   s h i f t e d   d o w n   6 4 p x
       - name: day4_icon
         type: weather_icon
         x: "day1_icon.left"
@@ -1015,7 +1015,7 @@ templates:
   #
   # All field positions are literal pixel coordinates for 128×64 mono displays.
   # Override an entire easter_egg_* template in assets/{driver}/layout.yaml
-  # to adjust positions for a different display size — no category matching needed.
+  # to adjust positions for a different display size - no category matching needed.
 
   easter_egg_bass:
     variants:

@@ -123,7 +123,7 @@ impl EmulatorState {
     /// don't overwrite each other.
     ///
     /// Frames are written from inside the process, so this needs no desktop
-    /// access and works over SSH — unlike an external screen grabber.
+    /// access and works over SSH - unlike an external screen grabber.
     pub fn save_png(&self, dir: &std::path::Path, scale: u32)
         -> Result<std::path::PathBuf, String>
     {

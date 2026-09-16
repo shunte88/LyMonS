@@ -389,6 +389,44 @@ Many 128×64 SH1107 modules are a portrait 64×128 panel mounted sideways. Start
 at `rotate_deg: 0`; if the image reads sideways, try `90`, then `270`. The
 128×128 panels are square and need no rotation.
 
+### SHARP Memory LCD wiring
+
+SHARP Memory (Memory In Pixel) panels are not OLED controllers and their pins
+do not line up with the other SPI drivers, so the shared `bus:` block is
+mapped as follows:
+
+| Config key | SHARP pin | Notes                                                          |
+|------------|-----------|----------------------------------------------------------------|
+| `bus`      | SI, SCLK  | Standard spidev node                                             |
+| `cs_pin`   | SCS       | Active **HIGH**, so it must be a free GPIO, not the node's own CE |
+| `rst_pin`  | DISP      | Optional display enable, held high. There is no reset line       |
+| `dc_pin`   | unused    | Mode bits travel in the data stream, there is no D/C pin         |
+
+```yaml
+display:
+  driver: sharpmemory
+  width:  400
+  height: 240
+  invert: false        # false = lit content on dark; true = the paper look
+  rotate_deg: 0        # 0 or 180 only; a quarter turn needs 400 gate lines
+  bus:
+    bus: /dev/spidev0.0
+    speed_hz: 2000000  # datasheet ceiling, clamped if you ask for more
+    cs_pin: 6
+    dc_pin: 0          # ignored
+```
+
+Leaving `cs_pin` unset makes the driver ask the kernel for an active-high chip
+select via `SPI_CS_HIGH`, which not every SPI controller honours. A dedicated
+GPIO is the reliable route.
+
+Two behaviours are specific to this panel. The pixels hold their own state, so
+the driver diffs each of the 240 gate lines against what it last sent and
+transmits only the lines that changed, which is why a clock page costs a small
+fraction of a full frame. And because VCOM polarity has to keep alternating or
+a DC bias damages the panel, the driver keeps a 1 Hz square wave going with
+two-byte maintain commands even when the picture is completely static.
+
 ### Orange Pi and other non-Pi boards
 
 LyMonS talks to hardware through the generic Linux character devices - 

@@ -66,7 +66,7 @@ fn eval_or(expr: &str, ctx: &ExprContext<'_>, fallback: i32,
     match eval(expr, ctx) {
         Ok(v)  => v,
         Err(e) => {
-            log::warn!("layout: {loc} [{attr}={expr:?}]: {e} — using {fallback}");
+            log::warn!("layout: {loc} [{attr}={expr:?}]: {e} - using {fallback}");
             fallback
         }
     }
@@ -103,7 +103,7 @@ impl<'t> LayoutResolver<'t> {
         let mut all_fields: Vec<Field> = Vec::new();
 
         for region in &variant.regions {
-            // Resolve region bounds (display.* only — no field refs at this level)
+            // Resolve region bounds (display.* only - no field refs at this level)
             let empty_fields: HashMap<String, FieldGeom> = HashMap::new();
             let region_ctx = ExprContext {
                 display_width:  dw,

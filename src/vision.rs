@@ -659,7 +659,7 @@ impl VisReader {
 
         fence(Ordering::Acquire);
 
-        // read updated again — accept only if unchanged
+        // read updated again - accept only if unchanged
         let second = unsafe { ptr::read_volatile(&sd.updated) };
         if second == first && second != self.last_seen {
             Some(VisFrame {

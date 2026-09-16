@@ -93,7 +93,7 @@ pub struct VisualizerComponent {
     viz_state: crate::vision::LastVizState,
     layout: LayoutConfig,
     visualization_type: Visualization,
-    /// Visualizer panel bounds for AIO modes — set from YAML layout before each render.
+    /// Visualizer panel bounds for AIO modes - set from YAML layout before each render.
     aio_viz_rect: Option<Rectangle>,
     /// Pre-computed gradient LUT for Rgb565 histogram fills. Built once at construction.
     hist_lut: GradientLut,
@@ -180,7 +180,7 @@ impl VisualizerComponent {
         self.aio_viz_rect = Some(rect);
     }
 
-    /// Render the visualizer — generic over display color depth and color proxy.
+    /// Render the visualizer - generic over display color depth and color proxy.
     ///
     /// Callers select the appropriate proxy at the call site:
     ///   `render::<_, MonoProxy>`, `render::<_, Gray4Proxy>`, `render::<_, Rgb565Proxy>`
@@ -451,7 +451,7 @@ impl VisualizerComponent {
         let max_level = PEAK_METER_LEVELS_MAX as u32;
         let h_u = (panel_size.height as u32).saturating_sub(2);
 
-        let cap_color = P::on(); // caps are always max brightness — distinct from the gradient
+        let cap_color = P::on(); // caps are always max brightness - distinct from the gradient
         let h_f = (h_u as f32 - 1.0).max(1.0);
 
         for (i, (&lvl, &cap)) in bars.iter().zip(caps.iter()).enumerate() {
@@ -463,7 +463,7 @@ impl VisualizerComponent {
             let cap_h = ((cap_level_u * h_u) / max_level) as i32;
 
             if bar_h > 0 {
-                // draw_iter: single call, driver batches all pixels — colour computed per row.
+                // draw_iter: single call, driver batches all pixels - colour computed per row.
                 // pct = 0.0 at panel bottom (quiet), 1.0 at panel top (peak).
                 let bar_top_y = origin.y + (h - bar_h);
                 let bar_rect = Rectangle::new(
@@ -644,7 +644,7 @@ impl VisualizerComponent {
         Ok(true)
     }
 
-    /// Draw AIO VU visualization — SVG-based VU needle on the right half; left panel rendered by manager
+    /// Draw AIO VU visualization - SVG-based VU needle on the right half; left panel rendered by manager
     fn draw_aio_vu<D, P>(
         display: &mut D,
         viz: &mut Visual,
@@ -663,7 +663,7 @@ impl VisualizerComponent {
         state.init = false;
 
         if state.wide {
-            // Wide: stereo VU — position SVG at layout-provided rect (fallback: x=display.width/2)
+            // Wide: stereo VU - position SVG at layout-provided rect (fallback: x=display.width/2)
             if let Some(rect) = viz_rect {
                 viz.set_rect(rect);
             }
@@ -686,7 +686,7 @@ impl VisualizerComponent {
 
         } else {
 
-            // Narrow: mono VU — vuaio.svg covers full 128px, VU face in right portion
+            // Narrow: mono VU - vuaio.svg covers full 128px, VU face in right portion
             state.vu_m.update(db_m as f64);
             let disp_m = state.vu_m.angle_degrees() as f32;
             state.last.db_m = db_m;
@@ -712,7 +712,7 @@ impl VisualizerComponent {
         Ok(true)
     }
 
-    /// Draw AIO Histogram visualization — histogram right panel; left panel rendered by manager
+    /// Draw AIO Histogram visualization - histogram right panel; left panel rendered by manager
     fn draw_aio_hist<D, P>(
         display: &mut D,
         viz: &mut Visual,
@@ -785,7 +785,7 @@ impl VisualizerComponent {
             let meter_h = panel_h - my - title_base - 1;
 
             Self::draw_hist_panel::<D, P>(
-                display, "", // no label — scroller handles track info
+                display, "", // no label - scroller handles track info
                 title_base as u32, panel_h - title_base,
                 Point::new(meter_x + mx, my),
                 Size::new(inner_w as u32, meter_h as u32),

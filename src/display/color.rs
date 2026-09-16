@@ -71,7 +71,7 @@ pub enum Color {
     /// Custom grayscale value (0-255)
     Grayscale(u8),
 
-    /// Arbitrary 24-bit RGB — full gamut on Rgb565 displays, luminance-mapped on others
+    /// Arbitrary 24-bit RGB - full gamut on Rgb565 displays, luminance-mapped on others
     Rgb(u8, u8, u8),
 }
 
@@ -111,8 +111,8 @@ impl Color {
             Color::Cyan => Gray4::new(11), // Map to LightGray (bright but not full white)
             Color::Green => Gray4::new(8), // Map to Gray (medium brightness, ~50%)
             Color::Yellow  => Gray4::new(12),
-            Color::Red     => Gray4::new(4),   // dark — low luminance
-            Color::Blue    => Gray4::new(3),   // darkest — minimal luminance
+            Color::Red     => Gray4::new(4),   // dark - low luminance
+            Color::Blue    => Gray4::new(3),   // darkest - minimal luminance
             Color::Orange  => Gray4::new(10),  // warm mid-bright
             Color::Magenta => Gray4::new(8),   // mid gray
             Color::Grayscale(val) => Gray4::new(((*val as u16 * 15) / 255) as u8),

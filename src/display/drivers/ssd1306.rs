@@ -66,14 +66,14 @@ pub const ALT_I2C_ADDRESS: u8 = 0x3D;
 pub const DEFAULT_I2C_SPEED_HZ: u32 = 400_000;
 /// Default SPI clock speed
 pub const DEFAULT_SPI_SPEED_HZ: u32 = 8_000_000;
-/// Default DC (Data/Command) GPIO line — BCM 24 on a Raspberry Pi header.
+/// Default DC (Data/Command) GPIO line - BCM 24 on a Raspberry Pi header.
 ///
 /// These are cdev *line offsets* on whichever controller `gpio_chip` selects.
 /// On a Pi the header is a single controller whose offsets are the BCM numbers,
 /// so 24/25 read as BCM 24/25.  On Orange Pi / Rockchip each bank is its own
-/// controller and the offset is bank-relative — see the `lymons-gpio` crate.
+/// controller and the offset is bank-relative - see the `lymons-gpio` crate.
 pub const DEFAULT_DC_PIN: u32 = 24;
-/// Default RST (Reset) GPIO line — BCM 25 on a Raspberry Pi header.
+/// Default RST (Reset) GPIO line - BCM 25 on a Raspberry Pi header.
 pub const DEFAULT_RST_PIN: u32 = 25;
 /// Fallback GPIO character device when no controller is configured or detected.
 pub const DEFAULT_GPIO_CHIP: &str = lymons_gpio::DEFAULT_GPIO_CHIP;

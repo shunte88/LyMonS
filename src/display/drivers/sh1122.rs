@@ -68,7 +68,7 @@ pub const DEFAULT_RST_PIN: u32 = 25;
 /// SH1122 display driver wrapper (256×64 grayscale, stub implementation)
 ///
 /// The SH1122 supports 4-bit grayscale (16 levels) at 256×64 resolution.
-/// SPI only — no I2C mode on this controller.  Uses page-based addressing.
+/// SPI only - no I2C mode on this controller.  Uses page-based addressing.
 pub struct Sh1122Driver {
     framebuffer:  VarFrameBuf<Gray4>,
     capabilities: DisplayCapabilities,

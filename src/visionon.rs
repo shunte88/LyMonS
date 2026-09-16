@@ -40,7 +40,7 @@ use crate::spectrum::SPECTRUM_BANDS_COUNT;
 use crate::visualization::Visualization;
 use crate::visualizer::VizPayload;
 
-// Histogram dB range — mirrors spectrum.rs constants.
+// Histogram dB range - mirrors spectrum.rs constants.
 const HIST_FLOOR_DB: f32 = -80.0;
 const HIST_CEIL_DB: f32 = -12.0;
 const PEAK_METER_LEVELS_MAX: u8 = 48;
@@ -176,7 +176,7 @@ pub fn parse_event(json: &str, kind: Visualization) -> Option<VizPayload> {
             Some(VizPayload::HistAio { bands, bands_l, bands_r })
         }
 
-        // WaveformSpectrum requires raw PCM — not available via SSE.
+        // WaveformSpectrum requires raw PCM - not available via SSE.
         // All other type/event mismatches are silently skipped.
         _ => None,
     }

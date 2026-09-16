@@ -1,14 +1,14 @@
 #
 #  assets/st7796s/layout.yaml
 #
-#  LyMonS — ST7796S display override (480x320 Rgb565)
+#  LyMonS - ST7796S display override (480x320 Rgb565)
 #
 #  Merged on top of assets/layout.yaml at runtime.
 #  Only components/templates that differ from the base are defined here.
 #
 #  Display geometry:
 #    300×170 px, full-color Rgb565
-#    SVG icon: 150×150 at (0, 10) — vertically centred ((170-150)/2=10)
+#    SVG icon: 150×150 at (0, 10) - vertically centred ((170-150)/2=10)
 #    Right column: x=152, width=148
 #    Glyph col x=152, text col x=glyph.right+2
 #
@@ -18,7 +18,7 @@
 #    y=58   wind               (font_8x13_bold, glyph 40x40)
 #    y=84   precipitation      (font_8x13_bold, glyph 40x40)
 #    y=84   pressure           (font_8x13_bold, glyph 40x40)
-#    y=106  astral block — sunrise/sunset/moonrise/moonset chained at no gap
+#    y=106  astral block - sunrise/sunset/moonrise/moonset chained at no gap
 #    y=154  conditions strip   (font_8x13_bold, full width)
 #
 #  Moonphase: 42×42 glyph at right edge (x=parent.width-46),
@@ -99,7 +99,7 @@ components:
         height: "22"
         font: font_8x13_bold
 
-  # Scroller panel — status bar + 4 cover art scrolling text rows + progress bar + info line.
+  # Scroller panel - status bar + 4 cover art scrolling text rows + progress bar + info line.
   # Fills any region; parent.width/height drive all expressions.
   scroller_art_panel:
     fields:
@@ -210,18 +210,18 @@ components:
         horizontal_alignment: Center
         fg_color: Cyan
 
-  # Current weather — 220×220 SVG icon left, all data in right column,
+  # Current weather - 220×220 SVG icon left, all data in right column,
   # conditions as a full-width strip at the bottom of the display.
   weather_current_main:
     fields:
-      # SVG icon — 280×280 vertically centered
+      # SVG icon - 280×280 vertically centered
       - name: weather_icon
         type: weather_icon
         x: "0"
         y: "15"
         width: "220"
         height: "220"
-      # Metric rows — 40x40 glyphs, font_8x13_bold text
+      # Metric rows - 40x40 glyphs, font_8x13_bold text
       - name: temp_glyph
         type: weather_glyph
         x: "weather_icon.right + 4"
@@ -305,7 +305,7 @@ components:
         fg_color: Cyan
         vertical_alignment: Middle
         horizontal_alignment: Left
-      # Astral block — rows chained with no gap, 20x20 glyphs
+      # Astral block - rows chained with no gap, 20x20 glyphs
       - name: sunrise_glyph
         type: weather_glyph
         x: "temp_glyph.left"
@@ -370,7 +370,7 @@ components:
         vertical_alignment: Middle
         horizontal_alignment: Left
         fg_color: Cyan
-      # Moonphase — multi-line text below
+      # Moonphase - multi-line text below
       # glyph will be centered above this text
       - name: moonphase_text
         type: label
@@ -381,7 +381,7 @@ components:
         font: font_8x13_bold
         horizontal_alignment: Center
         fg_color: Yellow
-      # Moonphase — 42×42 glyph center-justified 
+      # Moonphase - 42×42 glyph center-justified 
       # with multi-line text below
       - name: moonphase_svg
         type: custom
@@ -389,7 +389,7 @@ components:
         y: "4"
         width: "68"
         height: "68"
-      # Conditions — full-width strip at the bottom of the display
+      # Conditions - full-width strip at the bottom of the display
       - name: conditions
         type: label
         x: "2"
@@ -673,7 +673,7 @@ templates:
             width: "display.width"
             height: "display.height"
 
-  # AIO: 50/50 split — 160px info panel, 160px visualizer panel.
+  # AIO: 50/50 split - 160px info panel, 160px visualizer panel.
   # Adjust x/width on visualizer_panel here to tune the split without recompiling.
   aio:
     variants:

@@ -66,7 +66,7 @@ pub async fn run_sse_stream(url: String, tx: mpsc::Sender<SseEvent>) {
                 info!("sse_client: connected ({})", resp.status());
                 if let Err(reason) = stream_events(resp, &tx).await {
                     if reason == "closed" {
-                        return; // channel dropped — stop
+                        return; // channel dropped - stop
                     }
                     info!("sse_client: stream ended ({reason}), reconnecting…");
                 }

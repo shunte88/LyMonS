@@ -245,7 +245,7 @@ impl LayoutConfig {
             LayoutCategory::ExtraLarge => Self::extra_large_layout(width, height, color_depth),
         };
 
-        // Driver name is the authoritative source for asset path — override the
+        // Driver name is the authoritative source for asset path - override the
         // category/color_depth guess whenever a concrete driver name is available.
         if !capabilities.driver_name.is_empty() {
             layout.asset_path = Self::driver_asset_path(&capabilities.driver_name);
@@ -258,13 +258,13 @@ impl LayoutConfig {
     fn driver_asset_path(driver_name: &str) -> String {
         match driver_name {
             "ssd1306" | "ssd1309" | "sh1106" => "./assets/ssd1309/".to_string(),
-            // SH1107 ships as 128×128 and 128×64 — its own folder carries the
+            // SH1107 ships as 128×128 and 128×64 - its own folder carries the
             // 128×128 layout override alongside the shared 128-wide panels.
             "sh1107"                          => "./assets/sh1107/".to_string(),
             "ssd1322" | "sh1122"              => "./assets/ssd1322/".to_string(),
             "st7789"                          => "./assets/st7789/".to_string(),
             "st7796s"                         => "./assets/st7796s/".to_string(),
-            "sharpmemory"                     => "./assets/sharp400/".to_string(),
+            "sharpmemory"                     => "./assets/sharpmemory/".to_string(),
             _                                 => "./assets/ssd1309/".to_string(),
         }
     }
@@ -435,7 +435,7 @@ impl LayoutConfig {
                 clock_digits: FontSize::ExtraLarge,
                 weather: FontSize::Large,
             },
-            asset_path: "./assets/sharp400/".to_string(), // 400-width assets
+            asset_path: "./assets/sharpmemory/".to_string(),
             visualizer: VisualizerLayout {
                 width: 400,
                 height: 220,
@@ -580,7 +580,7 @@ mod tests {
         let layout = layout_for_resolution(400, 240, ColorDepth::Monochrome);
         assert_eq!(layout.category, LayoutCategory::ExtraLarge);
         assert_eq!(layout.weather.forecast_days, 5);
-        assert!(layout.asset_path.contains("sharp400"));
+        assert!(layout.asset_path.contains("sharpmemory"));
     }
 
     #[test]

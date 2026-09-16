@@ -2,7 +2,7 @@
 name = "LyMonS"
 version = "0.4.17"
 edition = "2024"
-description = "An LMS Monitor For The Future — This LyMonS worth the squeeze"
+description = "An LMS Monitor For The Future - This LyMonS worth the squeeze"
 license = "Apache-2.0"
 authors = ["shunte88"]
 
@@ -101,11 +101,12 @@ driver-ssd1322 = ["dep:ssd1322"]
 driver-sh1106 = ["dep:sh1106"]
 driver-sh1107 = []
 driver-sh1122 = []
+driver-sharpmemory = []
 driver-st7789 = ["dep:mipidsi"]
 driver-st7796s = ["dep:mipidsi"]
 
 # Convenience features
-all-drivers = ["driver-ssd1306", "driver-ssd1309", "driver-ssd1322", "driver-sh1106", "driver-sh1107", "driver-sh1122", "driver-st7789", "driver-st7796s"]
+all-drivers = ["driver-ssd1306", "driver-ssd1309", "driver-ssd1322", "driver-sh1106", "driver-sh1107", "driver-sh1122", "driver-sharpmemory", "driver-st7789", "driver-st7796s"]
 
 # Plugin system for dynamic driver loading
 plugin-system = ["dep:libloading"]
@@ -118,6 +119,7 @@ embedded = ["driver-ssd1306"]
 embedded-ssd1322 = ["driver-ssd1322"]
 embedded-sh1106 = ["driver-sh1106"]
 embedded-sh1107 = ["driver-sh1107"]
+embedded-sharpmemory = ["driver-sharpmemory"]
 
 # Display emulator for desktop testing
 emulator = ["dep:pixels", "dep:winit", "dep:winit_input_helper"]

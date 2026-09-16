@@ -691,7 +691,7 @@ impl LMSServer {
                 "No players available on LMS server".to_string()
             } else {
                 format!(
-                    "Player '{}' not found — available: [{}]",
+                    "Player '{}' not found - available: [{}]",
                     player_name_filter,
                     if available.is_empty() { "none".to_string() } else { available }
                 )
@@ -715,7 +715,7 @@ impl LMSServer {
 
 impl Drop for LMSServer {
     fn drop(&mut self) {
-        info!("LMSServer dropped — stopping polling task.");
+        info!("LMSServer dropped - stopping polling task.");
         self.stop_polling();
     }
 }

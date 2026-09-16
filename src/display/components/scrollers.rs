@@ -248,8 +248,8 @@ impl ScrollingText {
         self.album_scroll.update(self.scroll_mode, ttf);
         self.title_scroll.update(self.scroll_mode, ttf);
         self.artist_scroll.update(self.scroll_mode, ttf);
-        self.combination_scroll.update(self.scroll_mode, ttf);
         self.year_scroll.update(self.scroll_mode, ttf);
+        self.combination_scroll.update(self.scroll_mode, ttf);
     }
 
     /// Update combination scroll position (called on each frame)
@@ -306,6 +306,7 @@ impl ScrollingText {
             self.artist_scroll.char_width =
                 f.character_size.width as usize + f.character_spacing as usize;
         }
+        self.artist_scroll.update(self.scroll_mode, ttf);
 
         self.year_scroll.update(self.scroll_mode, ttf);
         self.year_scroll.scroll_width = year_field.width();
@@ -440,7 +441,7 @@ impl ScrollingText {
         let mut clipped = target.clipped(&field.bounds);
 
         if let Some(ttf) = &self.ttf_font {
-            // TTF path — vertically centre the text within the field using real metrics.
+            // TTF path - vertically centre the text within the field using real metrics.
             let ascent= ttf.ascent();
             let line_h= ttf.line_height();
             let field_h= field.height() as i32;
@@ -457,7 +458,7 @@ impl ScrollingText {
                 )?;
             }
         } else {
-            // MonoFont path — identical to the previous implementation.
+            // MonoFont path - identical to the previous implementation.
             use embedded_graphics::mono_font::MonoTextStyle;
             use embedded_graphics::text::Text;
             use embedded_graphics::geometry::Point;

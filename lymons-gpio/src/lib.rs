@@ -11,14 +11,14 @@
  *
  *  Raspberry Pi
  *      One controller covers the whole 40-pin header, and its cdev line offset
- *      happens to equal the BCM number — so "DC on BCM 24" is literally line 24
+ *      happens to equal the BCM number - so "DC on BCM 24" is literally line 24
  *      on the header chip.  The *chip number* has moved around between models
  *      and kernels (Pi 5 was gpiochip4, then gpiochip0 on 6.6+), so we find it
  *      by the controller's stable label instead of a hardcoded path.
  *
  *  Orange Pi / Rockchip (RK3566, RK3588, ...)
- *      gpio-rockchip registers one controller *per bank* — gpio0 … gpio4, each
- *      exposing 32 lines — so there is no single "header chip" to detect and no
+ *      gpio-rockchip registers one controller *per bank* - gpio0 … gpio4, each
+ *      exposing 32 lines - so there is no single "header chip" to detect and no
  *      global numbering.  A pin such as PC7 on bank 3 is bank 3, line 23:
  *
  *          line = group * 8 + index      (group A=0, B=1, C=2, D=3)
@@ -37,7 +37,7 @@
  *
  *      The labels are device-tree node names and differ per SoC ("300b000.pinctrl"
  *      / "7022000.pinctrl" on H616/H618, "1c20800.pinctrl" / "1f02c00.pinctrl" on
- *      H3), so read them off the board rather than assuming — the fallback path
+ *      H3), so read them off the board rather than assuming - the fallback path
  *      below logs every controller it finds.
  *
  *  Selection order:
@@ -106,11 +106,11 @@ impl std::error::Error for GpioError {}
 /// How a user-supplied `gpio_chip` string names a controller.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChipSelector {
-    /// A device node — `/dev/gpiochip3`.
+    /// A device node - `/dev/gpiochip3`.
     Path(String),
-    /// A chip number — `3` or `gpiochip3`.
+    /// A chip number - `3` or `gpiochip3`.
     Number(u32),
-    /// A controller label — `gpio3` (Rockchip), `pinctrl-rp1` (Pi 5),
+    /// A controller label - `gpio3` (Rockchip), `pinctrl-rp1` (Pi 5),
     /// `1c20800.pinctrl` (Allwinner).
     Label(String),
 }
@@ -118,7 +118,7 @@ pub enum ChipSelector {
 /// Classify a `gpio_chip` selector without touching the filesystem.
 ///
 /// Anything containing a `/` is a path.  A bare number, or `gpiochipN`, is a
-/// chip number.  Everything else is a controller label — which is what
+/// chip number.  Everything else is a controller label - which is what
 /// Rockchip and Allwinner boards need, since their bank names carry the
 /// meaning that a Pi packs into a single header chip.
 pub fn parse_selector(selector: &str) -> ChipSelector {
@@ -200,7 +200,7 @@ pub fn open_header_chip(preferred: Option<&str>) -> Result<Chip, GpioError> {
         }
     }
 
-    // Not a Pi — the fallback is a guess, so say so loudly and show the user
+    // Not a Pi - the fallback is a guess, so say so loudly and show the user
     // what they should have configured instead.
     warn!(
         "No Raspberry Pi header GPIO controller found; falling back to {}",
@@ -259,7 +259,7 @@ fn open_label(label: &str) -> Result<Chip, GpioError> {
     }
     let available = describe_chips();
     let listing = if available.is_empty() {
-        "none found — is gpiochip support enabled and are you in the 'gpio' group?".to_string()
+        "none found - is gpiochip support enabled and are you in the 'gpio' group?".to_string()
     } else {
         available.join(", ")
     };

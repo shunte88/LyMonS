@@ -7,20 +7,20 @@
  *  Declarative layout template schema.
  *
  *  Defines the serde types that map to `layout.yaml`.  These are pure
- *  data — no rendering logic lives here.
+ *  data - no rendering logic lives here.
  *
  *  Hierarchy:
- *    LayoutTemplates            — root, loaded once at startup
+ *    LayoutTemplates            - root, loaded once at startup
  *      components: HashMap<name, ComponentDef>
  *      templates:  HashMap<name, TemplateDef>
  *
- *    ComponentDef               — reusable group of fields
- *      fields: Vec<FieldDef>   — positions expressed as Expr strings
+ *    ComponentDef               - reusable group of fields
+ *      fields: Vec<FieldDef>    - positions expressed as Expr strings
  *
- *    TemplateDef                — page definition
- *      variants: Vec<Variant>  — ordered; first match wins
- *        match: MatchRule      — filter on display characteristics
- *        regions: Vec<Region>  — component placements in the page
+ *    TemplateDef                - page definition
+ *      variants: Vec<Variant>   - ordered; first match wins
+ *        match: MatchRule       - filter on display characteristics
+ *        regions: Vec<Region>   - component placements in the page
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -54,7 +54,7 @@ fn yaml_entry_at_line(yaml: &str, error_line: usize) -> Option<String> {
             section = "template";
             entry   = "";
         } else if line.starts_with("  ") && !line.starts_with("   ") {
-            // Exactly 2-space indent — a top-level entry name
+            // Exactly 2-space indent - a top-level entry name
             if let Some(key) = line.trim_end().strip_suffix(':') {
                 entry = key.trim();
             }
@@ -68,7 +68,7 @@ fn yaml_entry_at_line(yaml: &str, error_line: usize) -> Option<String> {
     }
 }
 
-/// Root type — deserialised from `layout.yaml`.
+/// Root type - deserialised from `layout.yaml`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LayoutTemplates {
     /// Reusable field groups, keyed by name (e.g. "scroller", "clock_face").
@@ -94,10 +94,10 @@ impl LayoutTemplates {
 
     /// Merge `other` into `self`.
     ///
-    /// **Components** — full replacement: any component in `other` replaces the
+    /// **Components** - full replacement: any component in `other` replaces the
     /// same-named component in `self`; new names are added.
     ///
-    /// **Templates** — field-level merge within each matching variant:
+    /// **Templates** - field-level merge within each matching variant:
     ///   - If a template name exists in both, variants are matched by name.
     ///   - Within a matched variant, each field in `other` is upserted by name:
     ///     existing fields are replaced, new fields are appended.  Base-only fields
@@ -170,11 +170,11 @@ impl LayoutTemplates {
                             log::error!("  (in {ctx})");
                         }
                     }
-                    log::warn!("layout: driver override ignored — using base layout only");
+                    log::warn!("layout: driver override ignored - using base layout only");
                 }
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // No driver override — use base layout unchanged.
+                // No driver override - use base layout unchanged.
             }
             Err(e) => log::warn!("layout: could not read {override_path}: {e}"),
         }
@@ -212,7 +212,7 @@ pub struct FieldDef {
     /// Identifier used by the renderer (e.g. "status_bar", "album_artist").
     pub name: String,
 
-    /// Semantic field kind — drives renderer dispatch.
+    /// Semantic field kind - drives renderer dispatch.
     #[serde(rename = "type")]
     pub field_type: FieldKind,
 
@@ -266,7 +266,7 @@ fn zero_str() -> String { "0".to_string() }
 fn parent_width_str() -> String { "parent.width".to_string() }
 fn default_fg() -> ColorSpec { ColorSpec::Named(NamedColor::White) }
 
-/// Semantic field type — determines which renderer handles the field.
+/// Semantic field type - determines which renderer handles the field.
 ///
 /// All standard types are handled generically in `manager.rs` dispatch.
 /// `Custom` is an escape hatch for fields that need bespoke drawing
@@ -293,7 +293,7 @@ pub enum FieldKind {
     Custom,
 }
 
-/// A page template — a set of variants tried in order; first match wins.
+/// A page template - a set of variants tried in order; first match wins.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TemplateDef {
     pub variants: Vec<Variant>,
@@ -315,7 +315,7 @@ pub struct Variant {
     #[serde(default)]
     pub regions: Vec<Region>,
 
-    /// Inline field definitions — an alternative to `regions` for simple
+    /// Inline field definitions - an alternative to `regions` for simple
     /// layouts that don't need a reusable component.  Fields here are
     /// resolved with `display.*` as both display and parent dimensions,
     /// and may reference each other by name (same rules as component fields).
@@ -450,6 +450,8 @@ pub enum FontSpec {
     #[serde(rename = "font_7x14")]      Font7x14,
     #[serde(rename = "font_8x13")]      Font8x13,
     #[serde(rename = "font_8x13_bold")] Font8x13Bold,
+    #[serde(rename = "font_9x18")]      Font9x18,
+    #[serde(rename = "font_9x18_bold")] Font9x18Bold,
     #[serde(rename = "font_10x20")]     Font10x20,
 }
 
@@ -470,6 +472,8 @@ impl FontSpec {
             FontSpec::Font7x14     => &FONT_7X14,
             FontSpec::Font8x13     => &FONT_8X13,
             FontSpec::Font8x13Bold => &FONT_8X13_BOLD,
+            FontSpec::Font9x18     => &FONT_9X18,
+            FontSpec::Font9x18Bold => &FONT_9X18_BOLD,
             FontSpec::Font10x20    => &FONT_10X20,
         }
     }

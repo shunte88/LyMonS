@@ -216,7 +216,7 @@ fn resolve_ident(name: &str, ctx: &ExprContext<'_>) -> Result<i32, String> {
                 other    => Err(format!("unknown property '{}' on field '{}'", other, field_name)),
             };
         }
-        return Err(format!("unknown field '{}' — has it been defined above this field?", field_name));
+        return Err(format!("unknown field '{}' - has it been defined above this field?", field_name));
     }
 
     Err(format!("unknown variable '{}'", name))

@@ -7,7 +7,7 @@
  *  Cover art fetch, cache, and Rgb565 conversion.
  *
  *  Only active on large Rgb565 displays (ST7789 320×170).
- *  Uses the LMS `coverid` field as the cache key — one file per track,
+ *  Uses the LMS `coverid` field as the cache key - one file per track,
  *  stored as a JPEG in `~/.cache/lymons/coverart/`.
  *
  *  Pipeline (cache miss):
@@ -45,7 +45,7 @@ use image::{DynamicImage, ImageFormat};
 use log::{debug, info, warn};
 use thiserror::Error;
 
-/// Target cover art dimensions (pixels, square) — matches the ST7789 cover_art field size.
+/// Target cover art dimensions (pixels, square) - matches the ST7789 cover_art field size.
 pub const COVER_SIZE: u32 = 120;
 
 /// JPEG quality for cached files (0–100).
@@ -145,10 +145,10 @@ impl CoverArtCache {
     /// the on-disk JPEG without any network access.
     ///
     /// # Arguments
-    /// * `coverid`    — LMS `PlaylistLoop[0].Coverid` (used as cache filename)
-    /// * `lms_host`   — LMS server IP/hostname (e.g. `"192.168.1.25"`)
-    /// * `lms_port`   — LMS HTTP port (usually `9000`)
-    /// * `player_mac` — Player MAC address (e.g. `"b8:27:eb:70:71:5c"`)
+    /// * `coverid`    - LMS `PlaylistLoop[0].Coverid` (used as cache filename)
+    /// * `lms_host`   - LMS server IP/hostname (e.g. `"192.168.1.25"`)
+    /// * `lms_port`   - LMS HTTP port (usually `9000`)
+    /// * `player_mac` - Player MAC address (e.g. `"b8:27:eb:70:71:5c"`)
     pub async fn get(
         &self,
         coverid: &str,
@@ -163,8 +163,8 @@ impl CoverArtCache {
             return self.load_from_cache(&path);
         }
 
-        // ── 2. Cache miss — fetch from LMS ────────────────────────────────────
-        info!("Cover art cache miss — fetching coverid={}", coverid);
+        // ── 2. Cache miss - fetch from LMS ────────────────────────────────────
+        info!("Cover art cache miss - fetching coverid={}", coverid);
 
         let primary = format!(
             "http://{}:{}/music/current/cover.jpg?player={}",

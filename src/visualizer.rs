@@ -121,7 +121,7 @@ pub enum VizPayload {
         spectrum_column: Vec<u8>, // Current FFT frequency bands for this frame
     },
     NoVisualization {},
-    /// Squeezelite has stopped writing to shmem — warn the user.
+    /// Squeezelite has stopped writing to shmem - warn the user.
     ShmemStale,
 }
 
@@ -142,7 +142,7 @@ pub struct Visualizer {
 }
 
 /// Returns true if `ip` belongs to a local network interface.
-/// Uses `TcpListener::bind` as a zero-cost locality probe — bind only
+/// Uses `TcpListener::bind` as a zero-cost locality probe - bind only
 /// succeeds when the address is assigned to this host.
 fn is_local_ip(ip: &str) -> bool {
     if ip.is_empty() { return false; }
@@ -235,7 +235,7 @@ async fn visualizer_worker(
 
     match reader_result {
         Ok(reader) => {
-            // Local shared memory available — use the existing SHM path.
+            // Local shared memory available - use the existing SHM path.
             info!("visualizer: using shared-memory acquisition");
             visualizer_shm_loop(cmd_rx, out_tx, playing_rx, reader).await;
         }
@@ -445,7 +445,7 @@ async fn visualizer_shm_loop(
             }
         }) {
             Ok(true)  => {
-                // Fresh frame received — clear any prior stale warning
+                // Fresh frame received - clear any prior stale warning
                 if shmem_stale_sent {
                     shmem_stale_sent = false;
                     // Signal manager that data is live again (re-use NoVisualization as a clear)

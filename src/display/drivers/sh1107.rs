@@ -19,7 +19,7 @@
  *  addressing mode (0x20) advance the column pointer, so a frame is pushed
  *  one page at a time: set page, set column, blast `native_columns` bytes.
  *
- *  Unlike the SSD1306 the SH1107 has no hardware 90 degrees rotation — only
+ *  Unlike the SSD1306 the SH1107 has no hardware 90 degrees rotation - only
  *  segment remap (0xA0/0xA1) and COM scan direction (0xC0/0xC8), which give
  *  0 degrees and 180 degrees.  Rotation is therefore applied here, while the
  *  framebuffer is packed into controller RAM, so all four angles are
@@ -85,14 +85,14 @@ pub const ALT_I2C_ADDRESS: u8 = 0x3D;
 pub const DEFAULT_I2C_SPEED_HZ: u32 = 400_000;
 /// Default SPI clock speed
 pub const DEFAULT_SPI_SPEED_HZ: u32 = 8_000_000;
-/// Default DC (Data/Command) GPIO line — BCM 24 on a Raspberry Pi header.
+/// Default DC (Data/Command) GPIO line - BCM 24 on a Raspberry Pi header.
 ///
 /// These are cdev *line offsets* on whichever controller `gpio_chip` selects.
 /// On a Pi the header is a single controller whose offsets are the BCM numbers,
 /// so 24/25 read as BCM 24/25.  On Orange Pi / Rockchip each bank is its own
-/// controller and the offset is bank-relative — see the `lymons-gpio` crate.
+/// controller and the offset is bank-relative - see the `lymons-gpio` crate.
 pub const DEFAULT_DC_PIN: u32 = 24;
-/// Default RST (Reset) GPIO line — BCM 25 on a Raspberry Pi header.
+/// Default RST (Reset) GPIO line - BCM 25 on a Raspberry Pi header.
 pub const DEFAULT_RST_PIN: u32 = 25;
 /// Fallback GPIO character device when no controller is configured or detected.
 pub const DEFAULT_GPIO_CHIP: &str = lymons_gpio::DEFAULT_GPIO_CHIP;
@@ -143,7 +143,7 @@ const PRECHARGE: u8 = 0x22;
 /// VCOMH deselect level
 const VCOM_DESELECT: u8 = 0x35;
 
-/// The bus this driver instance talks over — fixed at construction.
+/// The bus this driver instance talks over - fixed at construction.
 enum Sh1107Bus {
     I2c { dev: I2cdev, address: u8 },
     Spi { dev: SpidevDevice, dc: CdevPin },
@@ -218,7 +218,7 @@ impl Sh1107Driver {
     /// Validate a requested panel size, returning it long-axis-first.
     ///
     /// SH1107 modules are sold as 128x128 and 128x64; a 128x64 panel mounted
-    /// portrait (64x128) is the same panel and normalises to 128x64 — use
+    /// portrait (64x128) is the same panel and normalises to 128x64 - use
     /// `rotate_deg` to orient it.
     pub fn validate_size(w: u32, h: u32) -> Result<(u32, u32), DisplayError> {
         let (long, short) = if w >= h { (w, h) } else { (h, w) };
@@ -633,7 +633,7 @@ impl DisplayDriver for Sh1107Driver {
         self.write_commands(&[cmd])
     }
 
-    /// Rotation is applied in software while packing the framebuffer — the
+    /// Rotation is applied in software while packing the framebuffer - the
     /// SH1107 itself only offers 0°/180° via segment remap and COM scan order.
     fn set_rotation(&mut self, degrees: u16) -> Result<(), DisplayError> {
         if !matches!(degrees, 0 | 90 | 180 | 270) {

@@ -78,7 +78,7 @@ pub enum BusConfig {
         /// (`/dev/gpiochip3`), a chip number (`3`) or a controller label
         /// (`gpio3` on Rockchip, `pinctrl-rp1` on a Pi 5).
         ///
-        /// Leave unset on a Raspberry Pi — the header controller is detected
+        /// Leave unset on a Raspberry Pi - the header controller is detected
         /// by label and `dc_pin`/`rst_pin` are plain BCM numbers.  On Orange
         /// Pi / Rockchip each bank is its own controller, so name the bank
         /// here and give bank-relative line numbers for the pins.
@@ -115,7 +115,7 @@ pub struct Config {
     pub show_metrics:   Option<bool>,
     pub show_splash:    Option<bool>,
     pub i2c_bus:        Option<String>,
-    /// Standalone lat/lon — fallback for astral when weather is not configured.
+    /// Standalone lat/lon - fallback for astral when weather is not configured.
     pub latitude:       Option<f64>,
     pub longitude:      Option<f64>,
     pub display:        Option<DisplayConfig>,
@@ -124,7 +124,7 @@ pub struct Config {
 
 impl Config {
     /// Resolve lat/lon: weather config first, standalone fallback second.
-    /// Returns `(None, None)` when neither is set — callers should GeoIP.
+    /// Returns `(None, None)` when neither is set - callers should GeoIP.
     pub fn effective_lat_lng(&self) -> (Option<f64>, Option<f64>) {
         let wlat = self.weather.as_ref().and_then(|w| w.latitude);
         let wlon = self.weather.as_ref().and_then(|w| w.longitude);
@@ -151,7 +151,7 @@ impl Config {
 #[derive(Debug, Parser, Clone)]
 #[command(
     name    = "LyMonS",
-    about   = "LMS monitor — worth the squeeze",
+    about   = "LMS monitor - worth the squeeze",
     version,
     author,
     after_help = ""
@@ -185,11 +185,11 @@ pub struct Cli {
     #[arg(long = "weather-lang")]
     pub weather_lang: Option<String>,
 
-    /// Latitude — overrides config file and GeoIP
+    /// Latitude - overrides config file and GeoIP
     #[arg(long)]
     pub lat: Option<f64>,
 
-    /// Longitude — overrides config file and GeoIP
+    /// Longitude - overrides config file and GeoIP
     #[arg(long)]
     pub lon: Option<f64>,
 
@@ -271,7 +271,7 @@ pub fn load() -> Result<Config, ConfigError> {
             let y = read_yaml(p)?;
             merge(&mut cfg, y);
         } else if cli.config.is_some() {
-            // Explicit path was given but doesn't exist — that's an error
+            // Explicit path was given but doesn't exist - that's an error
             return Err(ConfigError::Validation(format!(
                 "Config file not found: {}", p.display()
             )));
@@ -385,7 +385,7 @@ fn apply_cli_overrides(cfg: &mut Config, cli: &Cli) {
     take_opt!(cli.lat            => cfg.latitude);
     take_opt!(cli.lon            => cfg.longitude);
 
-    // Weather overrides — comma-separated -W/--weather first, then discrete flags win
+    // Weather overrides - comma-separated -W/--weather first, then discrete flags win
     if let Some(w_str) = &cli.weather {
         // Format: key,units,lang,latitude,longitude  (any trailing fields may be omitted)
         let parts: Vec<&str> = w_str.splitn(5, ',').collect();

@@ -619,7 +619,7 @@ impl DisplayManager {
         }
     }
 
-    /// Generic scroller page renderer — dispatched from `render_scrolling` for each color depth.
+    /// Generic scroller page renderer - dispatched from `render_scrolling` for each color depth.
     fn render_scrolling_page<D>(
         fb: &mut D,
         page: &crate::display::PageLayout,
@@ -2732,7 +2732,7 @@ impl DisplayManager {
             }
         }
 
-        // Layout-driven text overlay — resolve per-egg template from layout.yaml
+        // Layout-driven text overlay - resolve per-egg template from layout.yaml
         let egg_name = self.easter_egg.egg_type_name().to_string();
         let page = self.layout_manager.create_egg_page(&egg_name);
 
@@ -2761,7 +2761,7 @@ impl DisplayManager {
             crate::deutils::seconds_to_hms(self.current_track_time_secs)
         };
 
-        // Render — scrolling_text is borrowed immutably; framebuffer mutably.
+        // Render - scrolling_text is borrowed immutably; framebuffer mutably.
         // Rust allows these as disjoint field borrows on self.
         let st = &self.scrolling_text;
         match &mut self.framebuffer {
@@ -3387,7 +3387,7 @@ impl DisplayManager {
         // Get splash page layout
         let splash_page = self.layout_manager.create_splash_page();
 
-        // Render with status message (text routine clears its own rect — no full clear needed)
+        // Render with status message (text routine clears its own rect - no full clear needed)
         match &mut self.framebuffer {
             crate::display::framebuffer::FrameBuffer::Mono(fb) => {
                 Self::render_splash(fb, &splash_page, &self.splash_version, &self.splash_build_date, Some(status))?;
@@ -3449,7 +3449,7 @@ impl DisplayManager {
     /// Setup visualizer with playing state receiver.
     ///
     /// `sse_config` is forwarded to `Visualizer::spawn` as the visionon SSE
-    /// fallback — used when local shared-memory is unavailable (remote player).
+    /// fallback - used when local shared-memory is unavailable (remote player).
     pub async fn setup_visualizer(
         &mut self,
         viz_type: &str,
@@ -3463,10 +3463,10 @@ impl DisplayManager {
             return Ok(());
         }
 
-        // Probe data source before committing to setup — avoids a visualizer
+        // Probe data source before committing to setup - avoids a visualizer
         // that is configured but will never receive audio data.
         if !crate::visualizer::Visualizer::data_source_available(player_ip, sse_config.as_ref()) {
-            info!("Visualizer '{}' requested but no data source available (player: {}, no SSE, not local or no SHM) — skipping", viz_type, player_ip);
+            info!("Visualizer '{}' requested but no data source available (player: {}, no SSE, not local or no SHM) - skipping", viz_type, player_ip);
             return Ok(());
         }
 

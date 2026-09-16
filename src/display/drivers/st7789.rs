@@ -8,7 +8,7 @@
  *
  *  The ST7789V is a 262K-colour TFT LCD controller with a MIPI DCS command set.
  *  Supported variant: 320×170 (TTGO T-Display / Waveshare 1.9" form factor).
- *  SPI only — no I2C mode.
+ *  SPI only - no I2C mode.
  *
  *  Typical wiring (Raspberry Pi, BCM pin numbering):
  *
@@ -62,7 +62,7 @@ use crate::vframebuf::VarFrameBuf;
 
 use log::info;
 
-/// Default SPI clock speed (40 MHz — ST7789 supports up to ~62.5 MHz on Pi)
+/// Default SPI clock speed (40 MHz - ST7789 supports up to ~62.5 MHz on Pi)
 pub const DEFAULT_SPI_SPEED_HZ: u32 = 40_000_000;
 /// Default DC (Data/Command) GPIO pin (BCM)
 pub const DEFAULT_DC_PIN: u32 = 24;
@@ -82,7 +82,7 @@ pub const SUPPORTED_SIZES: &[(u32, u32)] = &[
 /// ST7789 display driver (320×170 Rgb565, SPI only, stub implementation)
 ///
 /// Full-colour 16-bit per pixel (Rgb565) at 320×170 resolution.
-/// Uses MIPI DCS commands — no I2C mode.
+/// Uses MIPI DCS commands - no I2C mode.
 pub struct St7789Driver {
     /// Framebuffer for drawing operations (Rgb565)
     framebuffer: VarFrameBuf<Rgb565>,
@@ -182,11 +182,11 @@ impl St7789Driver {
         // TODO: send ST7789 initialisation sequence (MIPI DCS):
         //   - Assert RST low ≥10µs, then release high; wait 5ms
         //   - ExitSleepMode  (0x11); wait 120ms
-        //   - SetAddressMode (0x36, 0x00)  — no flip, no mirror
-        //   - SetInvertMode  (0x21)        — ST7789 panel is normally inverted
-        //   - SetPixelFormat (0x3A, 0x55)  — Rgb565
-        //   - SetColumnAddr  (0x2A, 0x00, 0x00, 0x01, 0x3F)  — 0..319
-        //   - SetRowAddr     (0x2B, 0x00, 0x00, 0x00, 0xA9)  — 0..169
+        //   - SetAddressMode (0x36, 0x00)  - no flip, no mirror
+        //   - SetInvertMode  (0x21)        - ST7789 panel is normally inverted
+        //   - SetPixelFormat (0x3A, 0x55)  - Rgb565
+        //   - SetColumnAddr  (0x2A, 0x00, 0x00, 0x01, 0x3F)  - 0..319
+        //   - SetRowAddr     (0x2B, 0x00, 0x00, 0x00, 0xA9)  - 0..169
         //   - EnterNormalMode (0x13)
         //   - SetDisplayOn   (0x29)
         //

@@ -21,7 +21,7 @@
  *
  */
 
-//! # VU Meter — Analogue Needle Physics
+//! # VU Meter - Analogue Needle Physics
 //!
 //! A fully self-contained simulation of a D'Arsonval moving-coil VU movement.
 //!
@@ -165,7 +165,7 @@ impl VuMeter {
             overload_threshold_db: 0.0,
             overload_hold_s: 0.005,
 
-            // Physics — representative values for a 200 µA D'Arsonval movement.
+            // Physics - representative values for a 200 µA D'Arsonval movement.
             // Damping ratio zeta = b / (2 * sqrt(k * I)) ≈ 0.89 → classic VU
             // underdamped response with ~300 ms attack time.
             inertia: 8.0e-9,    // [kg·m²]
@@ -173,7 +173,7 @@ impl VuMeter {
             damping_b: 4.5e-9,  // [N·m·s/rad]
             restitution: 0.05,
 
-            // State — needle at rest against the negative stop
+            // State - needle at rest against the negative stop
             angle_rad: sweep_min.to_radians(),
             angular_velocity: 0.0,
             overload_accumulated_s: 0.0,
@@ -430,14 +430,14 @@ impl VuMeter {
     }
 
     /// Equilibrium (steady-state) angle for a given dB value [degrees].
-    /// Does **not** modify state — useful for calibration marks and scale drawing.
+    /// Does **not** modify state - useful for calibration marks and scale drawing.
     pub fn steady_state_degrees(&self, db: f64) -> f64 {
         self.db_to_target_rad(db).to_degrees()
     }
 }
 
 impl VuMeter {
-    /// **Primary public API** — feed a signal level and receive the needle state.
+    /// **Primary public API** - feed a signal level and receive the needle state.
     ///
     /// Call on every animation frame (60 Hz, 120 Hz, …) or from an audio
     /// callback.  Wall-clock time is measured internally; no `dt` is required.
@@ -563,7 +563,7 @@ impl VuMeter {
         let max_rad = self.sweep_max.to_radians();
 
         if theta < min_rad {
-            // Hit negative stop — reverse velocity with restitution
+            // Hit negative stop - reverse velocity with restitution
             (min_rad, (-omega * self.restitution).max(0.0))
         } else if theta > max_rad {
             // Hit positive stop

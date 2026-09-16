@@ -46,6 +46,9 @@ use crate::display::drivers::sh1107::Sh1107Driver;
 #[cfg(feature = "driver-sh1122")]
 use crate::display::drivers::sh1122::Sh1122Driver;
 
+#[cfg(feature = "driver-sharpmemory")]
+use crate::display::drivers::sharp_memory::SharpMemoryDriver;
+
 #[cfg(feature = "driver-st7789")]
 use crate::display::drivers::st7789::St7789Driver;
 
@@ -177,6 +180,14 @@ impl DisplayDriverFactory {
                 )?))
             }
 
+            // SHARP panels have no D/C and no reset.  `cs_pin` is SCS, which
+            // is active HIGH and so cannot be the spidev node's own chip
+            // select, and `rst_pin` is reused for the optional DISP enable.
+            #[cfg(feature = "driver-sharpmemory")]
+            (DriverKind::SharpMemory, BusConfig::Spi { bus, rst_pin, cs_pin, .. }) => {
+                Ok(Box::new(SharpMemoryDriver::new_spi(bus, *cs_pin, *rst_pin, config)?))
+            }
+
             #[cfg(feature = "driver-st7789")]
             (DriverKind::St7789, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
                 Ok(Box::new(St7789Driver::new_spi(
@@ -253,6 +264,13 @@ impl DisplayDriverFactory {
                 if matches!(driver_kind, DriverKind::Sh1122) {
                     return Err(DisplayFactoryError::ConfigError(
                         "SH1122 driver not enabled. Enable with --features driver-sh1122".to_string()
+                    ));
+                }
+
+                #[cfg(not(feature = "driver-sharpmemory"))]
+                if matches!(driver_kind, DriverKind::SharpMemory) {
+                    return Err(DisplayFactoryError::ConfigError(
+                        "SharpMemory driver not enabled. Enable with --features driver-sharpmemory".to_string()
                     ));
                 }
 
@@ -403,25 +421,10 @@ impl DisplayDriverFactory {
                 use crate::display::drivers::sh1122::Sh1122Driver;
                 Sh1122Driver::default_config()
             }
+            #[cfg(feature = "driver-sharpmemory")]
             DriverKind::SharpMemory => {
-                use crate::config::BusConfig;
-                DisplayConfig {
-                    driver: Some(DriverKind::SharpMemory),
-                    width: Some(400),
-                    height: Some(240),
-                    bus: Some(BusConfig::Spi {
-                        bus: "/dev/spidev0.0".to_string(),
-                        speed_hz: Some(2_000_000),
-                        dc_pin: 24,
-                        rst_pin: None,
-                        cs_pin: None,
-                        gpio_chip: None,
-                    }),
-                    brightness: Some(255),
-                    invert: Some(false),
-                    rotate_deg: Some(0),
-                    emulated: Some(false),
-                }
+                use crate::display::drivers::sharp_memory::SharpMemoryDriver;
+                SharpMemoryDriver::default_config()
             }
             #[cfg(feature = "driver-st7789")]
             DriverKind::St7789 => {
@@ -507,5 +510,28 @@ mod tests {
         };
 
         assert!(DisplayDriverFactory::validate_config(&config).is_err());
+    }
+
+    /// SHARP panels are SPI only and need SCS on a free GPIO, so the default
+    /// config has to carry a cs_pin rather than lean on the spidev node's own
+    /// active-low chip select.
+    #[cfg(feature = "driver-sharpmemory")]
+    #[test]
+    fn sharpmemory_default_config_is_a_400x240_spi_panel() {
+        let config = DisplayDriverFactory::default_config_for(&DriverKind::SharpMemory);
+
+        assert!(matches!(config.driver, Some(DriverKind::SharpMemory)));
+        assert_eq!(config.width, Some(400));
+        assert_eq!(config.height, Some(240));
+
+        match config.bus {
+            Some(BusConfig::Spi { speed_hz, cs_pin, .. }) => {
+                assert!(cs_pin.is_some(), "SCS needs its own GPIO");
+                assert_eq!(speed_hz, Some(2_000_000), "datasheet clock ceiling");
+            }
+            other => panic!("expected an SPI bus, got {:?}", other),
+        }
+
+        assert!(DisplayDriverFactory::validate_config(&config).is_ok());
     }
 }

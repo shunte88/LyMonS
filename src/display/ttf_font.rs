@@ -11,9 +11,9 @@
  *
  *  Anti-aliasing is handled via the `BlendCoverage` trait, which maps
  *  0.0–1.0 coverage to a pixel color appropriate for the target depth:
- *    BinaryColor  — threshold at 0.5 (crisp, no intermediate values)
- *    Gray4        — full 16-level grayscale (smooth sub-pixel rendering)
- *    Rgb565       — per-channel scaling (blends against black background)
+ *    BinaryColor  - threshold at 0.5 (crisp, no intermediate values)
+ *    Gray4        - full 16-level grayscale (smooth sub-pixel rendering)
+ *    Rgb565       - per-channel scaling (blends against black background)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -51,9 +51,9 @@ struct CachedGlyph {
 /// Blend a 0.0–1.0 coverage value into a typed pixel color.
 ///
 /// Each color depth has its own AA strategy:
-/// - `BinaryColor` — 1-bit threshold, no blending
-/// - `Gray4`       — full 4-bit grayscale, maximally smooth on gray OLEDs
-/// - `Rgb565`      — per-channel scale (assumes black background)
+/// - `BinaryColor` - 1-bit threshold, no blending
+/// - `Gray4`       - full 4-bit grayscale, maximally smooth on gray OLEDs
+/// - `Rgb565`      - per-channel scale (assumes black background)
 pub trait BlendCoverage: PixelColor + Copy {
     fn blend(color: Self, coverage: f32) -> Self;
 }
@@ -227,7 +227,7 @@ impl TtfFont {
                 })
             }
             None => {
-                // Whitespace or non-printable — no pixels, but advance is known.
+                // Whitespace or non-printable - no pixels, but advance is known.
                 Some(CachedGlyph {
                     bitmap:   Vec::new(),
                     width:    0,
@@ -242,9 +242,9 @@ impl TtfFont {
 
     /// Render `text` to `target` using anti-aliasing appropriate for `D::Color`.
     ///
-    /// - `x`          — left edge of the text run (cursor start position)
-    /// - `baseline_y` — vertical baseline position (same convention as `MonoTextStyle`)
-    /// - `color`      — foreground color; coverage-blended per pixel
+    /// - `x`          - left edge of the text run (cursor start position)
+    /// - `baseline_y` - vertical baseline position (same convention as `MonoTextStyle`)
+    /// - `color`      - foreground color; coverage-blended per pixel
     ///
     /// The caller is responsible for clipping `target` to the desired bounds before
     /// calling this function (e.g. `target.clipped(&field.bounds)`).

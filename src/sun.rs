@@ -155,7 +155,7 @@ pub struct MoonTimes {
 }
 
 /// Moon rise/set times for a specific date using a simplified Meeus algorithm.
-/// Accuracy is typically within ±10 minutes — adequate for a display.
+/// Accuracy is typically within ±10 minutes - adequate for a display.
 pub fn moon_times_for_date(lat_deg: f64, lon_deg: f64, date: NaiveDate) -> MoonTimes {
     // Days from J2000.0 (noon UTC 2000-01-01) to noon on the target date.
     let j2000 = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();

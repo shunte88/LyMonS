@@ -7,10 +7,10 @@
  *  SVG-based clock font loader.
  *
  *  Each font lives in `./data/{font}.zip` and contains 13 SVG files:
- *    {font}_0.svg … {font}_9.svg  — digits
- *    {font}_colon.svg             — colon separator
- *    {font}_space.svg             — blank (for blinking colon)
- *    {font}_minus.svg             — minus sign
+ *    {font}_0.svg … {font}_9.svg  - digits
+ *    {font}_colon.svg             - colon separator
+ *    {font}_space.svg             - blank (for blinking colon)
+ *    {font}_minus.svg             - minus sign
  *
  *  All SVGs have a 25×44 viewBox.  Characters are rendered at load time
  *  to a 1bpp packed pixel mask at the display-appropriate size:
@@ -75,7 +75,7 @@ pub enum ClockDigitLayout {
 ///   Gray4       → BT.601 luma * alpha/255 → 0-15
 ///   Rgb565      → R>>3, G>>2, B>>3, premultiplied by alpha
 ///
-/// Owns all pixel data — no lifetime parameter.
+/// Owns all pixel data - no lifetime parameter.
 pub struct ClockFontData {
     pub digit_width:  u32,
     pub digit_height: u32,
@@ -196,7 +196,7 @@ pub fn set_clock_font(font_name: &str, display_width: u32, display_height: u32) 
     let (mut width, mut height) = if display_height > 70 { SIZE_LARGE } else { SIZE_NORMAL };
 
     // Square panels stack HH over MM, so the digit box comes from the panel
-    // itself — a third of each axis — and the width-fit rule below never
+    // itself - a third of each axis - and the width-fit rule below never
     // applies.  Checked first so a square display doesn't warn about a fit it
     // was never going to use (SH1107 128×128 sized 60 wide, warned, scaled,
     // then had both values overwritten here).
@@ -223,7 +223,7 @@ pub fn set_clock_font(font_name: &str, display_width: u32, display_height: u32) 
             }
         })
         .unwrap_or_else(|| {
-            warn!("7seg zip also missing — using blank glyphs");
+            warn!("7seg zip also missing - using blank glyphs");
             Default::default()
         });
 
@@ -252,7 +252,7 @@ mod tests {
                 "expected scale-down from {}, got {}", SIZE_LARGE.0, f.digit_width);
     }
 
-    /// The classic 128×64 panel fits SIZE_NORMAL exactly — no scaling, no stacking.
+    /// The classic 128×64 panel fits SIZE_NORMAL exactly - no scaling, no stacking.
     #[test]
     fn standard_128x64_is_unscaled() {
         let f = set_clock_font("7seg", 128, 64);

@@ -4,7 +4,7 @@
  *  LyMonS - worth the squeeze
  *  (c) 2020-26 Stuart Hunter
  *
- *  Library crate root — module declarations.
+ *  Library crate root - module declarations.
  */
 
 pub mod config;

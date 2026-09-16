@@ -1,16 +1,16 @@
 #
 #  assets/layout.yaml
 #
-#  LyMonS — Declarative layout templates
+#  LyMonS - Declarative layout templates
 #
 #  Defines reusable components and page templates evaluated at runtime by
 #  layout_resolver::LayoutResolver against a concrete DisplayProfile.
 #
 #  Expression variables available in component fields:
-#    display.width  display.height   — full display dimensions
-#    parent.width   parent.height    — region dimensions allocated by the template
-#    font_height                     — character_size.height of the field's font (0 if none)
-#    <name>.top  .bottom  .left  .right  .width  .height  — prior field geometry
+#    display.width  display.height   - full display dimensions
+#    parent.width   parent.height    - region dimensions allocated by the template
+#    font_height                     - character_size.height of the field's font (0 if none)
+#    <name>.top  .bottom  .left  .right  .width  .height  - prior field geometry
 #
 #  Arithmetic: + - * / with integer truncation; parentheses; unary minus.
 #
@@ -22,7 +22,7 @@
 
 components:
 
-  # Astral panel — right side of wide displays only (placed at x=0 full width so
+  # Astral panel - right side of wide displays only (placed at x=0 full width so
   # expressions can use display.width for anchoring).
   # All x positions are anchored from (display.width / 2) - 8 -- (120 on 256px).
   weather_astral_panel:
@@ -91,7 +91,7 @@ components:
         font: font_5x8
         horizontal_alignment: Center
         fg_color: Cyan
-      # Moonphase — multi-line text below
+      # Moonphase - multi-line text below
       # glyph will be centered above this text
       - name: moonphase_text
         type: label
@@ -102,7 +102,7 @@ components:
         font: font_5x8
         horizontal_alignment: Center
         fg_color: Yellow
-      # Moonphase — 34x34 glyph center-justified 
+      # Moonphase - 34x34 glyph center-justified 
       # with multi-line text below
       - name: moonphase_svg
         type: custom

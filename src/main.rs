@@ -65,7 +65,7 @@ async fn unified_display_loop(
     // Get MAC address for LMS discovery
     let mac_addr = get_mac_addr();
 
-    // Connect to LMS server — shows warning and retries every 5s until connected
+    // Connect to LMS server - shows warning and retries every 5s until connected
     let mut lms_arc = {
         let mut display_lock = display.lock().await;
         establish_lms_connection(&mut *display_lock, player_name, mac_addr.as_str()).await
@@ -144,9 +144,9 @@ async fn unified_display_loop(
 
         let mut lms_guard = lms_arc.lock().await;
 
-        // Mid-session health check — reconnect if server/player connection lost
+        // Mid-session health check - reconnect if server/player connection lost
         if !lms_guard.is_healthy() {
-            warn!("LMS connection unhealthy — reconnecting...");
+            warn!("LMS connection unhealthy - reconnecting...");
             lms_guard.stop_polling();
             drop(lms_guard);
             lms_arc = establish_lms_connection(
@@ -311,7 +311,7 @@ async fn render_for_duration(display: &mut display::DisplayManager, duration: Du
 
 /// Connects to the LMS server and locates the configured player.
 /// Shows appropriate warnings and retries every 5 seconds until both succeed.
-/// Reusable at startup and after mid-session connection loss — single implementation.
+/// Reusable at startup and after mid-session connection loss - single implementation.
 async fn establish_lms_connection(
     display: &mut display::DisplayManager,
     name_filter: &str,
@@ -865,7 +865,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let raw_w = display_config.width .unwrap_or(default_w);
         let raw_h = display_config.height.unwrap_or(default_h);
 
-        // ST7789 / ST7796S ship in fixed sets of panel sizes — validate and
+        // ST7789 / ST7796S ship in fixed sets of panel sizes - validate and
         // normalise (long axis becomes width). Other drivers carry their
         // config straight through.
         let (width, height) = {
@@ -1012,7 +1012,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             display_manager.set_astral_service(astral);
         }
 
-        // Load TTF text_font (graceful — MonoFont used if zip not found)
+        // Load TTF text_font (graceful - MonoFont used if zip not found)
         let text_font_name = text_font.clone();
         let font_size = text_font_size.clamp(9.0, 30.0);
         let zip_path = format!("./data/{}-text.zip", text_font_name);
@@ -1162,7 +1162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         display_manager.set_astral_service(astral);
     }
 
-    // Load TTF text font (graceful — MonoFont used if zip not found)
+    // Load TTF text font (graceful - MonoFont used if zip not found)
     let text_font_name = text_font.clone();
     let font_size = text_font_size.clamp(9.0, 30.0);
     let zip_path = format!("./data/{}-text.zip", text_font_name);
@@ -1201,7 +1201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else{
         info!("LMS communication...");
     }
-    // Connect to LMS server — shows warning and retries every 5s until connected
+    // Connect to LMS server - shows warning and retries every 5s until connected
     let mut lms_arc = establish_lms_connection(
         &mut display_manager, name_filter, mac_addr.as_str()
     ).await;
@@ -1249,9 +1249,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Acquire a lock on the LMSServer instance to access its methods and data
                 let mut lms_guard = lms_arc.lock().await;
 
-                // Mid-session health check — reconnect if server/player connection lost
+                // Mid-session health check - reconnect if server/player connection lost
                 if !lms_guard.is_healthy() {
-                    warn!("LMS connection unhealthy — reconnecting...");
+                    warn!("LMS connection unhealthy - reconnecting...");
                     lms_guard.stop_polling();
                     drop(lms_guard);
                     lms_arc = establish_lms_connection(
