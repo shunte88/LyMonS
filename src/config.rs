@@ -58,6 +58,10 @@ pub struct DisplayConfig {
     pub driver:     Option<DriverKind>,
     pub bus:        Option<BusConfig>,
     pub emulated:   Option<bool>,
+    /// ST7789 only: send Pimoroni's power/gamma register values after init.
+    /// Unset = on for 240x240 panels (Pirate Audio), off otherwise.
+    #[serde(default)]
+    pub panel_tuning: Option<bool>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -352,6 +356,7 @@ fn merge_display(dst: &mut DisplayConfig, src: DisplayConfig) {
     }
     take!(width); take!(height); take!(rotate_deg); take!(invert);
     take!(brightness); take!(driver); take!(bus); take!(emulated);
+    take!(panel_tuning);
 }
 
 fn merge_weather(dst: &mut WeatherConfig, src: WeatherConfig) {

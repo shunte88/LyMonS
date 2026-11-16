@@ -190,14 +190,7 @@ impl DisplayDriverFactory {
 
             #[cfg(feature = "driver-st7789")]
             (DriverKind::St7789, BusConfig::Spi { bus, dc_pin, rst_pin, .. }) => {
-                Ok(Box::new(St7789Driver::new_spi(
-                    bus,
-                    *dc_pin,
-                    rst_pin.ok_or_else(|| DisplayFactoryError::ConfigError(
-                        "ST7789 requires rst_pin".to_string()
-                    ))?,
-                    config
-                )?))
+                Ok(Box::new(St7789Driver::new_spi(bus, *dc_pin, *rst_pin, config)?))
             }
 
             #[cfg(feature = "driver-st7796s")]

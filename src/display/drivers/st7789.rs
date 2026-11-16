@@ -18,13 +18,19 @@
  *    MOSI → GPIO 10 (MOSI, pin 19)
  *    CS   → GPIO 8  (CE0,  pin 24)
  *    DC   → GPIO 24 (pin 18) - Data/Command select (HIGH=data, LOW=command)
- *    RST  → GPIO 25 (pin 22) - Active-low reset
+ *    RST  → GPIO 25 (pin 22) - Active-low reset (optional, see below)
  *    BL   → GPIO 18 (pin 12) - Backlight PWM (optional; tie HIGH for max)
  *
+ *  RST is optional.  Some boards (e.g. Pimoroni Pirate Audio, 240x240 on
+ *  /dev/spidev0.1, DC=GPIO 9, BL=GPIO 13) tie RST to 3.3V; leave `rst_pin`
+ *  unset for those.  A software reset (SWRESET 0x01) is sent on every init
+ *  regardless, after the hardware pulse when an RST line is wired.
+ *
  *  Pixel format: Rgb565 big-endian (2 bytes per pixel, R5 G6 B5).
- *  Init sequence follows the mipidsi ST7789 model (MIPI DCS):
- *    ExitSleepMode  (0x11)  → 120ms delay
- *    SetAddressMode (0x36)  → 0x00 (normal orientation)
+ *  Init sequence is the mipidsi ST7789 model (MIPI DCS):
+ *    SoftReset      (0x01)  → 150ms delay
+ *    ExitSleepMode  (0x11)
+ *    SetAddressMode (0x36)  → MADCTL for the configured rotation
  *    SetInvertMode  (0x21)  → panel is inverted by default; invert to correct
  *    SetPixelFormat (0x3A)  → 0x55 (Rgb565)
  *    EnterNormalMode(0x13)
@@ -45,12 +51,19 @@
  *
  */
 
-#![allow(dead_code)] // ST7789 driver helpers; some methods reserved for future display modes
-
 use embedded_graphics::prelude::*;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::geometry::Size;
+
+use embedded_hal::digital::OutputPin;
+use linux_embedded_hal::{CdevPin, Delay, SpidevDevice};
+use linux_embedded_hal::spidev::{SpiModeFlags, SpidevOptions};
+use lymons_gpio as gpio;
+use mipidsi::{Builder, NoResetPin};
+use mipidsi::interface::{Interface, SpiInterface};
+use mipidsi::models::ST7789;
+use mipidsi::options::{ColorInversion, Orientation, Rotation};
 
 use crate::config::{DisplayConfig, BusConfig};
 use crate::display::error::DisplayError;
@@ -69,6 +82,29 @@ pub const DEFAULT_DC_PIN: u32 = 24;
 /// Default RST (Reset) GPIO pin (BCM)
 pub const DEFAULT_RST_PIN: u32 = 25;
 
+/// Bytes mipidsi batches per SPI write.  Matches the spidev default `bufsiz`
+/// (4096); a larger value fails with EMSGSIZE unless the module is reloaded.
+const SPI_CHUNK: usize = 4096;
+
+/// Pimoroni's power and gamma values for their 240x240 ST7789 panels (Pirate
+/// Audio, 1.3" SPI LCD), from `pimoroni/st7789-python`.  Sent after the
+/// mipidsi init, which leaves these at controller reset defaults.
+const PIMORONI_TUNING: &[(u8, &[u8])] = &[
+    (0xB2, &[0x0C, 0x0C, 0x00, 0x33, 0x33]),  // PORCTRL porch setting
+    (0xB7, &[0x14]),                          // GCTRL gate voltages
+    (0xBB, &[0x37]),                          // VCOMS
+    (0xC0, &[0x2C]),                          // LCMCTRL
+    (0xC2, &[0x01]),                          // VDVVRHEN
+    (0xC3, &[0x12]),                          // VRHS
+    (0xC4, &[0x20]),                          // VDVS
+    (0xD0, &[0xA4, 0xA1]),                    // PWCTRL1
+    (0xC6, &[0x0F]),                          // FRCTRL2 60 Hz
+    (0xE0, &[0xD0, 0x04, 0x0D, 0x11, 0x13, 0x2B, 0x3F,
+             0x54, 0x4C, 0x18, 0x0D, 0x0B, 0x1F, 0x23]),  // PVGAMCTRL
+    (0xE1, &[0xD0, 0x04, 0x0C, 0x11, 0x13, 0x2C, 0x3F,
+             0x44, 0x51, 0x2F, 0x1F, 0x1F, 0x20, 0x23]),  // NVGAMCTRL
+];
+
 /// Supported ST7789 panel sizes in `(long_axis, short_axis)` form.
 pub const SUPPORTED_SIZES: &[(u32, u32)] = &[
     (320, 240),  // layout done, inclusive easter eggs
@@ -79,15 +115,21 @@ pub const SUPPORTED_SIZES: &[(u32, u32)] = &[
     (160, 80),   // layout done, eggs are a mess - fix if we get a ticket
 ];
 
-/// ST7789 display driver (320×170 Rgb565, SPI only, stub implementation)
+type St7789Display = mipidsi::Display<SpiInterface<'static, SpidevDevice, CdevPin>, ST7789, NoResetPin>;
+
+/// ST7789 display driver (Rgb565, SPI only)
 ///
-/// Full-colour 16-bit per pixel (Rgb565) at 320×170 resolution.
-/// Uses MIPI DCS commands - no I2C mode.
+/// Full-colour 16-bit per pixel (Rgb565). Uses MIPI DCS commands via mipidsi.
 pub struct St7789Driver {
-    /// Framebuffer for drawing operations (Rgb565)
+    /// Framebuffer for drawing operations (Rgb565), landscape (long axis first)
     framebuffer: VarFrameBuf<Rgb565>,
     /// Display capabilities
     capabilities: DisplayCapabilities,
+    /// Panel handle
+    display: St7789Display,
+    /// Hardware reset line, held high for the driver's lifetime.  `None` when
+    /// RST is strapped high on the board (Pirate Audio).
+    _rst: Option<CdevPin>,
 }
 
 impl St7789Driver {
@@ -110,6 +152,7 @@ impl St7789Driver {
             invert: Some(false),
             rotate_deg: Some(0),
             emulated: Some(false),
+            panel_tuning: None,
         }
     }
 
@@ -135,6 +178,33 @@ impl St7789Driver {
         }
     }
 
+    /// Offset of the visible panel inside the controller's 240x320 RAM, in
+    /// native (portrait, rotation 0) coordinates.  Panels are centered in RAM
+    /// except 240x240, which sits at row 0; mipidsi mirrors the offset when
+    /// the panel is rotated.
+    // ponytail: 160x80 offset is the centered guess, unverified on hardware.
+    fn panel_offset(long: u32, short: u32) -> (u16, u16) {
+        if long == short {
+            return (0, 0);
+        }
+        (((240 - short) / 2) as u16, ((320 - long) / 2) as u16)
+    }
+
+    /// Controller rotation for a landscape framebuffer.  The panel is native
+    /// portrait, so non-square panels start a quarter turn round; a further
+    /// quarter turn would make them portrait, which the layouts do not cover.
+    fn hw_rotation(width: u32, height: u32, rotate_deg: u16) -> Result<Rotation, DisplayError> {
+        let base = if width == height { 0 } else { 90 };
+        if width != height && !rotate_deg.is_multiple_of(180) {
+            return Err(DisplayError::InvalidConfiguration(format!(
+                "ST7789: rotate_deg {} would make a {}x{} panel portrait; use 0 or 180",
+                rotate_deg, width, height
+            )));
+        }
+        Rotation::try_from_degree(base + rotate_deg as i32)
+            .map_err(|_| DisplayError::InvalidRotation(rotate_deg))
+    }
+
     fn make_capabilities(width: u32, height: u32) -> DisplayCapabilities {
         DisplayCapabilities {
             width,
@@ -143,31 +213,32 @@ impl St7789Driver {
             interface: BusInterface::Spi(SpiInfo {
                 max_speed_hz: DEFAULT_SPI_SPEED_HZ,
                 dc_pin_desc: "Data/Command select - HIGH=data, LOW=command",
-                rst_pin_desc: "Active-low reset - pulse low ≥10µs to reset controller",
-                rst_required: true,
+                rst_pin_desc: "Optional active-low reset; SWRESET is sent when absent",
+                rst_required: false,
             }),
             supports_rotation: true,
             max_fps: 60,
-            supports_brightness: true,
+            supports_brightness: false,
             supports_invert: true,
             driver_name: "st7789".to_string(),
         }
     }
 
-    /// Create a new ST7789 driver using SPI
+    /// Create a new ST7789 driver using SPI and run the panel init sequence.
     ///
     /// # Arguments
     /// * `spi_bus_path` - Path to SPI device (e.g. "/dev/spidev0.0")
-    /// * `dc_pin`       - Data/Command GPIO pin (BCM), typically 24
-    /// * `rst_pin`      - Reset GPIO pin (BCM), typically 25
+    /// * `dc_pin`       - Data/Command GPIO pin, typically 24
+    /// * `rst_pin`      - Reset GPIO pin, typically 25; `None` when RST is
+    ///   tied high on the board
     /// * `config`       - Display configuration
     pub fn new_spi(
         spi_bus_path: &str,
         dc_pin: u32,
-        rst_pin: u32,
+        rst_pin: Option<u32>,
         config: &DisplayConfig,
     ) -> Result<Self, DisplayError> {
-        info!("Initializing ST7789 SPI on {} DC={} RST={}",
+        info!("Initializing ST7789 SPI on {} DC={} RST={:?}",
               spi_bus_path, dc_pin, rst_pin);
 
         let raw_w = config.width.unwrap_or(320);
@@ -177,29 +248,86 @@ impl St7789Driver {
             info!("ST7789: normalised input {}x{} → {}x{} (long axis first)",
                   raw_w, raw_h, width, height);
         }
+        let rotation = Self::hw_rotation(width, height, config.rotate_deg.unwrap_or(0))?;
 
-        // TODO: open SPI bus at DEFAULT_SPI_SPEED_HZ, configure DC/RST GPIO pins
-        // TODO: send ST7789 initialisation sequence (MIPI DCS):
-        //   - Assert RST low ≥10µs, then release high; wait 5ms
-        //   - ExitSleepMode  (0x11); wait 120ms
-        //   - SetAddressMode (0x36, 0x00)  - no flip, no mirror
-        //   - SetInvertMode  (0x21)        - ST7789 panel is normally inverted
-        //   - SetPixelFormat (0x3A, 0x55)  - Rgb565
-        //   - SetColumnAddr  (0x2A, 0x00, 0x00, 0x01, 0x3F)  - 0..319
-        //   - SetRowAddr     (0x2B, 0x00, 0x00, 0x00, 0xA9)  - 0..169
-        //   - EnterNormalMode (0x13)
-        //   - SetDisplayOn   (0x29)
-        //
-        // Using mipidsi 0.10.0 as reference (not stored in struct due to generics):
-        //   let di = SpiInterface::new(spi, dc_pin, &mut spi_buffer);
-        //   let mut display = Builder::new(ST7789, di)
-        //       .display_size(320, 170)
-        //       .invert_colors(ColorInversion::Inverted)
-        //       .init(&mut delay)?;
+        let (speed_hz, gpio_chip) = match config.bus.as_ref() {
+            Some(BusConfig::Spi { speed_hz, gpio_chip, .. }) =>
+                (speed_hz.unwrap_or(DEFAULT_SPI_SPEED_HZ), gpio_chip.clone()),
+            _ => (DEFAULT_SPI_SPEED_HZ, None),
+        };
+
+        let mut spi = SpidevDevice::open(spi_bus_path)
+            .map_err(|e| DisplayError::SpiError(format!("Failed to open {}: {:?}", spi_bus_path, e)))?;
+        let options = SpidevOptions::new()
+            .bits_per_word(8)
+            .max_speed_hz(speed_hz)
+            .mode(SpiModeFlags::SPI_MODE_0)
+            .build();
+        spi.0.configure(&options)
+            .map_err(|e| DisplayError::SpiError(format!("Failed to configure SPI: {:?}", e)))?;
+
+        let mut chip = gpio::open_header_chip(gpio_chip.as_deref())
+            .map_err(|e| DisplayError::GpioError(e.into_message()))?;
+        let dc = gpio::request_output(&mut chip, dc_pin, 0, "lymons-st7789-dc")
+            .map_err(|e| DisplayError::GpioError(e.into_message()))?;
+
+        let mut delay = Delay;
+
+        // Hardware reset pulse when wired.  mipidsi is never handed the pin,
+        // so it always follows up with SWRESET (0x01): the only reset boards
+        // with RST strapped high get.
+        let rst = match rst_pin {
+            Some(pin) => {
+                let mut rst = gpio::request_output(&mut chip, pin, 1, "lymons-st7789-rst")
+                    .map_err(|e| DisplayError::GpioError(e.into_message()))?;
+                rst.set_low().ok();
+                std::thread::sleep(std::time::Duration::from_micros(20));
+                rst.set_high().ok();
+                std::thread::sleep(std::time::Duration::from_millis(120));
+                Some(rst)
+            }
+            None => {
+                info!("ST7789: no rst_pin configured, relying on software reset");
+                None
+            }
+        };
+
+        // SpiInterface borrows its batch buffer; the driver lives for the
+        // whole run, so leaking one 4 KiB buffer is the simplest 'static.
+        let buffer: &'static mut [u8] = Box::leak(vec![0u8; SPI_CHUNK].into_boxed_slice());
+        let di = SpiInterface::new(spi, dc, buffer);
+
+        let (offset_x, offset_y) = Self::panel_offset(width, height);
+        let inversion = if config.invert.unwrap_or(false) {
+            ColorInversion::Normal
+        } else {
+            ColorInversion::Inverted
+        };
+
+        let mut display = Builder::new(ST7789, di)
+            .display_size(height as u16, width as u16) // native portrait
+            .display_offset(offset_x, offset_y)
+            .invert_colors(inversion)
+            .orientation(Orientation::new().rotate(rotation))
+            .init(&mut delay)
+            .map_err(|e| DisplayError::InitializationFailed(format!("ST7789 init: {:?}", e)))?;
+
+        if config.panel_tuning.unwrap_or(width == 240 && height == 240) {
+            info!("ST7789: applying Pimoroni power/gamma tuning (display.panel_tuning)");
+            // SAFETY: power and gamma registers only; mipidsi tracks
+            // addressing and MADCTL state, which these do not touch.
+            let di = unsafe { display.dcs() };
+            for (cmd, args) in PIMORONI_TUNING {
+                di.send_command(*cmd, args)
+                    .map_err(|e| DisplayError::SpiError(format!("ST7789 tuning 0x{:02X}: {:?}", cmd, e)))?;
+            }
+        }
 
         Ok(Self {
             framebuffer: VarFrameBuf::new(width, height, Rgb565::BLACK),
             capabilities: Self::make_capabilities(width, height),
+            display,
+            _rst: rst,
         })
     }
 }
@@ -210,20 +338,20 @@ impl DisplayDriver for St7789Driver {
     fn capabilities(&self) -> &DisplayCapabilities { &self.capabilities }
 
     fn init(&mut self) -> Result<(), DisplayError> {
-        // TODO: send ST7789 init sequence (see new_spi comments above)
-        Ok(())
+        // The panel is brought up in new_spi; start from a black screen.
+        DisplayDriver::clear(self)
     }
 
     fn set_brightness(&mut self, _value: u8) -> Result<(), DisplayError> {
-        // TODO: PWM backlight on BL pin (GPIO 18 typical)
-        // value 0 = off, 255 = full brightness
+        // Backlight is a separate GPIO/PWM line, not a controller command.
         Ok(())
     }
 
     fn flush(&mut self) -> Result<(), DisplayError> {
-        // TODO: set column/row window (0x2A/0x2B), then MemoryWrite (0x2C)
-        // Stream self.framebuffer as big-endian Rgb565 bytes via SPI
-        Ok(())
+        let (w, h) = (self.capabilities.width as u16, self.capabilities.height as u16);
+        self.display
+            .set_pixels(0, 0, w - 1, h - 1, self.framebuffer.as_slice().iter().copied())
+            .map_err(|e| DisplayError::SpiError(format!("ST7789 flush: {:?}", e)))
     }
 
     fn clear(&mut self) -> Result<(), DisplayError> {
@@ -252,19 +380,16 @@ impl DisplayDriver for St7789Driver {
         self.flush()
     }
 
-    fn set_invert(&mut self, inverted: bool) -> Result<(), DisplayError> {
-        // TODO: send INVON (0x21) or INVOFF (0x20) command via SPI
-        let _ = inverted;
+    fn set_invert(&mut self, _inverted: bool) -> Result<(), DisplayError> {
+        // Applied once at init from `config.invert`; mipidsi has no runtime toggle.
         Ok(())
     }
 
     fn set_rotation(&mut self, degrees: u16) -> Result<(), DisplayError> {
-        if degrees != 0 && degrees != 90 && degrees != 180 && degrees != 270 {
-            return Err(DisplayError::InvalidRotation(degrees));
-        }
-        // TODO: send SetAddressMode (0x36) with appropriate MADCTL byte:
-        //   0° = 0x00, 90° = 0x60, 180° = 0xC0, 270° = 0xA0
-        Ok(())
+        let (w, h) = (self.capabilities.width, self.capabilities.height);
+        let rotation = Self::hw_rotation(w, h, degrees)?;
+        self.display.set_orientation(Orientation::new().rotate(rotation))
+            .map_err(|e| DisplayError::SpiError(format!("ST7789 rotation: {:?}", e)))
     }
 }
 
@@ -294,5 +419,30 @@ impl DrawTarget for St7789Driver {
 impl OriginDimensions for St7789Driver {
     fn size(&self) -> Size {
         Size::new(self.capabilities.width, self.capabilities.height)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_offsets_fit_controller_ram() {
+        assert_eq!(St7789Driver::panel_offset(240, 240), (0, 0));   // Pirate Audio
+        assert_eq!(St7789Driver::panel_offset(320, 170), (35, 0));
+        assert_eq!(St7789Driver::panel_offset(240, 135), (52, 40)); // TTGO T-Display
+        assert_eq!(St7789Driver::panel_offset(280, 240), (0, 20));
+        for &(long, short) in SUPPORTED_SIZES {
+            let (x, y) = St7789Driver::panel_offset(long, short);
+            assert!(short + x as u32 <= 240 && long + y as u32 <= 320, "{}x{}", long, short);
+        }
+    }
+
+    #[test]
+    fn rotation_keeps_landscape() {
+        assert_eq!(St7789Driver::hw_rotation(240, 240, 90).unwrap(), Rotation::Deg90);
+        assert_eq!(St7789Driver::hw_rotation(320, 170, 0).unwrap(), Rotation::Deg90);
+        assert_eq!(St7789Driver::hw_rotation(320, 170, 180).unwrap(), Rotation::Deg270);
+        assert!(St7789Driver::hw_rotation(320, 170, 90).is_err());
     }
 }

@@ -98,6 +98,7 @@ impl Sh1106Driver {
             invert: Some(false),
             rotate_deg: Some(0),
             emulated: Some(false),
+            panel_tuning: None,
         }
     }
 
@@ -119,6 +120,7 @@ impl Sh1106Driver {
             invert: Some(false),
             rotate_deg: Some(0),
             emulated: Some(false),
+            panel_tuning: None,
         }
     }
 

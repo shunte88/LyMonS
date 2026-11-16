@@ -105,6 +105,7 @@ impl St7796sDriver {
             invert: Some(false),
             rotate_deg: Some(0),
             emulated: Some(false),
+            panel_tuning: None,
         }
     }
 

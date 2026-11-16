@@ -389,6 +389,50 @@ Many 128×64 SH1107 modules are a portrait 64×128 panel mounted sideways. Start
 at `rotate_deg: 0`; if the image reads sideways, try `90`, then `270`. The
 128×128 panels are square and need no rotation.
 
+### ST7789 wiring
+
+`rst_pin` is optional. Boards that tie RST to 3.3V, such as the Pimoroni
+Pirate Audio HAT, should leave it out; the driver sends a software reset
+(SWRESET) on every start whether or not RST is wired. Pirate Audio example:
+
+```yaml
+display:
+  driver: st7789
+  width:  240
+  height: 240
+  rotate_deg: 0        # 0 | 90 | 180 | 270 on square panels, 0 | 180 otherwise
+  bus:
+    bus: /dev/spidev0.1  # CE1
+    dc_pin: 9
+    speed_hz: 80000000   # Pimoroni's own examples run at 80 MHz
+    # no rst_pin: RST is tied high on this board
+```
+
+240x240 panels also get Pimoroni's power and gamma register values (VCOM,
+VRH, positive/negative gamma) after init. Pirate Audio has no HAT ID EEPROM,
+so this keys off panel size, not detection. Override either way with
+`panel_tuning` in the `display:` block:
+
+```yaml
+display:
+  panel_tuning: false  # unset = on for 240x240, off for other sizes
+```
+
+`rotate_deg: 0` is upright on Pirate Audio. Pimoroni's Python examples pass
+`rotation=90`, but their library applies that on top of its own MADCTL, so the
+net result is our 0; do not copy their value.
+
+LyMonS does not drive the backlight. On Pirate Audio it is GPIO 13, which
+idles low at boot, so add this to `config.txt` (the same mechanism Pimoroni
+uses for the DAC enable on GPIO 25):
+
+```
+gpio=13=op,dh
+```
+
+If the image is shifted or mirrored, try another `rotate_deg`. If colors look
+like a photo negative, set `invert: true`.
+
 ### SHARP Memory LCD wiring
 
 SHARP Memory (Memory In Pixel) panels are not OLED controllers and their pins
