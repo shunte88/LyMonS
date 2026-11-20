@@ -7,11 +7,12 @@
  *  Cover art fetch, cache, and Rgb565 conversion.
  *
  *  Only active on large Rgb565 displays (ST7789 320×170).
- *  Uses the LMS `coverid` field as the cache key - one file per track,
- *  stored as a JPEG in `~/.cache/lymons/coverart/`.
+ *  Uses the LMS `coverid` plus the target size as the cache key - one file
+ *  per track and size, stored as `{coverid}_{size}.jpg` in
+ *  `~/.cache/lymons/coverart/`.
  *
  *  Pipeline (cache miss):
- *    fetch JPEG from LMS  →  decode  →  resize 160×160 Lanczos  →
+ *    fetch JPEG from LMS  →  decode  →  resize to field size (Lanczos)  →
  *    save JPEG to cache   →  convert to Rgb565  →  return CoverArt
  *
  *  Pipeline (cache hit):
@@ -45,10 +46,10 @@ use image::{DynamicImage, ImageFormat};
 use log::{debug, info, warn};
 use thiserror::Error;
 
-/// Target cover art dimensions (pixels, square) - matches the ST7789 cover_art field size.
+/// Fallback cover art edge (pixels) when the layout has no `cover_art` field.
 pub const COVER_SIZE: u32 = 120;
 
-/// JPEG quality for cached files (0–100).
+/// JPEG quality for cached files (0 to 100).
 const CACHE_JPEG_QUALITY: u8 = 75;
 
 // ── Error ─────────────────────────────────────────────────────────────────────
@@ -67,18 +68,19 @@ pub enum CoverArtError {
 
 // ── CoverArt ─────────────────────────────────────────────────────────────────
 
-/// COVER_SIZE × COVER_SIZE pixels in big-endian Rgb565 format.
+/// Square cover art, `size` × `size` pixels in big-endian Rgb565 format.
 ///
 /// Ready to blit to an ST7789 display via `draw_to()` or consumed as raw bytes
 /// by `write_buffer()`.
 pub struct CoverArt {
-    /// Big-endian Rgb565 bytes: `COVER_SIZE * COVER_SIZE * 2` bytes total.
+    /// Big-endian Rgb565 bytes: `size * size * 2` bytes total.
     pixels: Vec<u8>,
+    size: u32,
 }
 
 impl CoverArt {
-    pub fn width() -> u32 { COVER_SIZE }
-    pub fn height() -> u32 { COVER_SIZE }
+    /// Edge length in pixels (the art is square).
+    pub fn size(&self) -> u32 { self.size }
 
     /// Raw big-endian Rgb565 bytes (2 bytes per pixel, row-major).
     pub fn as_bytes(&self) -> &[u8] { &self.pixels }
@@ -88,13 +90,14 @@ impl CoverArt {
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        let raw = ImageRaw::<Rgb565>::new(&self.pixels, COVER_SIZE);
+        let raw = ImageRaw::<Rgb565>::new(&self.pixels, self.size);
         Image::new(&raw, position).draw(display)
     }
 
     fn from_image(img: DynamicImage) -> Self {
+        let size = img.width();
         let rgb = img.to_rgb8();
-        let mut pixels = Vec::with_capacity((COVER_SIZE * COVER_SIZE * 2) as usize);
+        let mut pixels = Vec::with_capacity((size * size * 2) as usize);
         for p in rgb.pixels() {
             // RGB8 → Rgb565 big-endian
             let r = p[0] >> 3;   // 8-bit → 5-bit
@@ -104,7 +107,7 @@ impl CoverArt {
             pixels.push((word >> 8) as u8);
             pixels.push(word as u8);
         }
-        Self { pixels }
+        Self { pixels, size }
     }
 }
 
@@ -149,15 +152,18 @@ impl CoverArtCache {
     /// * `lms_host`   - LMS server IP/hostname (e.g. `"192.168.1.25"`)
     /// * `lms_port`   - LMS HTTP port (usually `9000`)
     /// * `player_mac` - Player MAC address (e.g. `"b8:27:eb:70:71:5c"`)
+    /// * `size`       - Edge length to resize to, normally the layout's
+    ///   `cover_art` field
     pub async fn get(
         &self,
         coverid: &str,
         lms_host: &str,
         lms_port: u16,
         player_mac: &str,
+        size: u32,
     ) -> Result<CoverArt, CoverArtError> {
         // ── 1. Cache hit ──────────────────────────────────────────────────────
-        let path = self.cache_path(coverid);
+        let path = self.cache_path(coverid, size);
         if path.exists() {
             debug!("Cover art cache hit: {}", coverid);
             return self.load_from_cache(&path);
@@ -176,19 +182,19 @@ impl CoverArtCache {
                 warn!("Primary cover art URL failed ({}), trying fallback", e);
                 let fallback = format!(
                     "http://{}:{}/music/{}/cover_{}x{}_o",
-                    lms_host, lms_port, coverid, COVER_SIZE, COVER_SIZE
+                    lms_host, lms_port, coverid, size, size
                 );
                 self.fetch_jpeg(&fallback).await?
             }
         };
 
-        self.decode_resize_cache(coverid, &jpeg, &path)
+        self.decode_resize_cache(coverid, &jpeg, &path, size)
     }
 
     /// Purge the cached file for `coverid` (e.g. when the track changes and
     /// the art is no longer needed). No-op if not cached.
-    pub fn evict(&self, coverid: &str) {
-        let path = self.cache_path(coverid);
+    pub fn evict(&self, coverid: &str, size: u32) {
+        let path = self.cache_path(coverid, size);
         if path.exists() {
             if let Err(e) = std::fs::remove_file(&path) {
                 warn!("Could not evict cover art {}: {}", coverid, e);
@@ -205,9 +211,9 @@ impl CoverArtCache {
 
     // ── Private ───────────────────────────────────────────────────────────────
 
-    /// Absolute path for a given `coverid` cache entry.
-    fn cache_path(&self, coverid: &str) -> PathBuf {
-        self.cache_dir.join(format!("{}.jpg", coverid))
+    /// Absolute path for a given `coverid` cache entry at `size`.
+    fn cache_path(&self, coverid: &str, size: u32) -> PathBuf {
+        self.cache_dir.join(format!("{}_{}.jpg", coverid, size))
     }
 
     /// Read a cached JPEG from `path` and decode to Rgb565.
@@ -227,18 +233,19 @@ impl CoverArtCache {
         Ok(bytes.to_vec())
     }
 
-    /// Decode `jpeg`, resize to COVER_SIZE², save to `cache_path`, return Rgb565.
+    /// Decode `jpeg`, resize to `size`², save to `cache_path`, return Rgb565.
     fn decode_resize_cache(
         &self,
         coverid: &str,
         jpeg: &[u8],
         cache_path: &Path,
+        size: u32,
     ) -> Result<CoverArt, CoverArtError> {
         // Decode
         let img = image::load_from_memory(jpeg)?;
 
-        // Resize to COVER_SIZE × COVER_SIZE (Lanczos3 for quality)
-        let resized = img.resize_exact(COVER_SIZE, COVER_SIZE, image::imageops::FilterType::Lanczos3);
+        // Resize to size × size (Lanczos3 for quality)
+        let resized = img.resize_exact(size, size, image::imageops::FilterType::Lanczos3);
 
         // Save to cache as JPEG at controlled quality
         let file = std::fs::File::create(cache_path)?;

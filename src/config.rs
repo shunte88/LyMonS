@@ -116,6 +116,9 @@ pub struct Config {
     pub easter_egg:     Option<String>,
     pub visualizer:     Option<String>,
     pub hist_scheme:    Option<String>,  // "classic" | "ocean" | "fire" | "neon"
+    /// Named layout variant, e.g. "tinkerguy_scroller"; unset = default layouts
+    #[serde(default)]
+    pub layout:         Option<String>,
     pub show_metrics:   Option<bool>,
     pub show_splash:    Option<bool>,
     pub i2c_bus:        Option<String>,
@@ -253,6 +256,10 @@ pub struct Cli {
     #[arg(long = "hist-scheme", value_parser = ["classic","ocean","fire","neon"])]
     pub hist_scheme: Option<String>,
 
+    /// Named layout variant (e.g. tinkerguy_scroller)
+    #[arg(long = "layout")]
+    pub layout: Option<String>,
+
     /// Print fully merged config and exit
     #[arg(long, action = ArgAction::SetTrue)]
     pub dump_config: bool,
@@ -332,6 +339,7 @@ fn merge(dst: &mut Config, src: Config) {
     take!(easter_egg);
     take!(visualizer);
     take!(hist_scheme);
+    take!(layout);
     take!(show_metrics);
     take!(show_splash);
     take!(i2c_bus);     // need to retire this and fold any code under display.bus.bus
@@ -386,6 +394,7 @@ fn apply_cli_overrides(cfg: &mut Config, cli: &Cli) {
     take_opt!(cli.eggs           => cfg.easter_egg);
     take_opt!(cli.viz            => cfg.visualizer);
     take_opt!(cli.hist_scheme    => cfg.hist_scheme);
+    take_opt!(cli.layout         => cfg.layout);
     take_opt!(cli.i2c_bus        => cfg.i2c_bus);
     take_opt!(cli.lat            => cfg.latitude);
     take_opt!(cli.lon            => cfg.longitude);

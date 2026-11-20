@@ -610,12 +610,44 @@ impl DisplayManager {
                 Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end, &year),
             crate::display::framebuffer::FrameBuffer::Rgb565(fb) => {
                 if let (Some(field), Some(art)) = (page.get_field("cover_art"), cover_art) {
+                    // Centered and clipped: a square art covers a non-square field.
+                    let half = (art.size() / 2) as i32;
+                    let pos = field.bounds.center() - Point::new(half, half);
                     let mut clipped = fb.clipped(&field.bounds);
-                    art.draw_to(&mut clipped, field.position())
+                    art.draw_to(&mut clipped, pos)
                         .map_err(|_| crate::display::error::DisplayError::DrawingError("cover art".to_string()))?;
+                }
+                // Scrims darken the art behind text so it stays readable.
+                for field in page.fields().iter().filter(|f| f.name.starts_with("scrim")) {
+                    Self::darken(fb, &field.bounds);
                 }
                 Self::render_scrolling_page(fb, &page, &mut self.status_bar, &mut self.scrolling_text, progress, &mode, &elapsed, &end, &year)
             },
+        }
+    }
+
+    /// Select a named layout variant (e.g. `tinkerguy_scroller`).  Call before
+    /// the first track arrives so cover art is fetched at the right size.
+    pub fn set_named_layout(&mut self, name: Option<String>) {
+        if let Some(n) = &name {
+            info!("Layout: using named variant '{}' where templates define it", n);
+        }
+        self.layout_manager.set_named_layout(name);
+    }
+
+    /// Darken `area` of an Rgb565 framebuffer to 3/8 brightness.
+    // ponytail: fixed strength, make it a layout attribute if covers need tuning.
+    fn darken(fb: &mut crate::vframebuf::VarFrameBuf<Rgb565>, area: &embedded_graphics::primitives::Rectangle) {
+        let area = area.intersection(&embedded_graphics::primitives::Rectangle::new(Point::zero(),
+            Size::new(fb.width() as u32, fb.height() as u32)));
+        let Some(br) = area.bottom_right() else { return };
+        let w = fb.width();
+        let buf = fb.as_mut_slice();
+        for y in area.top_left.y..=br.y {
+            for x in area.top_left.x..=br.x {
+                let p = &mut buf[y as usize * w + x as usize];
+                *p = Rgb565::new(p.r() * 3 / 8, p.g() * 3 / 8, p.b() * 3 / 8);
+            }
         }
     }
 
@@ -3304,7 +3336,12 @@ impl DisplayManager {
             self.current_coverid = coverid.to_string();
             self.cover_art = None;
             if let Some(cache) = &self.cover_art_cache {
-                match cache.get(coverid, lms_host, lms_port, player_mac).await {
+                // Fetch at the layout's field size so the art fills it exactly.
+                let size = self.layout_manager.create_scrolling_page(SCROLLING_PAGE)
+                    .get_field("cover_art")
+                    .map(|f| f.width().max(f.height()))
+                    .unwrap_or(crate::coverart::COVER_SIZE);
+                match cache.get(coverid, lms_host, lms_port, player_mac, size).await {
                     Ok(art) => {
                         log::info!("Cover art loaded for coverid={}", coverid);
                         self.cover_art = Some(art);

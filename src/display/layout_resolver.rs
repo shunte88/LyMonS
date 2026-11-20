@@ -58,6 +58,8 @@ pub struct DisplayProfile {
 /// Resolves a named template for a given display profile.
 pub struct LayoutResolver<'t> {
     templates: &'t LayoutTemplates,
+    /// Named layout chosen by the user (`layout:` config / `--layout`).
+    named: Option<&'t str>,
 }
 
 /// Log an expression evaluation error with full location context and return the fallback.
@@ -74,7 +76,13 @@ fn eval_or(expr: &str, ctx: &ExprContext<'_>, fallback: i32,
 
 impl<'t> LayoutResolver<'t> {
     pub fn new(templates: &'t LayoutTemplates) -> Self {
-        Self { templates }
+        Self { templates, named: None }
+    }
+
+    /// Prefer variants called `name` in any template that offers one.
+    pub fn with_named(mut self, name: Option<&'t str>) -> Self {
+        self.named = name;
+        self
     }
 
     /// Resolve `template_name` for `profile` into a concrete `PageLayout`.
@@ -83,12 +91,15 @@ impl<'t> LayoutResolver<'t> {
     pub fn resolve(&self, template_name: &str, profile: DisplayProfile) -> Option<PageLayout> {
         let template = self.templates.templates.get(template_name)?;
 
-        // Variant selection: a variant whose name is "{width}x{height}" wins
-        // (exact dimensional override). Otherwise fall through to the original
-        // first-match logic: catch-all OR matching match_rule, in YAML order.
+        // Variant selection: a user-named layout wins where the template has
+        // it, then a variant named "{width}x{height}" (exact dimensional
+        // override). Otherwise fall through to the original first-match
+        // logic: catch-all OR matching match_rule, in YAML order.  Named
+        // variants have no match rule, so keep them last in the YAML.
         let dim_name = format!("{}x{}", profile.width, profile.height);
-        let variant = template.variants.iter()
-            .find(|v| v.name == dim_name)
+        let variant = self.named
+            .and_then(|n| template.variants.iter().find(|v| v.name == n))
+            .or_else(|| template.variants.iter().find(|v| v.name == dim_name))
             .or_else(|| template.variants.iter().find(|v| {
                 v.match_rule.is_catch_all() || matches_profile(&v.match_rule, profile)
             }))?;
@@ -455,6 +466,33 @@ templates:
         // x = display.height = 170, width = 320 - 170 = 150
         assert_eq!(page.fields()[0].bounds.top_left.x, 170);
         assert_eq!(page.fields()[0].bounds.size.width, 150);
+    }
+
+    /// A named layout wins where the template defines it; everywhere else, and
+    /// with no name set, normal selection is untouched.
+    #[test]
+    fn named_layout_variant_selection() {
+        let templates = LayoutTemplates::load_with_driver_override("./assets/st7789/");
+        let profile = DisplayProfile {
+            width: 240,
+            height: 240,
+            color_depth: ColorDepth::Rgb565,
+            category: LayoutCategory::ExtraLarge,
+        };
+        let plain = LayoutResolver::new(&templates);
+        assert!(plain.resolve("playback", profile).unwrap().name.ends_with(":240x240"));
+
+        let named = LayoutResolver::new(&templates).with_named(Some("tinkerguy_scroller"));
+        let page = named.resolve("playback", profile).unwrap();
+        assert!(page.name.ends_with(":tinkerguy_scroller"));
+        let art = page.get_field("cover_art").unwrap();
+        assert_eq!((art.width(), art.height()), (240, 240));
+        for f in ["scrim_top", "scrim_text", "album_artist", "album", "title", "artist", "year"] {
+            assert!(page.get_field(f).is_some(), "missing {f}");
+        }
+        // Templates without the named variant fall back as before.
+        assert_eq!(named.resolve("clock", profile).unwrap().name,
+                   plain.resolve("clock", profile).unwrap().name);
     }
 
     /// The layouts park fields they do not want on a given page at a negative

@@ -946,6 +946,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             hist_scheme,
         )?;
 
+        display_manager.set_named_layout(cfg.layout.clone());
+
         // Set emulator state for keyboard shortcuts
         display_manager.set_emulator_state(emulator_state.clone());
 
@@ -1091,6 +1093,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         easter_egg,
         hist_scheme,
     )?;
+    display_manager.set_named_layout(cfg.layout.clone());
 
     let inet =  local_ip().unwrap();
     // specific to Pi nomenclature

@@ -130,6 +130,8 @@ Options:
           Visualizer type [possible values: combination, hist_aio, hist_mono, hist_stereo, peak_mono, peak_stereo, vu_aio, vu_mono, vu_stereo, waveform_spectrum, no_viz]
       --hist-scheme <HIST_SCHEME>
           Histogram color scheme [possible values: classic, ocean, fire, neon]
+      --layout <LAYOUT>
+          Named layout variant (e.g. tinkerguy_scroller)
       --dump-config
           Print fully merged config and exit
   -h, --help
@@ -181,6 +183,10 @@ OLED Clock Fonts:
 TTF font on ST7789:
 
 ![ST7789 scroller TTF font](assets/github/scroller_ttf_font_st7789.png)
+
+Cover art background on a 240x240 ST7789 (`layout: tinkerguy_scroller`, see [Named Variants](#named-variants)):
+
+![ST7789 cover art background](assets/github/scroller_cover_bg_st7789.png)
 
 ### Clock, Marvel Font
 
@@ -402,6 +408,7 @@ display:
   height: 240
   rotate_deg: 0        # 0 | 90 | 180 | 270 on square panels, 0 | 180 otherwise
   bus:
+    type: spi
     bus: /dev/spidev0.1  # CE1
     dc_pin: 9
     speed_hz: 80000000   # Pimoroni's own examples run at 80 MHz
@@ -454,6 +461,7 @@ display:
   invert: false        # false = lit content on dark; true = the paper look
   rotate_deg: 0        # 0 or 180 only; a quarter turn needs 400 gate lines
   bus:
+    type: spi
     bus: /dev/spidev0.0
     speed_hz: 2000000  # datasheet ceiling, clamped if you ask for more
     cs_pin: 6
@@ -794,9 +802,27 @@ templates:
             ...
 ```
 
-Resolution order: dimensional name match → variant with a matching `match:`
+Resolution order: named variant (see below) → dimensional name match → variant with a matching `match:`
 block → first catch-all. Authoring convention: put dimensional variants and
 specific match-rule variants first, leave the catch-all `default` last.
+
+### Named Variants
+
+A variant can also be picked by name with `--layout <name>` or `layout: <name>`
+at the top level of the config file. Every template that defines a variant of
+that name uses it; templates that don't fall back to normal resolution. On
+240x240 ST7789 panels `tinkerguy_scroller` draws the cover art full screen
+behind the playback text:
+
+```yaml
+layout: tinkerguy_scroller
+```
+
+A named variant has no `match:` block, so it would act as a catch-all. Always
+put it **last** in the template so it only wins when asked for by name.
+
+Fields whose name starts with `scrim` darken the cover art underneath them,
+which keeps text legible over a busy album cover.
 
 ### Driver Overrides
 

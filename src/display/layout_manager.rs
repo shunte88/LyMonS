@@ -36,6 +36,8 @@ pub struct LayoutManager {
     layout_config: LayoutConfig,
     templates: LayoutTemplates,
     profile: DisplayProfile,
+    /// User-selected named layout variant (`layout:` config / `--layout`).
+    named: Option<String>,
 }
 
 impl LayoutManager {
@@ -48,11 +50,18 @@ impl LayoutManager {
             color_depth: layout_config.color_depth,
             category:    layout_config.category,
         };
-        Self { layout_config, templates, profile }
+        Self { layout_config, templates, profile, named: None }
     }
 
     fn resolve(&self, template_name: &str) -> Option<PageLayout> {
-        LayoutResolver::new(&self.templates).resolve(template_name, self.profile)
+        LayoutResolver::new(&self.templates)
+            .with_named(self.named.as_deref())
+            .resolve(template_name, self.profile)
+    }
+
+    /// Select a named layout variant; templates without one keep their default.
+    pub fn set_named_layout(&mut self, name: Option<String>) {
+        self.named = name;
     }
 
     pub fn create_aio_scrolling_page(&self) -> PageLayout {
